@@ -109,8 +109,9 @@ Alım/satım defteri. Dizi; her kayıt:
 | `enstruman` | string | Enstrüman kodu (`instruments.json`) |
 | `yon` | `AL` \| `SAT` | |
 | `lot` | number | Adet |
-| `fiyat_tl` | number \| null | Girilen TL birim fiyat (varsa) |
-| `fiyat_usd` | number | USD birim fiyat — `fiyat_tl / kur` ya da doğrudan girilen |
+| `girisParaBirimi` | `TL` \| `USD` | Kullanıcının fiyatı hangi para biriminde girdiği |
+| `fiyat_tl` | number \| null | TL birim fiyat — `girisParaBirimi=TL` ise girilen, `USD` ise `fiyat_usd * kur` (gösterim için) |
+| `fiyat_usd` | number | USD birim fiyat — `girisParaBirimi=TL` ise `fiyat_tl / kur`, `USD` ise girilen |
 | `kur` | number | O tarihteki USD/TRY (`fxrates.json`'dan) |
 | `komisyon_usd` | number | Toplam işlem masrafı (USD) |
 | `brut_usd` | number | `lot * fiyat_usd` |
@@ -185,6 +186,7 @@ holding'leri yeni etiketlere taşımak için). `ALTIN` bir portföy etiketi değ
     "kod": "ASTOR",
     "ad": "Astor Enerji",
     "sinif": "BIST",            // BIST | ALTIN | FON_PARA | FON_HISSE | USA  (Varlik Siniflari ile aynı)
+    "girisParaBirimi": "TL",    // giriş formunun varsayılan para birimi: BIST/ALTIN → TL, USA → USD (kullanıcı yine değiştirebilir)
     "fiyatKaynagi": "yahoo",
     "fiyatSembolu": "ASTOR.IS",
     "seviyeler": {
@@ -315,18 +317,21 @@ hücreleri satır 807'ye kadar dolu ama gerçek işlem sayısı bu.)
    | `QNB.F`   | `QNB`     | `FON`  |
 
    Etiket eşleşmesi büyük/küçük harf ve nokta duyarsız yapılır.
-3. **Kalan belirsizlik çözümü (Enis ile):**
-   - Her fiyat/tutar sütunu TL mi USD mi? (`H`=TL sütunu çoğunlukla boş, `I`=fiyat dolu —
-     `I`'nin para birimi netleşecek)
-   - `#VALUE!` / `#REF!` / boş satırlar
-   - Karışık ondalık ayıraçları
-   - Her enstrümanın `sinif`'ı (BIST / ALTIN / FON_PARA / FON_HISSE / USA) ve fiyat sembolü
-3. **Kur doldurma:** Tüm işlem/nakit tarihleri için TCMB geçmiş kuru → `fxrates.json`.
-4. **Türetme:** işlemlerden pozisyonlar, gerçekleşmiş K/Z, nakit bakiyeleri, aylık snapshot'lar.
-5. **Mutabakat raporu:** türetilen değerler vs. Excel'in Stock Position / Monthly Report /
+3. **Fiyat para birimi (kural — netleşti):** Excel'de `H`=TL sütunu opsiyoneldi ve çoğunlukla
+   boş; `I`=Price sütunu **USD** tutuyor (tıpkı yeni sistemdeki gibi: TL enstrümanlar için
+   kullanıcı TL girer, sistem yan sütuna USD yazar). Migration'da:
+   `fiyat_usd` ← Excel `I`. `fiyat_tl` ← Excel `H` doluysa o, değilse `fiyat_usd * kur`.
+   `girisParaBirimi` ← enstrüman sınıfına göre (BIST/ALTIN → `TL`, USA → `USD`).
+4. **Kur doldurma:** Tüm işlem/nakit tarihleri için TCMB geçmiş kuru → `fxrates.json`.
+5. **Türetme:** işlemlerden pozisyonlar, gerçekleşmiş K/Z, nakit bakiyeleri, aylık snapshot'lar.
+6. **Mutabakat raporu:** türetilen değerler vs. Excel'in Stock Position / Monthly Report /
    Portföyler değerleri. Fark eşiğini aşanlar tek tek listelenir ve çözülür.
-6. **Doğrulama çapaları:** toplam yatırılan, toplam gerçekleşmiş K/Z, güncel lot adetleri.
-7. Çıktı: `BBB/` içinde doğrulanmış JSON seti. Excel arşive taşınır.
+7. **Doğrulama çapaları:** toplam yatırılan, toplam gerçekleşmiş K/Z, güncel lot adetleri.
+8. Çıktı: `BBB/` içinde doğrulanmış JSON seti. Excel arşive taşınır.
+
+**Migration sırasında Enis ile çözülecek kalanlar:** `#VALUE!` / `#REF!` / boş satırlar ·
+karışık ondalık ayıraçları · her enstrümanın `sinif`'ı ve fiyat sembolü · `XAU` fiziki altının
+giriş para birimi.
 
 ## 9. Sayfalar ve bileşenler
 
@@ -470,8 +475,9 @@ Her faz bağımsız değer taşır. P0 + P1, "dashboard'a bak" ihtiyacını tek 
 
 ## 15. Açık sorular ve riskler
 
-1. **Fiyat/tutar sütunlarının para birimi** — migration'da her sütun için netleşecek
-   (Excel USD'ye çevrilmiş değerler mi, ham TL mi tutuyor?).
+1. ~~Fiyat/tutar sütunlarının para birimi~~ — **çözüldü:** TL enstrümanda kullanıcı TL girer,
+   sistem USD karşılığını (`÷` o günün kuru) yan alana yazar; USD enstrümanda doğrudan USD.
+   Excel `I` sütunu zaten USD. Bkz. Bölüm 8.3.
 2. ~~Hesap/portföy ayrıştırma eşlemesi~~ — **çözüldü**, bkz. Bölüm 8 tablosu.
 3. **TCMB kuru: hangi değer?** — döviz alış / satış / efektif / orta. Öneri: "döviz alış" veya
    alış-satış ortası; migration'da sabitlenir.
