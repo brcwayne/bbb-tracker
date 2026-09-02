@@ -40,7 +40,7 @@ kullanıcıda olan bir PWA** ile değiştirmenin tasarımını tanımlar.
    yeniden, daha iyi tasarlanmış karşılıkları.
 6. Enstrüman bazında **destek / direnç / hedef** seviyeleri ve "hedefe/dirence yaklaşanlar" görünümü.
 7. Aylık broker PDF ekstresiyle **mutabakat**: "atladığım işlem var mı?"
-8. Excel'deki tüm geçmişin (≈790 işlem, ≈500 nakit hareketi, ≈200 temettü) taşınması.
+8. Excel'deki tüm geçmişin (≈154 işlem, ≈201 nakit hareketi, ≈190 temettü) taşınması.
 9. Yüksek estetik: editoryal, sofistike, kişilikli tasarım (bkz. Bölüm 10).
 
 ### Hedef olmayanlar
@@ -139,27 +139,43 @@ Para giriş/çıkış + temettü. Her kayıt:
 
 ### 5.3 `brokers.json`
 
+Aslında **hesaplar** listesi — aracı kurum + hesap sahibi birlikte (aynı kurumda birden
+çok hesap olabilir, örn. Oyak'ta Enis'in ve annesinin hesabı). Ekstre mutabakatı hesap bazlı
+olduğu için her hesap ayrı kayıt.
+
 ```json
 [
-  { "kod": "GARAN", "ad": "Garanti Yatırım", "tur": "BROKER", "aktif": true },
-  { "kod": "MIDAS", "ad": "Midas", "tur": "BROKER", "aktif": true },
-  { "kod": "QNB",   "ad": "QNB Finansinvest", "tur": "BROKER", "aktif": true },
-  { "kod": "KASA",  "ad": "Kasa (fiziki)", "tur": "FIZIKI", "aktif": true }
+  { "kod": "GARAN",     "ad": "Garanti Yatırım",  "tur": "BROKER", "sahip": "Enis", "aktif": true },
+  { "kod": "MIDAS",     "ad": "Midas",            "tur": "BROKER", "sahip": "Enis", "aktif": true },
+  { "kod": "QNB",       "ad": "QNB Finansinvest", "tur": "BROKER", "sahip": "Enis", "aktif": true },
+  { "kod": "TEB",       "ad": "TEB Yatırım",      "tur": "BROKER", "sahip": "Enis", "aktif": true },
+  { "kod": "OYAK-E",    "ad": "Oyak · Enis",      "tur": "BROKER", "sahip": "Enis", "aktif": true },
+  { "kod": "OYAK-ANNE", "ad": "Oyak · Anne",      "tur": "BROKER", "sahip": "Anne", "aktif": true },
+  { "kod": "KASA",      "ad": "Kasa (fiziki)",    "tur": "FIZIKI", "sahip": "Enis", "aktif": true }
 ]
 ```
+
+`OYAK-ANNE` şimdilik işlemsiz — tanımlı, boş. Kullanıcı uygulamadan **yeni hesap ekleyebilir,
+yeniden adlandırabilir, pasife alabilir** (serbest kod/ad).
 
 ### 5.4 `portfolios.json`
 
-Portföy/strateji etiketleri. Aracı kurumdan bağımsız.
+Portföy/strateji etiketleri. Hesaptan bağımsız. Bir işlem bir hesaba **ve** bir portföye ait.
 
 ```json
 [
-  { "kod": "ALFA",  "ad": "Alfa (Yatırım101)", "aktif": true },
-  { "kod": "DELTA", "ad": "Delta (Yatırım101)", "aktif": true },
-  { "kod": "KENDI", "ad": "Kendi Seçimim", "aktif": true },
-  { "kod": "ALTIN", "ad": "Altın", "aktif": true }
+  { "kod": "ENIS",  "ad": "Enis (kendi seçimlerim)", "aktif": true },
+  { "kod": "ALFA",  "ad": "Alfa (Yatırım101)",       "aktif": true },
+  { "kod": "DELTA", "ad": "Delta (Yatırım101)",      "aktif": true },
+  { "kod": "FON",   "ad": "Fonlar",                  "aktif": true },
+  { "kod": "USA",   "ad": "ABD Piyasası",            "aktif": true }
 ]
 ```
+
+Kullanıcı uygulamadan **yeni portföy etiketi ekleyebilir, yeniden adlandırabilir, pasife
+alabilir**; bir pozisyonun/işlemin portföy etiketini tek tıkla değiştirebilir (ileride
+holding'leri yeni etiketlere taşımak için). `ALTIN` bir portföy etiketi değil — varlık sınıfı
+(bkz. 5.5) onu zaten taşıyor.
 
 ### 5.5 `instruments.json`
 
@@ -168,7 +184,7 @@ Portföy/strateji etiketleri. Aracı kurumdan bağımsız.
   {
     "kod": "ASTOR",
     "ad": "Astor Enerji",
-    "sinif": "BIST",            // BIST | ALTIN | FON | USA
+    "sinif": "BIST",            // BIST | ALTIN | FON_PARA | FON_HISSE | USA  (Varlik Siniflari ile aynı)
     "fiyatKaynagi": "yahoo",
     "fiyatSembolu": "ASTOR.IS",
     "seviyeler": {
@@ -185,6 +201,10 @@ Portföy/strateji etiketleri. Aracı kurumdan bağımsız.
 
 Altın enstrümanları için `fiyatKaynagi: "altin-turev"` — fiyat `XAU/USD * katsayı`
 (çeyrek/yarım/tam/gram) formülüyle hesaplanır; katsayılar `instruments.json`'da tutulur.
+
+Kodun sonundaki `.F` eki fon işaretidir; kod olduğu gibi saklanır (ör. `"AFT.F"`), sınıf
+`FON_PARA` (para piyasası / likit) veya `FON_HISSE` (hisse fonu) olur — dağılım grafiği ve
+TEFAS fiyatı için ayrım burada.
 
 ### 5.6 `fxrates.json`
 
@@ -266,20 +286,41 @@ kaynağına açık.
 
 ## 8. Migration planı (tek seferlik, rehberli)
 
+**Hacim (gerçek):** Trade Log ≈ **154 işlem** (122 alış, 32 satış), 2016-07 → 2026-08,
+46 farklı enstrüman. Bank Transfers ≈ 201 satır. Dividends ≈ 190 satır. (Şablonun yardımcı
+hücreleri satır 807'ye kadar dolu ama gerçek işlem sayısı bu.)
+
+**Trade Log sütun düzeni:** `C`=No., `D`=portföy etiketi, `E`=tarih, `F`=enstrüman kodu,
+`G`=işlem yönü (BUY/SELL), `H`=TL, `I`=fiyat, `J`=lot, `K`=manuel komisyon, `A`=`#VALUE!`
+(formül, yok sayılır).
+
 1. **Çıkarma:** Python (openpyxl) scripti `.xlsm`'den ham satırlar:
    - `Trade Log` → işlem taslakları
    - `Bank Transfers` → nakit hareketleri
    - `Dividends` → temettüler
    - `Stock Position`, `Portföyler` → **doğrulama referansı**
-2. **Belirsizlik çözümü (Enis ile):**
-   - Her fiyat/tutar sütunu TL mi USD mi?
-   - `hesap`/`portföy` ayrıştırma eşlemesi:
-     `GARAN→(GARAN,KENDI)`, `M.ALFA→(MIDAS,ALFA)`, `M.DELTA→(MIDAS,DELTA)`,
-     `MID.USA→(MIDAS,USA?)`, `MIDAS→(MIDAS,KENDI?)`, `QNB→(QNB,KENDI)`,
-     `QNB.F→(QNB,FON)`, `OYAK E→(OYAK,?)`, `TEB→(TEB,KENDI)`, `KASA→(KASA,ALTIN)`
-     (kesin liste Enis onaylayacak)
+2. **Hesap / portföy eşleme tablosu (kesinleşti):**
+
+   | Excel `D` | → `hesap` | → `portfoy` |
+   |-----------|-----------|-------------|
+   | `QNB`     | `QNB`     | `ENIS` |
+   | `KASA`    | `KASA`    | `ENIS` |
+   | `MID.USA` | `MIDAS`   | `USA`  |
+   | `TEB`     | `TEB`     | `ENIS` |
+   | `OYAK E`  | `OYAK-E`  | `ENIS` |
+   | `M.Delta` | `MIDAS`   | `DELTA` |
+   | `GARAN`   | `GARAN`   | `ENIS` |
+   | `MIDAS`   | `MIDAS`   | `ENIS` |
+   | `M.Alfa`  | `MIDAS`   | `ALFA` |
+   | `QNB.F`   | `QNB`     | `FON`  |
+
+   Etiket eşleşmesi büyük/küçük harf ve nokta duyarsız yapılır.
+3. **Kalan belirsizlik çözümü (Enis ile):**
+   - Her fiyat/tutar sütunu TL mi USD mi? (`H`=TL sütunu çoğunlukla boş, `I`=fiyat dolu —
+     `I`'nin para birimi netleşecek)
    - `#VALUE!` / `#REF!` / boş satırlar
    - Karışık ondalık ayıraçları
+   - Her enstrümanın `sinif`'ı (BIST / ALTIN / FON_PARA / FON_HISSE / USA) ve fiyat sembolü
 3. **Kur doldurma:** Tüm işlem/nakit tarihleri için TCMB geçmiş kuru → `fxrates.json`.
 4. **Türetme:** işlemlerden pozisyonlar, gerçekleşmiş K/Z, nakit bakiyeleri, aylık snapshot'lar.
 5. **Mutabakat raporu:** türetilen değerler vs. Excel'in Stock Position / Monthly Report /
@@ -297,7 +338,7 @@ kaynağına açık.
   hafif alan yıkaması.
 - **Varlık sınıfı dağılımı** — Altın / BIST / Hisse Fonları / Para Fonları / USA. Doğrudan
   etiketli donut veya yatay yığın bar.
-- **Portföy dağılımı** — ALFA / DELTA / KENDI / ALTIN...
+- **Portföy dağılımı** — ENIS / ALFA / DELTA / FON / USA
 - **Kâr/zarar dağılımı** — kapanmış işlemlerin % getiri histogramı (Excel'deki 22 kova).
 - **Win/Loss** ve **Profit/Loss** oranları — iki küçük donut.
 - **Kümülatif en çok kazandıran/kaybettiren** — hisse bazında gerçekleşmiş + gerçekleşmemiş,
@@ -431,8 +472,7 @@ Her faz bağımsız değer taşır. P0 + P1, "dashboard'a bak" ihtiyacını tek 
 
 1. **Fiyat/tutar sütunlarının para birimi** — migration'da her sütun için netleşecek
    (Excel USD'ye çevrilmiş değerler mi, ham TL mi tutuyor?).
-2. **Hesap/portföy ayrıştırma eşlemesi** — `OYAK E`, `MID.USA`, `MIDAS`, `QNB.F` etiketlerinin
-   kesin karşılıkları Enis'ten alınacak.
+2. ~~Hesap/portföy ayrıştırma eşlemesi~~ — **çözüldü**, bkz. Bölüm 8 tablosu.
 3. **TCMB kuru: hangi değer?** — döviz alış / satış / efektif / orta. Öneri: "döviz alış" veya
    alış-satış ortası; migration'da sabitlenir.
 4. **Yahoo Finance resmi olmayan uç** kırılganlığı — kesilirse alternatif kaynak (investing.com
