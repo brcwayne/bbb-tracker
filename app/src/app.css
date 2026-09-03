@@ -1,3 +1,33 @@
-:root { color-scheme: light dark; }
+:root {
+  color-scheme: light dark;
+  --bg: #f4f1ea;
+  --surface: #fbf9f4;
+  --ink: #1c1a17;
+  --ink-soft: #5c574e;
+  --hairline: #d9d3c6;
+  --gain: #1d3b6e;
+  --loss: #b06a2b;
+  --gold: #a9863f;
+  --font-num: ui-monospace, "SF Mono", Menlo, monospace;
+}
+:root:not([data-theme='light']) {
+  @media (prefers-color-scheme: dark) {
+    --bg: #17161c;
+    --surface: #1e1d24;
+    --ink: #ece7dd;
+    --ink-soft: #9a938a;
+    --hairline: #322f3a;
+    --gain: #6d8fce;
+    --loss: #d69154;
+    --gold: #c7a55e;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #17161c; --surface: #1e1d24; --ink: #ece7dd; --ink-soft: #9a938a;
+  --hairline: #322f3a; --gain: #6d8fce; --loss: #d69154; --gold: #c7a55e;
+}
 * { box-sizing: border-box; }
-body { margin: 0; font: 14px/1.5 system-ui, sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+.hairline { border: 0; border-top: 1px solid var(--hairline); }
