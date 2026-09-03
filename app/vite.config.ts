@@ -5,7 +5,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { manifest, workbox } from './pwa.config'
 
 export default defineConfig({
-  base: './',                    // Task 16'da GitHub Pages alt-yoluna çevrilecek
+  // Dev/preview + relative builds use './'. On GitHub Actions the app is served
+  // from a repo sub-path (https://<user>.github.io/bbb-tracker/), so assets need
+  // an absolute base. If the repo is NOT named `bbb-tracker`, change '/bbb-tracker/'
+  // here and the URL in app/README.md (Enis kurulumu, adım 6).
+  base: process.env.GITHUB_ACTIONS ? '/bbb-tracker/' : './',
   plugins: [
     svelte(),
     svelteTesting(),
