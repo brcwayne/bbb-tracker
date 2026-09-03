@@ -479,12 +479,18 @@ Her faz bağımsız değer taşır. P0 + P1, "dashboard'a bak" ihtiyacını tek 
    sistem USD karşılığını (`÷` o günün kuru) yan alana yazar; USD enstrümanda doğrudan USD.
    Excel `I` sütunu zaten USD. Bkz. Bölüm 8.3.
 2. ~~Hesap/portföy ayrıştırma eşlemesi~~ — **çözüldü**, bkz. Bölüm 8 tablosu.
-3. **TCMB kuru: hangi değer?** — döviz alış / satış / efektif / orta. Öneri: "döviz alış" veya
-   alış-satış ortası; migration'da sabitlenir.
+3. ~~**TCMB kuru: hangi değer?**~~ — **çözüldü (P0 migration):** günlük **USD "Döviz Alış"**
+   (`ForexBuying`) sabitlendi. Kaynak `tcmb.gov.tr/kurlar/YYYYMM/DDMMYYYY.xml`; hafta
+   sonu/tatil için en fazla 10 gün geriye yürünür. Bkz. `migration/bbb_migration/tcmb.py`.
 4. **Yahoo Finance resmi olmayan uç** kırılganlığı — kesilirse alternatif kaynak (investing.com
    scraping, Fintables) gerekebilir. Worker soyutlaması bunu izole eder.
 5. **Altın enstrümanları modeli** — ATA LIRA / YARIM / XAU / gram için katsayı tablosu ve
-   milyem/işçilik farkları netleşmeli.
+   milyem/işçilik farkları netleşmeli. Ayrıca fiziki `XAU` giriş para birimi (TL mi USD mi)
+   netleşmeli. **P3'e ertelendi:** `altinKatsayi` yalnızca canlı fiyatlamada (P3 Worker)
+   kullanılır; P0 migration mutabakatını etkilemez — P0'da altın işlemleri Excel'deki USD
+   tutarından türetilir. `overrides/instruments.json`'da altın kodları `sinif: ALTIN`,
+   `fiyatSembolu: XAUUSD`, `girisParaBirimi: TL` (güvenli varsayılan) ile bırakıldı; katsayı
+   ve XAU para birimi Enis onayı ile P3'te girilecek.
 6. **TEFAS fon fiyatları** — P4'e ertelendi; ayrı uç ve muhtemelen ayrı kaynak.
 7. **Google OAuth kısıtları** — yayınlanmamış OAuth uygulaması "test" modunda 7 günde bir
    yeniden onay isteyebilir; Google Cloud Console'da "production" başvurusu veya kişisel kullanım
