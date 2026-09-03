@@ -1,20 +1,13 @@
 import '@testing-library/jest-dom/vitest'
 
-// Polyfill localStorage for jsdom environment
-if (typeof globalThis !== 'undefined' && !globalThis.localStorage) {
-  const store: Record<string, string> = {}
+if (!globalThis.localStorage) {
+  const store = new Map<string, string>()
   ;(globalThis as any).localStorage = {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => {
-      store[key] = value
-    },
-    removeItem: (key: string) => {
-      delete store[key]
-    },
-    clear: () => {
-      Object.keys(store).forEach(key => delete store[key])
-    },
-    length: Object.keys(store).length,
-    key: (index: number) => Object.keys(store)[index] || null,
-  } as any
+    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+    setItem: (k: string, v: string) => void store.set(k, String(v)),
+    removeItem: (k: string) => void store.delete(k),
+    clear: () => store.clear(),
+    key: (i: number) => [...store.keys()][i] ?? null,
+    get length() { return store.size },
+  }
 }

@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [svelte()],
   test: {
     environment: 'jsdom',
+    environmentOptions: { jsdom: { url: 'http://localhost/' } },
     globals: true,
     setupFiles: ['./vitest-setup.ts'],
   },
