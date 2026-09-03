@@ -17,13 +17,20 @@ cd migration && python3 -m venv .venv && .venv/bin/pip install -r requirements.t
 5. "Dönüşüm / pozisyon hataları" ve "Pozisyon uyuşmazlıkları" → Enis ile satır satır incele
    (Excel'de kaynak satırı aç, gerçek değeri doğrula, gerekirse `overrides/` veya
    fixture-dışı düzeltme notu).
-   **Migration, `data/reconciliation-report.md` içinde herhangi bir `Pozisyon hataları`
-   satırı varken BİTMİŞ sayılmaz.** Kaynak satır düzeltilene kadar gerçekleşmiş K/Z
-   ölçülemeyen bir miktarda eksik kalır. Şu an: Trade Log satır 104 (`QNB/TRMET/BUY/1500`)
-   tarih/fiyat içermiyor → 1500 lotluk tam bir alım-satım turu (≈ 4.700 USD satış hasılatı)
-   gerçekleşmiş K/Z'ye sıfır katkı yapıyor.
+   **Kural:** `data/reconciliation-report.md` içinde `Pozisyon hataları` satırı varken
+   gerçekleşmiş K/Z ölçülemeyen bir miktarda eksik kalır — kaynak satır düzeltilmeli.
 6. Rapor `✅` verene kadar 1–5'i tekrarla.
 7. Temizlenince: `fxrates_cache.json` ve `data/` P1'de Drive'a yüklenecek.
+
+## Bu veri setinde kabul edilen açık kalem (2026-09-03)
+
+Trade Log **satır 104** (`QNB / TRMET / BUY / 1500 lot`) tarih ve fiyat içermiyor.
+Enis bu alımı reconstruct etmemeyi seçti (ismi değişmiş eski bir hisse, kayıt yok).
+Sonuç: o QNB TRMET alım-satım turu (≈ 4.700 USD satış hasılatı) **gerçekleşmiş K/Z'ye
+sıfır katkı** yapıyor; rapor kalıcı olarak 4 TRMET uyarısı gösteriyor ve `ok=false`
+dönüyor. Bu **beklenen** durum — mevcut TRMET pozisyonu (863 lot, M.Delta) etkilenmiyor,
+mutabakatta sorunsuz. P1 bu veri setini kullanabilir; `ok=false` bir kalite işareti,
+engel değil.
 
 ## Bilinen gürültü (yalnızca görüntü, hesaba girmez)
 

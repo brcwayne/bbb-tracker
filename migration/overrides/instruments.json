@@ -1,7 +1,7 @@
 {
   "_aciklama": "kod -> {sinif, fiyatKaynagi, fiyatSembolu, girisParaBirimi, altinKatsayi?}. sinif enum: BIST|ALTIN|FON_PARA|FON_HISSE|USA. Kaynak: workbook 'Varlik Siniflari' sayfasi. 2026-09-03: Enis 10 cikarim kodunu onayladi - BETAE/FROTO/MASFN/ORZAX/QUICK/TAVHL hisse (BIST); MAC/PTS/PUK/THF fon. ALTIN altinKatsayi = birim basina saf altin grami (Ata 7.216g 22ayar -> 6.612g saf; Yarim 3.50g 22ayar -> 3.208g saf; XAU = 1g). Sarrafiye/iscilik primi P3'te canli fiyata karsi kalibre edilecek. XAU girisParaBirimi hala spec §15 acik.",
 
-  "_bekleyen": "MAC/PTS/PUK/THF icin FON_PARA vs FON_HISSE ayrimi Enis onayi bekliyor (asagida _tahmin ile isaretli). TRMET row-104 alimi (tarih+fiyat yok) ayri konu - Enis hatirlamiyor, isim degismis eski hisse.",
+  "_bekleyen": "Bekleyen yok. MAC/PTS/PUK/THF fon ayrimi Enis tarafindan onaylandi (PTS=para, MAC/PUK/THF=hisse). TRMET row-104 alimi (tarih+fiyat yok): Enis reconstruct etmemeyi secti (isim degismis eski hisse) - o QNB alim-satimi gerceklesmis K/Z'ye girmiyor, rapor kalici olarak 4 TRMET uyarisi gosterir, ok=false BEKLENEN durum, P1'i engellemez.",
 
   "A1CAP":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "A1CAP.IS", "girisParaBirimi": "TL"},
   "AAGYO":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "AAGYO.IS", "girisParaBirimi": "TL"},
@@ -47,8 +47,8 @@
   "QUICK":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "QUICK.IS", "girisParaBirimi": "TL"},
   "TAVHL":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "TAVHL.IS", "girisParaBirimi": "TL"},
 
-  "MAC":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "MAC", "girisParaBirimi": "TL", "_tahmin": "fon (Enis onayli); para/hisse -> hisse tahmini (Oca-Tem 2026 %25 hareket)"},
-  "PTS":      {"sinif": "FON_PARA", "fiyatKaynagi": "tefas", "fiyatSembolu": "PTS", "girisParaBirimi": "TL", "_tahmin": "fon (Enis onayli); para/hisse -> para tahmini (6 gunde %0.7)"},
-  "PUK":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "PUK", "girisParaBirimi": "TL", "_tahmin": "fon (Enis onayli); para/hisse -> hisse tahmini (1 ayda %5)"},
-  "THF":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "THF", "girisParaBirimi": "TL", "_tahmin": "fon (Enis onayli); para/hisse -> hisse tahmini (Agu 2026 %2.28-2.58 dalgali)"}
+  "MAC":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "MAC", "girisParaBirimi": "TL"},
+  "PTS":      {"sinif": "FON_PARA", "fiyatKaynagi": "tefas", "fiyatSembolu": "PTS", "girisParaBirimi": "TL"},
+  "PUK":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "PUK", "girisParaBirimi": "TL"},
+  "THF":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "THF", "girisParaBirimi": "TL"}
 }
