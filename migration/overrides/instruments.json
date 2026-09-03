@@ -1,12 +1,14 @@
 {
-  "_aciklama": "kod -> {sinif, fiyatKaynagi, fiyatSembolu, girisParaBirimi, altinKatsayi?}. sinif enum: BIST|ALTIN|FON_PARA|FON_HISSE|USA. Kaynak: workbook 'Varlik Siniflari' sayfasi (Hisse Kodu | Kategori). 'Varlik Siniflari'nda olmayan kodlar kod sekline gore cikarim yapildi ve _cikarim:true ile isaretlendi (Enis onayi bekliyor). ALTIN icin altinKatsayi ve XAU girisParaBirimi spec §15 acik sorusu; P3'e ertelendi, P0 mutabakatini etkilemez.",
+  "_aciklama": "kod -> {sinif, fiyatKaynagi, fiyatSembolu, girisParaBirimi, altinKatsayi?}. sinif enum: BIST|ALTIN|FON_PARA|FON_HISSE|USA. Kaynak: workbook 'Varlik Siniflari' sayfasi. 2026-09-03: Enis 10 cikarim kodunu onayladi - BETAE/FROTO/MASFN/ORZAX/QUICK/TAVHL hisse (BIST); MAC/PTS/PUK/THF fon. ALTIN altinKatsayi = birim basina saf altin grami (Ata 7.216g 22ayar -> 6.612g saf; Yarim 3.50g 22ayar -> 3.208g saf; XAU = 1g). Sarrafiye/iscilik primi P3'te canli fiyata karsi kalibre edilecek. XAU girisParaBirimi hala spec §15 acik.",
+
+  "_bekleyen": "MAC/PTS/PUK/THF icin FON_PARA vs FON_HISSE ayrimi Enis onayi bekliyor (asagida _tahmin ile isaretli). TRMET row-104 alimi (tarih+fiyat yok) ayri konu - Enis hatirlamiyor, isim degismis eski hisse.",
 
   "A1CAP":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "A1CAP.IS", "girisParaBirimi": "TL"},
   "AAGYO":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "AAGYO.IS", "girisParaBirimi": "TL"},
   "AKBNK":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "AKBNK.IS", "girisParaBirimi": "TL"},
   "ALVES":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "ALVES.IS", "girisParaBirimi": "TL"},
   "ASTOR":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "ASTOR.IS", "girisParaBirimi": "TL"},
-  "ATA LIRA": {"sinif": "ALTIN", "fiyatKaynagi": "altin-turev", "fiyatSembolu": "XAUUSD", "girisParaBirimi": "TL"},
+  "ATA LIRA": {"sinif": "ALTIN", "fiyatKaynagi": "altin-turev", "fiyatSembolu": "XAUUSD", "girisParaBirimi": "TL", "altinKatsayi": 6.612, "_katsayiNot": "7.216 gr, 22 ayar (%91.6) -> 6.612 gr saf altin"},
   "BIMAS":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "BIMAS.IS", "girisParaBirimi": "TL"},
   "BRLSM":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "BRLSM.IS", "girisParaBirimi": "TL"},
   "BRSAN":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "BRSAN.IS", "girisParaBirimi": "TL"},
@@ -24,6 +26,7 @@
   "KCHOL":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "KCHOL.IS", "girisParaBirimi": "TL"},
   "KLKIM":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "KLKIM.IS", "girisParaBirimi": "TL"},
   "LMKDC":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "LMKDC.IS", "girisParaBirimi": "TL"},
+  "MASFN":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "MASFN.IS", "girisParaBirimi": "TL"},
   "OYL":      {"sinif": "FON_PARA", "fiyatKaynagi": "tefas", "fiyatSembolu": "OYL", "girisParaBirimi": "TL"},
   "PHE":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "PHE", "girisParaBirimi": "TL"},
   "SAHOL":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "SAHOL.IS", "girisParaBirimi": "TL"},
@@ -33,19 +36,19 @@
   "THYAO":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "THYAO.IS", "girisParaBirimi": "TL"},
   "TP2":      {"sinif": "FON_PARA", "fiyatKaynagi": "tefas", "fiyatSembolu": "TP2", "girisParaBirimi": "TL"},
   "TRALT":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "TRALT.IS", "girisParaBirimi": "TL"},
-  "TRMET":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "TRMET.IS", "girisParaBirimi": "TL"},
+  "TRMET":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "TRMET.IS", "girisParaBirimi": "TL", "_not": "eski hisse, ismi degismis olabilir; row-104 alimi tarih/fiyat eksik"},
   "TURSG":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "TURSG.IS", "girisParaBirimi": "TL"},
-  "XAU":      {"sinif": "ALTIN", "fiyatKaynagi": "altin-turev", "fiyatSembolu": "XAUUSD", "girisParaBirimi": "TL"},
-  "YARIM":    {"sinif": "ALTIN", "fiyatKaynagi": "altin-turev", "fiyatSembolu": "XAUUSD", "girisParaBirimi": "TL"},
+  "XAU":      {"sinif": "ALTIN", "fiyatKaynagi": "altin-turev", "fiyatSembolu": "XAUUSD", "girisParaBirimi": "TL", "altinKatsayi": 1.0, "_katsayiNot": "1 gram saf altin"},
+  "YARIM":    {"sinif": "ALTIN", "fiyatKaynagi": "altin-turev", "fiyatSembolu": "XAUUSD", "girisParaBirimi": "TL", "altinKatsayi": 3.208, "_katsayiNot": "3.50 gr, 22 ayar -> 3.208 gr saf altin"},
 
-  "BETAE":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "BETAE.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "FROTO":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "FROTO.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "MAC":      {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "MAC.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "MASFN":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "MASFN.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "ORZAX":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "ORZAX.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "PTS":      {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "PTS.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "PUK":      {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "PUK.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "QUICK":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "QUICK.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "TAVHL":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "TAVHL.IS", "girisParaBirimi": "TL", "_cikarim": true},
-  "THF":      {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "THF.IS", "girisParaBirimi": "TL", "_cikarim": true}
+  "BETAE":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "BETAE.IS", "girisParaBirimi": "TL"},
+  "FROTO":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "FROTO.IS", "girisParaBirimi": "TL"},
+  "ORZAX":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "ORZAX.IS", "girisParaBirimi": "TL"},
+  "QUICK":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "QUICK.IS", "girisParaBirimi": "TL"},
+  "TAVHL":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "TAVHL.IS", "girisParaBirimi": "TL"},
+
+  "MAC":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "MAC", "girisParaBirimi": "TL", "_tahmin": "fon (Enis onayli); para/hisse -> hisse tahmini (Oca-Tem 2026 %25 hareket)"},
+  "PTS":      {"sinif": "FON_PARA", "fiyatKaynagi": "tefas", "fiyatSembolu": "PTS", "girisParaBirimi": "TL", "_tahmin": "fon (Enis onayli); para/hisse -> para tahmini (6 gunde %0.7)"},
+  "PUK":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "PUK", "girisParaBirimi": "TL", "_tahmin": "fon (Enis onayli); para/hisse -> hisse tahmini (1 ayda %5)"},
+  "THF":      {"sinif": "FON_HISSE", "fiyatKaynagi": "tefas", "fiyatSembolu": "THF", "girisParaBirimi": "TL", "_tahmin": "fon (Enis onayli); para/hisse -> hisse tahmini (Agu 2026 %2.28-2.58 dalgali)"}
 }
