@@ -89,10 +89,12 @@ def build():
     _set(mr, "H20", "Withdrawals"); _set(mr, "I20", "Gain"); _set(mr, "J20", "Loss")
     _set(mr, "K20", "Cash Dividends"); _set(mr, "L20", "END CAPITAL"); _set(mr, "M20", "TAX & FEES")
     # row, month, beg, net_dep, additional, withdrawals, gain, loss, cash_div, end_capital, tax_fees
+    # Veri satırlarında beg/net_dep/withdrawals/cash_div/tax_fees kasıtlı olarak
+    # ayrı ayrı sıfırdan farklı → sütun eşlemesi testte anlamlı doğrulanabilir.
     mr_rows = [
-        (21, dt.datetime(2022, 6, 1), 1000.0, 0.0, 0.0, 0.0, 175.0, 0.0, 0.0, 1075.0, 0.0),  # TOTALS (C boş)
-        (22, dt.datetime(2020, 1, 1), 1000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 900.0, 0.0),
-        (23, dt.datetime(2021, 3, 1), 900.0, 0.0, 0.0, 0.0, 175.0, 0.0, 0.0, 1075.0, 0.0),
+        (21, dt.datetime(2022, 6, 1), 2000.0, 100.0, 100.0, 50.0, 175.0, -10.0, 5.0, 1075.0, 3.0),  # TOTALS (C boş) → dışlanmalı
+        (22, dt.datetime(2020, 1, 1), 1000.0, 250.0, 0.0, 30.0, 0.0, 0.0, 12.0, 900.0, 4.0),
+        (23, dt.datetime(2021, 3, 1), 900.0, 0.0, 0.0, 40.0, 175.0, 0.0, 7.0, 1075.0, 6.0),
     ]
     for r, m, beg, nd, addl, wd, gn, ls, cd, endc, tf in mr_rows:
         if r != 21:

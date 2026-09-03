@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import re
 
 _ERROR_STRINGS = {"#VALUE!", "#REF!", "#N/A", "#DIV/0!", "#NAME?", "#NULL!", "#NUM!"}
 _EPOCH = dt.date(1899, 12, 30)  # Excel 1900 tarih sistemi

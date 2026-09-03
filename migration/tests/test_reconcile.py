@@ -27,10 +27,42 @@ def test_anchor_checks_total_deposits():
     assert dep["derived"] == 1000.0 and dep["gecti"] is True
 
 
+def test_anchor_checks_deposits_anchor_passes_on_real_figure():
+    # F2: Σ YATIRMA == Bank Transfers H5 → çapa mevcut ve geçer
+    flows = [{"tur": "YATIRMA", "tutar_usd": 184608.62}]
+    anchors = rc.anchor_checks({"realized_total_usd": 0.0}, flows,
+                               {"total_deposits": 184608.62})
+    dep = [a for a in anchors if a["capa"] == "toplam_yatirma"][0]
+    assert dep["gecti"] is True
+
+
+def test_anchor_checks_marks_realized_skipped_when_ref_missing():
+    # F2: realized_total ref'te yoksa görünür bir 'atlandi' işareti üretilir
+    anchors = rc.anchor_checks({"realized_total_usd": 115018.97}, [],
+                               {"total_deposits": None})
+    skipped = [a for a in anchors if a.get("atlandi")]
+    assert len(skipped) == 1 and skipped[0]["capa"] == "gerceklesmis_kz_toplam"
+
+
 def test_render_report_clean():
     txt = rc.render_report(position_rows=[], anchors=[], transform_errors=[],
                            position_errors=[], unclassified=[], fx_missing=[])
     assert "✅" in txt
+    assert txt.startswith("# Migration Mutabakat Raporu\n\n✅")
+
+
+def test_render_report_shows_ozet_and_skipped_realized_anchor():
+    # F7 + F2: Özet her zaman ✅ satırından SONRA; atlanan çapa görünür; ok bozulmaz
+    txt = rc.render_report(
+        position_rows=[], anchors=[{"capa": "gerceklesmis_kz_toplam", "atlandi": True}],
+        transform_errors=[], position_errors=[], unclassified=[], fx_missing=[],
+        realized_total_usd=115018.97,
+        counts={"transactions": 153, "cashflows": 21, "snapshots": 124})
+    assert txt.startswith("# Migration Mutabakat Raporu\n\n✅")
+    assert txt.index("✅") < txt.index("## Özet")
+    assert "Gerçekleşmiş K/Z toplamı (USD): 115018.97" in txt
+    assert "İşlem: 153 · Nakit hareketi: 21 · Aylık snapshot: 124" in txt
+    assert "çapa atlandı: gerceklesmis_kz_toplam" in txt
 
 
 def test_render_report_lists_problems():

@@ -39,21 +39,40 @@ def anchor_checks(derived, cashflows, ref):
         d = round(derived["realized_total_usd"], 6)
         out.append({"capa": "gerceklesmis_kz_toplam", "derived": d, "excel": exc,
                     "gecti": abs(d - exc) <= 0.01 * max(abs(exc), 1.0)})
+    else:
+        out.append({"capa": "gerceklesmis_kz_toplam", "atlandi": True})
     return out
 
 
 def render_report(*, position_rows, anchors, transform_errors, position_errors,
-                  unclassified, fx_missing):
+                  unclassified, fx_missing, realized_total_usd=None, counts=None):
+    real_anchors = [a for a in anchors if not a.get("atlandi")]
+    skipped_anchors = [a for a in anchors if a.get("atlandi")]
     fails = ([r for r in position_rows if not r["gecti"]]
-             + [a for a in anchors if not a["gecti"]]
+             + [a for a in real_anchors if not a["gecti"]]
              + list(transform_errors) + list(position_errors)
              + list(unclassified) + list(fx_missing))
     lines = ["# Migration Mutabakat Raporu", ""]
     if not fails:
         lines.append("✅ Tüm çapalar geçti, çözülmemiş sorun yok.")
-        return "\n".join(lines) + "\n"
+    else:
+        lines.append(f"⚠️ {len(fails)} açık sorun.")
+    lines.append("")
 
-    lines.append(f"⚠️ {len(fails)} açık sorun.\n")
+    lines += ["## Özet", ""]
+    if realized_total_usd is not None:
+        lines.append(f"- Gerçekleşmiş K/Z toplamı (USD): {realized_total_usd:.2f}")
+    if counts:
+        lines.append(f"- İşlem: {counts['transactions']} · "
+                     f"Nakit hareketi: {counts['cashflows']} · "
+                     f"Aylık snapshot: {counts['snapshots']}")
+    for a in skipped_anchors:
+        lines.append(f"- ⚠️ çapa atlandı: {a['capa']} "
+                     "(Excel'de temiz gerçekleşmiş-K/Z kaynağı yok)")
+    lines.append("")
+
+    if not fails:
+        return "\n".join(lines).rstrip("\n") + "\n"
 
     if unclassified:
         lines += ["## Sınıflandırılmamış enstrümanlar", ""]
@@ -80,7 +99,7 @@ def render_report(*, position_rows, anchors, transform_errors, position_errors,
                   f'{(r["excel"] or 0):.4f} | {r["fark"]:.4f} |' for r in bad_pos]
         lines.append("")
 
-    bad_anchor = [a for a in anchors if not a["gecti"]]
+    bad_anchor = [a for a in real_anchors if not a["gecti"]]
     if bad_anchor:
         lines += ["## Çapa kontrolleri", "", "| Çapa | Türetilen | Excel |", "|---|---:|---:|"]
         lines += [f'| {a["capa"]} | {a["derived"]:.4f} | {(a["excel"] or 0):.4f} |'

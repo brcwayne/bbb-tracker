@@ -49,6 +49,9 @@ class TcmbClient:
     def get_rate(self, date_iso: str) -> float:
         if date_iso in self.cache:
             return self.cache[date_iso]
+        if date_iso in self.seed:
+            self.cache[date_iso] = self.seed[date_iso]
+            return self.seed[date_iso]
         d0 = dt.date.fromisoformat(date_iso)
         for i in range(_MAX_WALKBACK + 1):
             d = d0 - dt.timedelta(days=i)
@@ -62,9 +65,6 @@ class TcmbClient:
                 self.cache[key] = rate
                 self.cache[date_iso] = rate
                 return rate
-        if date_iso in self.seed:
-            self.cache[date_iso] = self.seed[date_iso]
-            return self.seed[date_iso]
         raise LookupError(f"USD/TRY bulunamadı: {date_iso}")
 
     def build_fxrates(self, dates):

@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import sys
 from pathlib import Path
 
 from . import constants, instruments as im, positions as pos, reconcile as rc
@@ -65,7 +64,10 @@ def run(xlsm_path, out_dir, overrides_dir, cache_path, *, tcmb_fetch=None):
         position_rows=pos_rows, anchors=anchors,
         transform_errors=[str(e) for e in terrors] + [str(e) for e in cerrors],
         position_errors=pos_res["errors"], unclassified=unclassified,
-        fx_missing=fx_missing)
+        fx_missing=fx_missing,
+        realized_total_usd=pos_res["realized_total_usd"],
+        counts={"transactions": len(txns), "cashflows": len(flows),
+                "snapshots": len(snaps)})
 
     _write(out_dir / "transactions.json", txns)
     _write(out_dir / "cashflows.json", flows)
@@ -82,6 +84,9 @@ def run(xlsm_path, out_dir, overrides_dir, cache_path, *, tcmb_fetch=None):
         "p0Sinirlari": [
             "Bank Transfers hesap kırılımı yok → nakit 'TOPLU' altında",
             "aylık snapshot Excel Monthly Report'tan; hesap/portföy/sınıf kırılımı boş",
+            "nakitHesapBazli yalnızca TOPLAM olarak geçerli — mevduatlar 'TOPLU' "
+            "altında toplu, alımlar hesap bazlı, dolayısıyla tek tek hesap "
+            "bakiyeleri anlamlı değil",
         ],
     })
     (out_dir / "reconciliation-report.md").write_text(report)

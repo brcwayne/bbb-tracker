@@ -94,6 +94,8 @@ def extract_dividends(path) -> list[dict]:
 def extract_reference(path) -> dict:
     wb = _load(path)
     out = {"stock_position": [], "monthly_report": [], "portfoyler": []}
+    if "Bank Transfers" in wb.sheetnames:
+        out["total_deposits"] = wb["Bank Transfers"]["H5"].value
     if "Stock Position" in wb.sheetnames:
         ws = wb["Stock Position"]
         for row in range(DATA_START_ROW, ws.max_row + 1):
@@ -110,7 +112,7 @@ def extract_reference(path) -> dict:
         ws = wb["Monthly Report"]
         for row in range(21, ws.max_row + 1):
             m = _cell(ws, "D", row)
-            if not hasattr(m, "year"):
+            if not hasattr(m, "year") or _cell(ws, "C", row) in (None, ""):
                 continue
             out["monthly_report"].append({
                 "ay": f"{m.year:04d}-{m.month:02d}",

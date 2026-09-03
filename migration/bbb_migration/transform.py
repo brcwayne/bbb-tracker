@@ -49,7 +49,7 @@ def build_transaction(raw, fx, instruments):
         raise TransformError(rn, f"kur yok: {tarih}")
     kur = fx[tarih]
 
-    kod = raw["kod_raw"].strip()
+    kod = str(raw["kod_raw"]).strip()
     if kod not in instruments:
         raise TransformError(rn, f"enstrüman tanımsız: {kod}")
     inst = instruments[kod]
@@ -136,7 +136,7 @@ def build_dividend_cashflow(raw, fx):
     return {
         "id": _rid("c_", f"div:{rn}"),
         "tarih": tarih, "hesap": "TOPLU", "portfoy": None, "tur": "TEMETTU",
-        "enstruman": raw["kod_raw"].strip(),
+        "enstruman": str(raw["kod_raw"]).strip(),
         "tutar_tl": _r(tutar_tl) if tutar_tl is not None else None,
         "tutar_usd": _r(tutar_usd),
         "kur": kur, "aciklama": (raw["tur_raw"] or ""), "kaynak": "migration",

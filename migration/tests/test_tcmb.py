@@ -32,10 +32,14 @@ def test_get_rate_walks_back_to_previous_business_day(tmp_path):
 
 
 def test_get_rate_falls_back_to_seed(tmp_path):
+    # F6: seed cache'ten hemen sonra danışılır; walk-back HTTP denenmez
     seed = tmp_path / "seed.json"
     seed.write_text(json.dumps({"1999-01-04": 0.31}))
-    client = tcmb.TcmbClient(tmp_path / "c.json", seed_path=seed, fetch=lambda ymd: None)
+    calls = []
+    client = tcmb.TcmbClient(tmp_path / "c.json", seed_path=seed,
+                             fetch=lambda ymd: calls.append(ymd) or None)
     assert client.get_rate("1999-01-04") == 0.31
+    assert calls == []  # seed kapsıyorsa fetch hiç çağrılmaz
 
 
 def test_get_rate_raises_when_nothing_found(tmp_path):

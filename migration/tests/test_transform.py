@@ -67,3 +67,12 @@ def test_build_transactions_collects_errors_and_skips():
     txns, errors = tr.build_transactions(raws, FX, INST)
     assert len(txns) == 1 and len(errors) == 1
     assert errors[0].row_no == 16
+
+
+def test_build_transactions_numeric_code_is_collected_not_aborted():
+    # F4: kod sütununda sayısal hücre AttributeError ile tüm koşuyu düşürmemeli
+    raws = [_raw(row_no=15), _raw(row_no=16, kod_raw=123)]
+    txns, errors = tr.build_transactions(raws, FX, INST)
+    assert len(txns) == 1 and len(errors) == 1
+    assert errors[0].row_no == 16
+    assert "enstrüman" in errors[0].reason.lower()

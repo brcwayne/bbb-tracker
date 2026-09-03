@@ -19,6 +19,10 @@ def build_snapshots(monthly_rows):
         out.append({
             "tarih": month_end(row["ay"]),
             "toplamOzkaynak_usd": parse_decimal(row.get("end_capital")),
+            "baslangicSermayesi_usd": parse_decimal(row.get("beg_capital")),
+            "netMevduatCekim_usd": parse_decimal(row.get("deposits")),
+            "cekim_usd": parse_decimal(row.get("withdrawals")),
+            "nakitTemettu_usd": parse_decimal(row.get("cash_div")),
             "nakit_usd": None,
             "gerceklesmemisKZ_usd": None,
             "hesapBazli": {},
