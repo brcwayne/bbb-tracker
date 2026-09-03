@@ -1,0 +1,4 @@
+{
+  "_aciklama": "kod -> {sinif, fiyatKaynagi, fiyatSembolu, girisParaBirimi, altinKatsayi?}. sinif enum: BIST|ALTIN|FON_PARA|FON_HISSE|USA",
+  "ASTOR": {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "ASTOR.IS", "girisParaBirimi": "TL"}
+}

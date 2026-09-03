@@ -5,3 +5,8 @@ node_modules/
 
 .claude/
 .superpowers/
+data/
+migration/.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
