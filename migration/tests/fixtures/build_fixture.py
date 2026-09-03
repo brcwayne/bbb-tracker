@@ -64,6 +64,20 @@ def build():
     _set(sp, "B17", "AFT.F"); _set(sp, "C17", 1000); _set(sp, "D17", 1.0); _set(sp, "E17", 1000.0)
     _set(sp, "B18", "THYAO"); _set(sp, "C18", 25); _set(sp, "D18", 40.06); _set(sp, "E18", 1001.5)
 
+    mr = wb.create_sheet("Monthly Report")
+    _set(mr, "B20", "Month"); _set(mr, "C20", "BEGINNING CAPITAL")
+    _set(mr, "D20", "Net Deposits/ Withdr"); _set(mr, "F20", "Withdrawals")
+    _set(mr, "G20", "Gain"); _set(mr, "H20", "Loss"); _set(mr, "I20", "Cash Dividends")
+    _set(mr, "J20", "END CAPITAL"); _set(mr, "K20", "TAX & FEES")
+    mr_rows = [
+        (22, dt.datetime(2020, 1, 1), 1000.0, 0.0, 0.0, 0.0, 0.0, 0.0, 900.0, 0.0),
+        (23, dt.datetime(2021, 3, 1), 900.0, 0.0, 0.0, 175.0, 0.0, 0.0, 1075.0, 0.0),
+    ]
+    for r, m, beg, nd, wd, gn, ls, cd, endc, tf in mr_rows:
+        _set(mr, f"B{r}", m); _set(mr, f"C{r}", beg); _set(mr, f"D{r}", nd)
+        _set(mr, f"F{r}", wd); _set(mr, f"G{r}", gn); _set(mr, f"H{r}", ls)
+        _set(mr, f"I{r}", cd); _set(mr, f"J{r}", endc); _set(mr, f"K{r}", tf)
+
     wb.save(OUT)
     print("wrote", OUT)
 

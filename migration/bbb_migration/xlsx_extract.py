@@ -95,5 +95,22 @@ def extract_reference(path) -> dict:
                 "ave_price": _cell(ws, "D", row),
                 "amount": _cell(ws, "E", row),
             })
+    if "Monthly Report" in wb.sheetnames:
+        ws = wb["Monthly Report"]
+        for row in range(21, ws.max_row + 1):
+            m = _cell(ws, "B", row)
+            if not hasattr(m, "year"):
+                continue
+            out["monthly_report"].append({
+                "ay": f"{m.year:04d}-{m.month:02d}",
+                "beg_capital": _cell(ws, "C", row),
+                "deposits": _cell(ws, "D", row),
+                "withdrawals": _cell(ws, "F", row),
+                "gain": _cell(ws, "G", row),
+                "loss": _cell(ws, "H", row),
+                "cash_div": _cell(ws, "I", row),
+                "end_capital": _cell(ws, "J", row),
+                "tax_fees": _cell(ws, "K", row),
+            })
     wb.close()
     return out
