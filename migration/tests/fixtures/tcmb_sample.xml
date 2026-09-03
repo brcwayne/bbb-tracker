@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="ISO-8859-9"?>
+<Tarih_Date Tarih="06.01.2020" Date="01/06/2020">
+  <Currency CrossOrder="0" Kod="USD" CurrencyCode="USD">
+    <Unit>1</Unit>
+    <Isim>ABD DOLARI</Isim>
+    <ForexBuying>5.9410</ForexBuying>
+    <ForexSelling>5.9517</ForexSelling>
+  </Currency>
+  <Currency Kod="EUR" CurrencyCode="EUR">
+    <ForexBuying>6.6320</ForexBuying>
+  </Currency>
+</Tarih_Date>
