@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
 
 from .constants import LABEL_MAP, MONEY_ROUND, normalize_label
 from . import normalize as n
@@ -22,7 +23,19 @@ def _r(x):
     return round(x, MONEY_ROUND)
 
 
-def build_transaction(raw, fx, instruments):
+def _payload(tarih, hesap, portfoy, enstruman, yon, lot, fiyat_usd, dup_idx):
+    return f"{tarih}|{hesap}|{portfoy}|{enstruman}|{yon}|{lot}|{fiyat_usd}|{dup_idx}"
+
+
+def _apply_dup_idx(prefix, record, key, seen):
+    """key = 7-tuple payload alanları; aynı key ikinci kez görülürse id'yi dup_idx ile yeniden hesapla."""
+    idx = seen[key]
+    seen[key] += 1
+    if idx:
+        record["id"] = _rid(prefix, _payload(*key, idx))
+
+
+def build_transaction(raw, fx, instruments, dup_idx=0):
     rn = raw["row_no"]
     label = raw["portfoy_raw"]
     if not isinstance(label, str) or normalize_label(label) not in LABEL_MAP:
@@ -61,7 +74,7 @@ def build_transaction(raw, fx, instruments):
     net_usd = _r(brut_usd + komisyon_usd) if yon == "AL" else _r(brut_usd - komisyon_usd)
 
     return {
-        "id": _rid("t_", f"trades:{rn}"),
+        "id": _rid("t_", _payload(tarih, hesap, portfoy, kod, yon, lot, _r(fiyat_usd), dup_idx)),
         "tarih": tarih,
         "hesap": hesap,
         "portfoy": portfoy,
@@ -82,12 +95,18 @@ def build_transaction(raw, fx, instruments):
 
 
 def build_transactions(raws, fx, instruments):
+    seen = Counter()
     txns, errors = [], []
     for raw in raws:
         try:
-            txns.append(build_transaction(raw, fx, instruments))
+            t = build_transaction(raw, fx, instruments, dup_idx=0)
         except TransformError as e:
             errors.append(e)
+            continue
+        key = (t["tarih"], t["hesap"], t["portfoy"], t["enstruman"],
+               t["yon"], t["lot"], t["fiyat_usd"])
+        _apply_dup_idx("t_", t, key, seen)
+        txns.append(t)
     return txns, errors
 
 
@@ -95,7 +114,7 @@ _DEP = {"deposit", "yatırma", "yatirma"}
 _WD = {"withdraw", "withdrawal", "çekme", "cekme"}
 
 
-def build_bank_cashflow(raw):
+def build_bank_cashflow(raw, dup_idx=0):
     rn = raw["row_no"]
     act = (raw["action_raw"] or "").strip().lower()
     if act in _DEP:
@@ -111,14 +130,14 @@ def build_bank_cashflow(raw):
     if tutar is None:
         raise TransformError(rn, f"tutar çözülemedi: {raw['gross_raw']!r}")
     return {
-        "id": _rid("c_", f"bank:{rn}"),
+        "id": _rid("c_", _payload(tarih, "TOPLU", None, None, None, None, None, dup_idx)),
         "tarih": tarih, "hesap": "TOPLU", "portfoy": None, "tur": tur,
         "enstruman": None, "tutar_tl": None, "tutar_usd": _r(tutar),
         "kur": None, "aciklama": (raw["notes_raw"] or ""), "kaynak": "migration",
     }
 
 
-def build_dividend_cashflow(raw, fx):
+def build_dividend_cashflow(raw, fx, dup_idx=0):
     rn = raw["row_no"]
     tarih = n.parse_date(raw["exdiv_raw"])
     if tarih is None:
@@ -133,10 +152,11 @@ def build_dividend_cashflow(raw, fx):
     else:
         raise TransformError(rn, "temettü tutarı hesaplanamadı (paid_usd / value+usdtry yok)")
     kur = usdtry if usdtry else fx.get(tarih)
+    kod = str(raw["kod_raw"]).strip()
     return {
-        "id": _rid("c_", f"div:{rn}"),
+        "id": _rid("c_", _payload(tarih, "TOPLU", None, kod, None, None, None, dup_idx)),
         "tarih": tarih, "hesap": "TOPLU", "portfoy": None, "tur": "TEMETTU",
-        "enstruman": str(raw["kod_raw"]).strip(),
+        "enstruman": kod,
         "tutar_tl": _r(tutar_tl) if tutar_tl is not None else None,
         "tutar_usd": _r(tutar_usd),
         "kur": kur, "aciklama": (raw["tur_raw"] or ""), "kaynak": "migration",
@@ -144,15 +164,24 @@ def build_dividend_cashflow(raw, fx):
 
 
 def build_cashflows(bank_raws, div_raws, fx):
+    seen = Counter()
     flows, errors = [], []
     for raw in bank_raws:
         try:
-            flows.append(build_bank_cashflow(raw))
+            c = build_bank_cashflow(raw, dup_idx=0)
         except TransformError as e:
             errors.append(e)
+            continue
+        key = (c["tarih"], "TOPLU", None, c["enstruman"], None, None, None)
+        _apply_dup_idx("c_", c, key, seen)
+        flows.append(c)
     for raw in div_raws:
         try:
-            flows.append(build_dividend_cashflow(raw, fx))
+            c = build_dividend_cashflow(raw, fx, dup_idx=0)
         except TransformError as e:
             errors.append(e)
+            continue
+        key = (c["tarih"], "TOPLU", None, c["enstruman"], None, None, None)
+        _apply_dup_idx("c_", c, key, seen)
+        flows.append(c)
     return flows, errors

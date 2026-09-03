@@ -26,8 +26,26 @@ def test_build_transaction_happy_path_buy():
     assert t["brut_usd"] == 100.0
     assert t["net_usd"] == 100.0
     assert t["girisParaBirimi"] == "TL"
-    assert t["id"] == "t_" + __import__("hashlib").sha1(b"trades:15").hexdigest()[:16]
     assert t["kaynak"] == "migration"
+
+
+def test_build_transaction_id_is_content_derived():
+    t = tr.build_transaction(_raw(), FX, INST)  # _raw(): row 15, M.Alfa/ASTOR/BUY/1.0/100/tl None
+    import hashlib
+    payload = "2020-01-06|MIDAS|ALFA|ASTOR|AL|100.0|1.0|0"
+    assert t["id"] == "t_" + hashlib.sha1(payload.encode()).hexdigest()[:16]
+    assert "trades:" not in payload  # satır numarası artık id'ye girmiyor
+
+
+def test_build_transactions_disambiguates_identical_rows():
+    a = _raw(row_no=15)
+    b = _raw(row_no=16)  # birebir aynı içerik, farklı satır
+    txns, errors = tr.build_transactions([a, b], FX, INST)
+    assert errors == []
+    assert txns[0]["id"] != txns[1]["id"]           # dup_idx 0 vs 1
+    # deterministik: aynı girdi -> aynı id
+    txns2, _ = tr.build_transactions([a, b], FX, INST)
+    assert [t["id"] for t in txns] == [t["id"] for t in txns2]
 
 
 def test_build_transaction_uses_tl_column_when_present():
