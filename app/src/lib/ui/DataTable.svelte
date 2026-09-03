@@ -71,3 +71,41 @@
     {/each}
   </tbody>
 </table>
+
+<style>
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--ink);
+  }
+  th,
+  td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--hairline);
+    text-align: left;
+  }
+  thead th {
+    color: var(--ink-soft);
+    font-weight: 600;
+    font-size: 0.85em;
+    letter-spacing: 0.02em;
+    border-bottom-color: var(--ink-soft);
+  }
+  th.sortable {
+    cursor: pointer;
+    user-select: none;
+  }
+  th.sortable:hover {
+    color: var(--ink);
+  }
+  td.num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+  tbody tr.clickable {
+    cursor: pointer;
+  }
+  tbody tr.clickable:hover {
+    background: var(--surface);
+  }
+</style>
