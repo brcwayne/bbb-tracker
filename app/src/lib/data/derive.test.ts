@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { derivePositions } from './derive'
+import {
+  derivePositions,
+  allocationByClass, allocationByPortfolio, gainBuckets, periodPerformance,
+  topMovers, winLoss, positionStats,
+} from './derive'
+import { fixture } from '../../fixtures/dataset'
 import type { Transaction } from './types'
 
 const t = (o: Partial<Transaction>): Transaction => ({
@@ -50,5 +55,57 @@ describe('derivePositions', () => {
       t({ id: 'b', tarih: '2020-06-10', yon: 'AL', lot: 100, fiyat_usd: 2, net_usd: 200 }),
     ])
     expect(r.realizedTotalUsd).toBeCloseTo(175, 9)
+  })
+})
+
+describe('allocation', () => {
+  it('by class, cost-weighted, sorted desc', () => {
+    const pos = derivePositions(fixture.transactions)
+    const a = allocationByClass(pos.open, fixture.instruments)
+    // açık: ASTOR 150@1.5 = 225 (BIST), THYAO 25 net 1001.5 (BIST); XAU tam çıkış -> yok
+    const bist = a.find((r) => r.key === 'BIST')!
+    expect(bist.tutarUsd).toBeCloseTo(1226.5, 6)
+    expect(a.reduce((s, r) => s + r.pay, 0)).toBeCloseTo(1, 9)
+  })
+
+  it('by portfolio, keyed on latest transaction', () => {
+    const pos = derivePositions(fixture.transactions)
+    const a = allocationByPortfolio(pos.open, fixture.transactions)
+    expect(a[0].key).toBe('ENIS')
+    expect(a[0].tutarUsd).toBeCloseTo(1001.5, 6)
+    expect(a.find((r) => r.key === 'ALFA')!.tutarUsd).toBeCloseTo(225, 6)
+    expect(a.reduce((s, r) => s + r.pay, 0)).toBeCloseTo(1, 9)
+  })
+})
+
+describe('gainBuckets', () => {
+  it('buckets closed positions by return %', () => {
+    const pos = derivePositions(fixture.transactions)
+    const b = gainBuckets(pos.closed)
+    // ASTOR kapalı: kz 175 / alisTutar 300 -> +58% -> üst kova; XAU: 300/500 -> +60% -> üst kova
+    expect(b.at(-1)!.count).toBe(2)
+    expect(b.reduce((s, r) => s + r.count, 0)).toBe(2)
+  })
+})
+
+describe('periodPerformance', () => {
+  it('sums netKZ over ranges with null-safe pct', () => {
+    const rows = periodPerformance(fixture.snapshots, new Date('2024-02-01'))
+    const ytd = rows.find((r) => r.period === 'YTD')!
+    expect(ytd.netKzUsd).toBeCloseTo(300, 6) // yalnız 2024-01 snapshot
+  })
+})
+
+describe('topMovers / winLoss / positionStats', () => {
+  it('ranks and counts', () => {
+    const pos = derivePositions(fixture.transactions)
+    const m = topMovers(pos.closed, 5)
+    expect(m.gainers[0].kod).toBe('XAU') // XAU +300 > ASTOR +175
+    const wl = winLoss(pos.closed)
+    expect(wl.wins).toBe(2)
+    expect(wl.losses).toBe(0)
+    const st = positionStats(pos.closed)
+    expect(st.win).toBe(2)
+    expect(st.enBuyukKazanc).toBeCloseTo(300, 6)
   })
 })
