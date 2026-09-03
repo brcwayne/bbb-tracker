@@ -49,12 +49,20 @@
         <th
           style:text-align={col.align ?? 'left'}
           class:sortable={col.sortable}
+          role={col.sortable ? 'button' : undefined}
+          tabindex={col.sortable ? 0 : undefined}
           aria-sort={sort?.key === col.key
             ? sort.dir === 'asc'
               ? 'ascending'
               : 'descending'
             : 'none'}
-          onclick={() => toggle(col)}>{col.label}</th
+          onclick={() => toggle(col)}
+          onkeydown={(e) => {
+            if (col.sortable && (e.key === 'Enter' || e.key === ' ')) {
+              e.preventDefault()
+              toggle(col)
+            }
+          }}>{col.label}</th
         >
       {/each}
     </tr>

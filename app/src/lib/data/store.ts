@@ -62,9 +62,13 @@ export function pickSource(): DataSource {
     const p = new URLSearchParams(location.search).get('source')
     const pref = p ?? localStorage.getItem('bbb-source')
     if (pref === 'drive') {
-      const clientId = (import.meta as unknown as { env: Record<string, string | undefined> }).env
-        .VITE_GOOGLE_CLIENT_ID
-      if (clientId) return new DriveSource(clientId)
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+      if (clientId)
+        return new DriveSource(
+          clientId,
+          import.meta.env.VITE_GOOGLE_API_KEY,
+          import.meta.env.VITE_GOOGLE_APP_ID,
+        )
       console.warn('VITE_GOOGLE_CLIENT_ID tanımlı değil — local kaynağa düşülüyor')
     }
   } catch {}

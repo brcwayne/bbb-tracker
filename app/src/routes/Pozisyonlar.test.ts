@@ -39,12 +39,25 @@ describe('Pozisyonlar', () => {
     expect(closed.textContent).toContain('+$300.00')
   })
 
-  it('renders the — placeholder somewhere on the page', async () => {
+  it('closed % is on the sold-lot cost basis, not the full-buy notional', async () => {
     const d = await v()
     const { container } = render(Pozisyonlar, {
       props: { dataset: d.dataset, derived: d.derived },
     })
-    expect(container.textContent).toContain('—')
+    const closed = container.querySelector('[data-testid="closed-table"]') as HTMLElement
+    // ASTOR partial exit: sold 50 @ avg cost 1.5 -> basis $75; realized $175 -> 233.3%
+    expect(closed.textContent).toContain('$75.00')
+    expect(closed.textContent).toContain('233.3%')
+  })
+
+  it('always renders the approximate portfolio/account note', async () => {
+    const d = await v()
+    const { getByTestId } = render(Pozisyonlar, {
+      props: { dataset: d.dataset, derived: d.derived },
+    })
+    expect(getByTestId('pozisyonlar-notes').textContent).toContain(
+      'son işlemine göre gösterilir (yaklaşık)',
+    )
   })
 
   it('class filter narrows the open table', async () => {

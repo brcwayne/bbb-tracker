@@ -27,6 +27,8 @@ describe('derivePositions', () => {
     expect(astor.toplamMaliyetUsd).toBeCloseTo(225, 9)
     expect(r.realizedTotalUsd).toBeCloseTo(175, 9)
     expect(r.closed[0].gerceklesmisKzUsd).toBeCloseTo(175, 9)
+    // sold-lot cost basis: 50 lots @ avg cost 1.5
+    expect(r.closed[0].satisMaliyetUsd).toBeCloseTo(75, 9)
   })
 
   it('full exit removes the open position', () => {
@@ -36,6 +38,8 @@ describe('derivePositions', () => {
     ])
     expect(r.open.find((p) => p.kod === 'XAU')).toBeUndefined()
     expect(r.realizedTotalUsd).toBeCloseTo(300, 9)
+    // full exit: sold-lot basis == the whole buy notional
+    expect(r.closed[0].satisMaliyetUsd).toBeCloseTo(500, 9)
   })
 
   it('oversell is flagged and clamped', () => {
@@ -79,11 +83,14 @@ describe('allocation', () => {
 })
 
 describe('gainBuckets', () => {
-  it('buckets closed positions by return %', () => {
+  it('buckets closed positions by return % (sold-lot basis)', () => {
     const pos = derivePositions(fixture.transactions)
     const b = gainBuckets(pos.closed)
-    // ASTOR kapalı: kz 175 / alisTutar 300 -> +58% -> üst kova; XAU: 300/500 -> +60% -> üst kova
+    // ASTOR kapalı: kz 175 / satisMaliyet 75 -> +233%; XAU: 300 / 500 -> +60%
+    // ikisi de en üst (">20%") kovada
+    expect(b.at(-1)!.label).toBe('>20%')
     expect(b.at(-1)!.count).toBe(2)
+    expect(b[0].label).toBe('<-22%')
     expect(b.reduce((s, r) => s + r.count, 0)).toBe(2)
   })
 })

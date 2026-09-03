@@ -54,6 +54,7 @@
   <ConnectDrive
     connect={() => drive.connect()}
     chooseFolder={() => drive.chooseFolder()}
+    hasFolder={() => drive.hasFolder()}
     onConnected={() => load(store, source)}
   />
 {:else if $store.status === 'error'}

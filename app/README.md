@@ -13,7 +13,13 @@ npm run dev
 ```
 
 Uygulama varsayılan olarak `local` kaynağı seçer ve `./data/*.json` dosyalarını
-`fetch` eder. Depoda `data/` **gitignore**'dur — önce migration ile üret:
+`fetch` eder. Vite'ın kökü `app/` olduğu için `vite.config.ts` içindeki
+**dev-only** `serve-repo-data` eklentisi `/data/*` isteklerini repo kökündeki
+`../data` klasörüne yönlendirir — yerelde `data/` böyle çalışır (bu eklenti
+olmasa istek SPA `index.html`'ine düşer ve `res.json()` patlar). Eklenti yalnızca
+`apply: 'serve'` olduğundan `npm run build` çıktısına hiçbir veri girmez.
+
+Depoda `data/` **gitignore**'dur — önce migration ile üret:
 
 ```bash
 cd migration
@@ -29,6 +35,8 @@ Drive kaynağını yerelde denemek için `app/.env` oluştur:
 
 ```
 VITE_GOOGLE_CLIENT_ID=<Web application OAuth client id>
+VITE_GOOGLE_API_KEY=<Picker API'ye kısıtlı API key>
+VITE_GOOGLE_APP_ID=<Google Cloud proje numarası>
 ```
 
 ## Test
@@ -41,9 +49,12 @@ npm test
 ## Yayın
 
 `main` dalına push → `.github/workflows/pages.yml` çalışır: `app/` içinde
-`npm ci && npm test && npm run build`, sonra `app/dist` GitHub Pages'e deploy
-edilir. Yalnızca `app/**` veya workflow dosyası değişince tetiklenir. Build
-`VITE_GOOGLE_CLIENT_ID` repo değişkenini env'e geçirir.
+`npm ci && npm test && npm run check && npm run build`, sonra `app/dist` GitHub
+Pages'e deploy edilir. Build ayrıca `dist/` içinde manifest dışında hiçbir
+`.json` olmadığını doğrular (veri paketlenmesin diye kalıcı koruma). Yalnızca
+`app/**` veya workflow dosyası değişince tetiklenir. Build
+`VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY` ve `VITE_GOOGLE_APP_ID` repo
+değişkenlerini env'e geçirir.
 
 GitHub Actions üzerinde `base` `/bbb-tracker/` olur (repo alt-yolu). Repo adını
 `bbb-tracker` dışında seçersen `app/vite.config.ts` içindeki `base` değerini ve
@@ -77,11 +88,17 @@ aşağıdaki 6. adımdaki URL'yi güncelle.
    - **Credentials** → **Create OAuth client ID** → **Web application** →
      Authorized JavaScript origins: `https://<kullanıcı>.github.io` → **Client ID**'yi
      kopyala.
+   - **Credentials** → **Create credentials** → **API key** → oluşan anahtarı
+     **Picker API**'ye kısıtla → kopyala. Bu senin `VITE_GOOGLE_API_KEY`'in.
+   - **App ID**, Google Cloud **proje numarandır** (proje ayarları / kadran
+     sayfasında görünür) → `VITE_GOOGLE_APP_ID`.
    - **Enabled APIs & services** → **Google Picker API**'yi de etkinleştir.
 
-4. **Repo değişkeni.** Repo → Settings → Secrets and variables → **Actions** →
-   **Variables** sekmesi → **New repository variable** → `VITE_GOOGLE_CLIENT_ID`
-   = kopyalanan Client ID.
+4. **Repo değişkenleri.** Repo → Settings → Secrets and variables → **Actions** →
+   **Variables** sekmesi → **New repository variable** ile üçünü ekle:
+   `VITE_GOOGLE_CLIENT_ID` = kopyalanan Client ID,
+   `VITE_GOOGLE_API_KEY` = kopyalanan API key,
+   `VITE_GOOGLE_APP_ID` = Google Cloud proje numarası.
 
 5. **Drive klasörü.** Google Drive'da adı tam olarak `BBB` olan bir klasör aç,
    migration çıktısındaki (`data/`) 8 JSON'u içine yükle:

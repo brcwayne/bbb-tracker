@@ -71,12 +71,14 @@
 
     const closedRows = d.positions.closed.map((c) => ({
       kod: c.kod,
-      alisOrt: c.alisLot ? c.alisTutarUsd / c.alisLot : null,
-      alisTutarUsd: c.alisTutarUsd,
+      // Sold-lot cost basis, not the full-buy notional (F2): avg cost of the
+      // lots actually sold, so a winning partial exit doesn't read as a loss.
+      alisOrt: c.satisLot ? c.satisMaliyetUsd / c.satisLot : null,
+      alisTutarUsd: c.satisMaliyetUsd,
       satisOrt: c.satisLot ? c.satisTutarUsd / c.satisLot : null,
       satisTutarUsd: c.satisTutarUsd,
       gerceklesmisKzUsd: c.gerceklesmisKzUsd,
-      pctVal: c.alisTutarUsd === 0 ? null : c.gerceklesmisKzUsd / c.alisTutarUsd,
+      pctVal: c.satisMaliyetUsd === 0 ? null : c.gerceklesmisKzUsd / c.satisMaliyetUsd,
     }))
 
     const s = d.stats
@@ -234,6 +236,18 @@
         initialSort={{ key: 'kod', dir: 'asc' }}
       />
     </div>
+
+    <aside class="notes" data-testid="pozisyonlar-notes">
+      {#if derived.positions.errors.length}
+        <h3>Uyarılar</h3>
+        <ul>
+          {#each derived.positions.errors as e}<li>{e}</li>{/each}
+        </ul>
+      {/if}
+      <p class="approx">
+        Portföy / Hesap sütunu enstrümanın son işlemine göre gösterilir (yaklaşık).
+      </p>
+    </aside>
   </section>
 {:else}
   <EmptyState title="Pozisyonlar" detail="Veri bekleniyor." />
@@ -267,5 +281,23 @@
     background: var(--surface);
     color: var(--ink);
     font: inherit;
+  }
+  .notes {
+    margin-top: 1.25rem;
+    font-size: 0.85em;
+    color: var(--ink-soft);
+  }
+  .notes h3 {
+    margin: 0 0 0.35rem;
+    font-size: 0.9em;
+    letter-spacing: 0.02em;
+    color: var(--loss);
+  }
+  .notes ul {
+    margin: 0 0 0.75rem;
+    padding-left: 1.1rem;
+  }
+  .notes .approx {
+    margin: 0;
   }
 </style>

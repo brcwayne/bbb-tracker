@@ -3,7 +3,7 @@ import type { Transaction, Snapshot, Instrument } from './types'
 export interface OpenPosition { kod: string; lot: number; ortMaliyetUsd: number; toplamMaliyetUsd: number }
 export interface ClosedPosition {
   kod: string; alisLot: number; alisTutarUsd: number
-  satisLot: number; satisTutarUsd: number; gerceklesmisKzUsd: number
+  satisLot: number; satisTutarUsd: number; satisMaliyetUsd: number; gerceklesmisKzUsd: number
 }
 export interface Positions {
   open: OpenPosition[]; closed: ClosedPosition[]; realizedTotalUsd: number; errors: string[]
@@ -22,7 +22,7 @@ export function derivePositions(txns: Transaction[]): Positions {
 
   const cl = (kod: string) =>
     closed.get(kod) ??
-    closed.set(kod, { kod, alisLot: 0, alisTutarUsd: 0, satisLot: 0, satisTutarUsd: 0, gerceklesmisKzUsd: 0 }).get(kod)!
+    closed.set(kod, { kod, alisLot: 0, alisTutarUsd: 0, satisLot: 0, satisTutarUsd: 0, satisMaliyetUsd: 0, gerceklesmisKzUsd: 0 }).get(kod)!
 
   for (const x of ordered) {
     const pos = open.get(x.enstruman) ?? { kod: x.enstruman, lot: 0, ortMaliyetUsd: 0, toplamMaliyetUsd: 0 }
@@ -50,13 +50,14 @@ export function derivePositions(txns: Transaction[]): Positions {
       const c = cl(x.enstruman)
       c.satisLot += sell
       c.satisTutarUsd += x.fiyat_usd * sell - x.komisyon_usd
+      c.satisMaliyetUsd += ort * sell
       c.gerceklesmisKzUsd += kz
       if (pos.lot <= EPS) open.delete(x.enstruman)
     }
   }
 
   return {
-    open: [...open.values()].sort((a, b) => (a.kod < b.kod ? -1 : 1)),
+    open: [...open.values()].filter((p) => p.lot > EPS).sort((a, b) => (a.kod < b.kod ? -1 : 1)),
     closed: [...closed.values()].filter((c) => c.satisLot > EPS).sort((a, b) => (a.kod < b.kod ? -1 : 1)),
     realizedTotalUsd,
     errors,
@@ -92,15 +93,18 @@ const BUCKET_EDGES = [
 ]
 
 export function gainBuckets(closed: ClosedPosition[]) {
-  const buckets = BUCKET_EDGES.slice(0, -1).map((lo, i) => ({
-    lo,
-    hi: BUCKET_EDGES[i + 1],
-    label: `${(lo * 100) | 0}%–${BUCKET_EDGES[i + 1] === Infinity ? '∞' : (BUCKET_EDGES[i + 1] * 100) | 0}%`,
-    count: 0,
-  }))
+  const buckets = BUCKET_EDGES.slice(0, -1).map((lo, i) => {
+    const hi = BUCKET_EDGES[i + 1]
+    return {
+      lo,
+      hi,
+      label: lo === -Infinity ? '<-22%' : hi === Infinity ? '>20%' : `${(lo * 100) | 0}%–${(hi * 100) | 0}%`,
+      count: 0,
+    }
+  })
   for (const c of closed) {
-    if (c.alisTutarUsd <= 0) continue
-    const r = c.gerceklesmisKzUsd / c.alisTutarUsd
+    if (c.satisMaliyetUsd <= 0) continue
+    const r = c.gerceklesmisKzUsd / c.satisMaliyetUsd
     const b = buckets.find((b) => r > b.lo && r <= b.hi) ?? buckets.at(-1)!
     b.count++
   }
@@ -161,8 +165,8 @@ export function winLoss(closed: ClosedPosition[]) {
 
 export function positionStats(closed: ClosedPosition[]) {
   const pcts = closed
-    .filter((c) => c.alisTutarUsd > 0)
-    .map((c) => ({ c, r: c.gerceklesmisKzUsd / c.alisTutarUsd }))
+    .filter((c) => c.satisMaliyetUsd > 0)
+    .map((c) => ({ c, r: c.gerceklesmisKzUsd / c.satisMaliyetUsd }))
   const wins = pcts.filter((p) => p.r > 0),
     losses = pcts.filter((p) => p.r < 0)
   const avg = (xs: number[]) => (xs.length ? xs.reduce((s, v) => s + v, 0) / xs.length : 0)

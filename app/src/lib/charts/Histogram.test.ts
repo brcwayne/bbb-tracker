@@ -11,4 +11,12 @@ describe('Histogram', () => {
     expect(a).toBe(0)
     expect(b).toBeGreaterThan(0)
   })
+
+  it('renders sparse band-axis tick labels (§10 direct labelling)', () => {
+    const buckets = Array.from({ length: 12 }, (_, i) => ({ label: `b${i}`, count: i }))
+    const { container } = render(Histogram, { props: { buckets, width: 400, height: 120 } })
+    const ticks = [...container.querySelectorAll('text')].map((t) => t.textContent)
+    // every 4th bucket + the last
+    expect(ticks).toEqual(['b0', 'b4', 'b8', 'b11'])
+  })
 })

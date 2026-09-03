@@ -1,26 +1,36 @@
+/* Spec §10: dark is the default. Bare :root carries the DARK palette, so a
+   "system" user with no OS preference and no in-app toggle gets dark. Light is
+   opt-in: an OS `prefers-color-scheme: light` (only when the user hasn't forced
+   dark) or an explicit `data-theme="light"`. `data-theme="dark"` re-asserts
+   dark so the toggle wins in both directions. The manifest theme/background
+   colour (#17161c) matches this default. */
 :root {
   color-scheme: light dark;
-  --bg: #f4f1ea;
-  --surface: #fbf9f4;
-  --ink: #1c1a17;
-  --ink-soft: #5c574e;
-  --hairline: #d9d3c6;
-  --gain: #1d3b6e;
-  --loss: #b06a2b;
-  --gold: #a9863f;
+  --bg: #17161c;
+  --surface: #1e1d24;
+  --ink: #ece7dd;
+  --ink-soft: #9a938a;
+  --hairline: #322f3a;
+  --gain: #6d8fce;
+  --loss: #d69154;
+  --gold: #c7a55e;
   --font-num: ui-monospace, "SF Mono", Menlo, monospace;
 }
-:root:not([data-theme='light']) {
-  @media (prefers-color-scheme: dark) {
-    --bg: #17161c;
-    --surface: #1e1d24;
-    --ink: #ece7dd;
-    --ink-soft: #9a938a;
-    --hairline: #322f3a;
-    --gain: #6d8fce;
-    --loss: #d69154;
-    --gold: #c7a55e;
+:root:not([data-theme='dark']) {
+  @media (prefers-color-scheme: light) {
+    --bg: #f4f1ea;
+    --surface: #fbf9f4;
+    --ink: #1c1a17;
+    --ink-soft: #5c574e;
+    --hairline: #d9d3c6;
+    --gain: #1d3b6e;
+    --loss: #b06a2b;
+    --gold: #a9863f;
   }
+}
+:root[data-theme='light'] {
+  --bg: #f4f1ea; --surface: #fbf9f4; --ink: #1c1a17; --ink-soft: #5c574e;
+  --hairline: #d9d3c6; --gain: #1d3b6e; --loss: #b06a2b; --gold: #a9863f;
 }
 :root[data-theme='dark'] {
   --bg: #17161c; --surface: #1e1d24; --ink: #ece7dd; --ink-soft: #9a938a;

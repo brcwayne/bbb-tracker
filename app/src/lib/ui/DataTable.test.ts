@@ -22,4 +22,17 @@ describe('DataTable', () => {
     await fireEvent.click(getByText('N'))
     expect(getAllByRole('row')[1].textContent).toContain('A') // n=10, desc
   })
+  it('sorts on Enter keydown on a sortable header', async () => {
+    const { getByText, getAllByRole } = render(DataTable, { props: { columns, rows } })
+    const header = getByText('N')
+    expect(header.getAttribute('tabindex')).toBe('0')
+    await fireEvent.keyDown(header, { key: 'Enter' })
+    expect(getAllByRole('row')[1].textContent).toContain('B') // asc
+    await fireEvent.keyDown(header, { key: 'Enter' })
+    expect(getAllByRole('row')[1].textContent).toContain('A') // flipped to desc
+  })
+  it('non-sortable headers are not keyboard-focusable', () => {
+    const { getByText } = render(DataTable, { props: { columns, rows } })
+    expect(getByText('Kod').hasAttribute('tabindex')).toBe(false)
+  })
 })

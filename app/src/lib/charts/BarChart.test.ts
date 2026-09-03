@@ -12,6 +12,13 @@ describe('BarChart', () => {
     expect(container.querySelector('[data-bar="a"]')!.getAttribute('fill')).toContain('--gain')
     expect(container.querySelector('[data-bar="b"]')!.getAttribute('fill')).toContain('--loss')
   })
+  it('horizontal: direct-labels each bar with its kod', () => {
+    const { container } = render(BarChart, {
+      props: { bars: [{ label: 'XAU', value: 10 }, { label: 'ASTOR', value: -4 }], orient: 'h', width: 200, height: 100, pad: 10 },
+    })
+    const labels = [...container.querySelectorAll('text')].map((t) => t.textContent)
+    expect(labels).toEqual(['XAU', 'ASTOR'])
+  })
   it('bar height is proportional to value', () => {
     const { container } = render(BarChart, {
       props: { bars: [{ label: 'a', value: 10 }, { label: 'b', value: 5 }], width: 200, height: 100, pad: 0 },

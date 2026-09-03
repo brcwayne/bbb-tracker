@@ -31,9 +31,15 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm test
+      - run: npm run check
       - run: npm run build
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_API_KEY: ${{ vars.VITE_GOOGLE_API_KEY }}
+          VITE_GOOGLE_APP_ID: ${{ vars.VITE_GOOGLE_APP_ID }}
+      # Permanent guard: no data file may ever land in the bundle. Fails the
+      # build if any .json other than the PWA manifest is in dist/.
+      - run: 'test -z "$(find dist -name "*.json" ! -name "manifest.webmanifest")"'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app/dist

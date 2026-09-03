@@ -3,10 +3,12 @@
     onConnected,
     connect,
     chooseFolder,
+    hasFolder,
   }: {
     onConnected: () => void
     connect: () => Promise<void>
     chooseFolder: () => Promise<string>
+    hasFolder?: () => boolean
   } = $props()
 
   let busy = $state(false)
@@ -17,7 +19,9 @@
     error = undefined
     try {
       await connect()
-      await chooseFolder()
+      // Only open the Picker when no folder is remembered — a return visitor
+      // with a stored folder goes straight through.
+      if (!hasFolder?.()) await chooseFolder()
       onConnected()
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)

@@ -29,7 +29,16 @@ export class DriveSource implements DataSource {
   private token: string | null = null
   folderId: string | null = null
 
-  constructor(private clientId: string) {}
+  constructor(
+    private clientId: string,
+    private apiKey?: string,
+    private appId?: string,
+  ) {}
+
+  /** True once a folder has been picked (this session or a prior one). */
+  hasFolder(): boolean {
+    return !!(this.folderId ?? readStoredFolder())
+  }
 
   connect(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
@@ -64,9 +73,15 @@ export class DriveSource implements DataSource {
           const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
             .setSelectFolderEnabled(true)
             .setMimeTypes('application/vnd.google-apps.folder')
-          const picker = new google.picker.PickerBuilder()
+          let builder = new google.picker.PickerBuilder()
             .addView(view)
             .setOAuthToken(this.token)
+          // Google requires both for the `drive.file` scope: the developer key
+          // and the Cloud project number (App ID) are what grant the app access
+          // to the folder the user picks.
+          if (this.apiKey) builder = builder.setDeveloperKey(this.apiKey)
+          if (this.appId) builder = builder.setAppId(this.appId)
+          const picker = builder
             .setCallback((data: any) => {
               if (data.action === google.picker.Action.PICKED) {
                 const id: string = data.docs[0].id
@@ -98,11 +113,14 @@ export class DriveSource implements DataSource {
     if (!folderId) throw new NeedsAuthError('klasör seçilmedi')
 
     const headers = { Authorization: `Bearer ${this.token}` }
-    const q = `'${folderId}' in parents and mimeType='application/json'`
+    // No mimeType filter — a browser upload can land as text/plain or
+    // application/octet-stream. Selection is by filename below.
+    const q = `'${folderId}' in parents and trashed = false`
     const listRes = await fetch(
       'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)',
       { headers },
     )
+    if (listRes.status === 401 || listRes.status === 403) throw new NeedsAuthError('oturum süresi doldu')
     if (!listRes.ok) throw new Error(`Drive: dosya listesi alınamadı (${listRes.status})`)
     const { files } = (await listRes.json()) as { files: { id: string; name: string }[] }
 
@@ -111,6 +129,7 @@ export class DriveSource implements DataSource {
         const file = files.find((f) => f.name === `${n}.json`)
         if (!file) throw new Error(`Drive: ${n}.json bulunamadı`)
         const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers })
+        if (res.status === 401 || res.status === 403) throw new NeedsAuthError('oturum süresi doldu')
         if (!res.ok) throw new Error(`Drive: ${n}.json okunamadı (${res.status})`)
         return [n, await res.json()] as const
       }),

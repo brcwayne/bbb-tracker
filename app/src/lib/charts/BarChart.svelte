@@ -24,6 +24,11 @@
       <rect data-bar={b.label} y={band(b.label)} height={band.bandwidth()}
         x={Math.min(zero, lin(b.value))} width={Math.abs(lin(b.value) - zero)}
         fill={b.value < 0 ? 'var(--loss)' : 'var(--gain)'} />
+      <text data-bar-label={b.label}
+        x={Math.max(zero, lin(b.value)) + 4}
+        y={(band(b.label) ?? 0) + band.bandwidth() / 2}
+        dominant-baseline="central"
+        style="font-size: 10px; fill: var(--ink);">{b.label}</text>
     {/if}
   {/each}
 </svg>
