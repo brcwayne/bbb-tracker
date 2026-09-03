@@ -1,3 +1,4 @@
+import datetime as dt
 from pathlib import Path
 from bbb_migration import xlsx_extract as x
 
@@ -19,24 +20,37 @@ def test_extract_trades_skips_noise_and_keeps_code_rows():
 
 
 def test_extract_bank_transfers():
+    # Gerçek workbook düzeni: C=No, D=Date, E=Action, F=Gross, G=Fees, H=Net, I=Notes.
     bt = x.extract_bank_transfers(MINI)
-    assert len(bt) == 2
+    assert len(bt) == 2  # yalnızca index'i dolu C17 gürültü satırı elenir
+    assert [r["row_no"] for r in bt] == [15, 16]
+    assert bt[0]["tarih_raw"] == dt.datetime(2019, 1, 2)
     assert bt[0]["action_raw"] == "Deposit"
     assert bt[0]["gross_raw"] == 1000.0
+    assert bt[0]["net_raw"] == 1000.0
+    assert bt[0]["notes_raw"] == "ilk"
     assert bt[1]["action_raw"] == "Withdraw"
 
 
 def test_extract_dividends():
+    # Gerçek düzen: C=No, D=Code, E=Type, F=Value, G=usdtry, H=Ex-Div(boş), I=Record, J=Payable, K=Paid.
     dv = x.extract_dividends(MINI)
-    assert len(dv) == 1
+    assert len(dv) == 1  # index'i dolu C16 gürültü satırı elenir
     assert dv[0]["kod_raw"] == "ASTOR"
+    assert dv[0]["tur_raw"] == "Cash"
+    assert dv[0]["value_raw"] == 100.0
     assert dv[0]["usdtry_raw"] == 25.0
     assert dv[0]["paid_usd_raw"] == 4.0
+    # H (Ex-Div) boş → tarih J (Payable) sütnundan çözülür
+    assert dv[0]["exdiv_raw"] == dt.datetime(2023, 4, 10)
 
 
 def test_extract_reference_stock_position():
     ref = x.extract_reference(MINI)
     sp = {r["kod"]: r for r in ref["stock_position"]}
+    # Gerçek düzen: D=Code, E=lot, F=ave_price, G=amount
     assert sp["ASTOR"]["lot"] == 150
+    assert sp["ASTOR"]["ave_price"] == 1.5
+    assert sp["ASTOR"]["amount"] == 225.0
     assert sp["XAU"]["lot"] == 10
     assert sp["THYAO"]["amount"] == 1001.5
