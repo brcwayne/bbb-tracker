@@ -89,3 +89,70 @@ def build_transactions(raws, fx, instruments):
         except TransformError as e:
             errors.append(e)
     return txns, errors
+
+
+_DEP = {"deposit", "yatırma", "yatirma"}
+_WD = {"withdraw", "withdrawal", "çekme", "cekme"}
+
+
+def build_bank_cashflow(raw):
+    rn = raw["row_no"]
+    act = (raw["action_raw"] or "").strip().lower()
+    if act in _DEP:
+        tur = "YATIRMA"
+    elif act in _WD:
+        tur = "CEKME"
+    else:
+        raise TransformError(rn, f"bank action çözülemedi: {raw['action_raw']!r}")
+    tarih = n.parse_date(raw["tarih_raw"])
+    if tarih is None:
+        raise TransformError(rn, f"tarih çözülemedi: {raw['tarih_raw']!r}")
+    tutar = n.parse_decimal(raw["gross_raw"])
+    if tutar is None:
+        raise TransformError(rn, f"tutar çözülemedi: {raw['gross_raw']!r}")
+    return {
+        "id": _rid("c_", f"bank:{rn}"),
+        "tarih": tarih, "hesap": "TOPLU", "portfoy": None, "tur": tur,
+        "enstruman": None, "tutar_tl": None, "tutar_usd": _r(tutar),
+        "kur": None, "aciklama": (raw["notes_raw"] or ""), "kaynak": "migration",
+    }
+
+
+def build_dividend_cashflow(raw, fx):
+    rn = raw["row_no"]
+    tarih = n.parse_date(raw["exdiv_raw"])
+    if tarih is None:
+        raise TransformError(rn, f"temettü tarihi çözülemedi: {raw['exdiv_raw']!r}")
+    tutar_tl = n.parse_decimal(raw["value_raw"])
+    usdtry = n.parse_decimal(raw["usdtry_raw"])
+    paid_usd = n.parse_decimal(raw["paid_usd_raw"])
+    if paid_usd is not None:
+        tutar_usd = paid_usd
+    elif tutar_tl is not None and usdtry:
+        tutar_usd = tutar_tl / usdtry
+    else:
+        raise TransformError(rn, "temettü tutarı hesaplanamadı (paid_usd / value+usdtry yok)")
+    kur = usdtry if usdtry else fx.get(tarih)
+    return {
+        "id": _rid("c_", f"div:{rn}"),
+        "tarih": tarih, "hesap": "TOPLU", "portfoy": None, "tur": "TEMETTU",
+        "enstruman": raw["kod_raw"].strip(),
+        "tutar_tl": _r(tutar_tl) if tutar_tl is not None else None,
+        "tutar_usd": _r(tutar_usd),
+        "kur": kur, "aciklama": (raw["tur_raw"] or ""), "kaynak": "migration",
+    }
+
+
+def build_cashflows(bank_raws, div_raws, fx):
+    flows, errors = [], []
+    for raw in bank_raws:
+        try:
+            flows.append(build_bank_cashflow(raw))
+        except TransformError as e:
+            errors.append(e)
+    for raw in div_raws:
+        try:
+            flows.append(build_dividend_cashflow(raw, fx))
+        except TransformError as e:
+            errors.append(e)
+    return flows, errors
