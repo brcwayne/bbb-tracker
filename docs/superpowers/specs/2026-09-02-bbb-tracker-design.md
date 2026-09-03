@@ -499,3 +499,14 @@ Her faz bağımsız değer taşır. P0 + P1, "dashboard'a bak" ihtiyacını tek 
    dosyaları elle taşırsa yeniden bağlama akışı gerekir.
 9. **Vergi/stopaj** — temettüde brüt/net ayrımı kapsamda tutulacak mı? Şimdilik `aciklama`ya
    not; gerekirse alan eklenir.
+
+## 16. Gelecek iş (parklanan fikirler)
+
+- **İşlem Günlüğü / Tez sayfası** — her hisse (ya da pozisyon) için "bu hisseyi neden aldım"
+  serbest metin notu + Enis'in aldığı ekran görüntüleri. Yazma özelliği + Drive'da resim
+  depolama gerektirir; P1 salt-okunur olduğu için P1 kapsamı dışında. Enis P1'i bir süre
+  kullandıktan sonra yeniden değerlendirecek (fikir ona ait). Muhtemel yer: P2 (yazma altyapısı
+  hazır olduğunda) veya kendi fazı.
+- **Enstrüman seviye editörü** — `instruments.json`'daki `seviyeler` (destek/direnç/hedef)
+  alanını uygulama içinden düzenleme. P1'de yalnızca *gösterim* var (veri elle girilir); editör
+  P2+.
