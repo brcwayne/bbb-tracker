@@ -1,7 +1,5 @@
 import type { Dataset } from './types'
-import type { DataSource } from './source'
-
-const NAMES = ['transactions', 'cashflows', 'snapshots', 'instruments', 'brokers', 'portfolios', 'meta', 'fxrates'] as const
+import { type DataSource, NAMES } from './source'
 
 export class LocalFileSource implements DataSource {
   readonly id = 'local' as const

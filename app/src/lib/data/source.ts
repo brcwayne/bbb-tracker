@@ -6,6 +6,12 @@ export interface DataSource {
   load(): Promise<Dataset>
 }
 
+/** The 8 dataset file basenames — shared by every DataSource adapter (DRY). */
+export const NAMES = [
+  'transactions', 'cashflows', 'snapshots', 'instruments',
+  'brokers', 'portfolios', 'meta', 'fxrates',
+] as const
+
 export function describeSource(s: DataSource, meta: Meta): string {
   const label = s.id === 'local' ? 'local' : 'Drive'
   const d = meta.olusturulma?.slice(0, 10)
