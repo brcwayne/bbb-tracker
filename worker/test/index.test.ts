@@ -57,6 +57,29 @@ describe('/prices', () => {
     expect(res.status).toBe(400)
   })
 
+  it('400 without symbols has the exact Turkish error body', async () => {
+    const res = await worker.fetch(new Request('https://w/prices'), env, ctx)
+    expect(await res.json()).toEqual({ error: 'symbols parametresi gerekli' })
+  })
+
+  it('degrades gracefully when TCMB is down: 200 with CORS, usdtry null, TRY priceUsd null, gold unaffected', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (u: string | URL) => {
+      const s = String(u)
+      if (s.includes('tcmb.gov.tr')) return new Response('', { status: 503 })
+      if (s.includes('THYAO')) return new Response(JSON.stringify(thyao))
+      if (s.includes('GC%3DF') || s.includes('GC=F'))
+        return new Response(JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: 4516.9, currency: 'USD' } }] } }))
+      return new Response('x', { status: 404 })
+    }))
+    const res = await worker.fetch(new Request('https://w/prices?symbols=THYAO.IS,GC=F'), env, ctx)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://example.test')
+    const b = await res.json() as any
+    expect(b.usdtry).toBeNull()
+    expect(b.prices['THYAO.IS'].priceUsd).toBeNull()
+    expect(b.prices['GC=F'].priceUsd).toBe(4516.9)
+  })
+
   it('returns priceUsd per symbol and folds in usdtry + usdPerGram', async () => {
     const res = await worker.fetch(new Request('https://w/prices?symbols=THYAO.IS,GC=F'), env, ctx)
     expect(res.status).toBe(200)

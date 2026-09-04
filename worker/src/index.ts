@@ -29,20 +29,28 @@ async function handlePrices(url: URL, origin: string): Promise<Response> {
   if (symbols.length === 0) return json({ error: 'symbols parametresi gerekli' }, 400, origin)
   if (symbols.length > 60) return json({ error: 'en fazla 60 sembol' }, 400, origin)
 
-  const [quotes, fx] = await Promise.all([fetchQuotes(symbols), fetchUsdTry()])
+  const quotes = await fetchQuotes(symbols)
+  let usdtry: number | null = null
+  try {
+    usdtry = (await fetchUsdTry()).usdtry
+  } catch {
+    usdtry = null
+  }
+
   const prices: Record<string, unknown> = {}
   for (const [sym, q] of Object.entries(quotes)) {
     if ('error' in q) {
       prices[sym] = q
       continue
     }
-    const priceUsd = q.currency === 'TRY' ? q.price / fx.usdtry : q.price
+    const priceUsd =
+      q.currency === 'TRY' ? (usdtry != null ? q.price / usdtry : null) : q.price
     const entry: Record<string, unknown> = { price: q.price, currency: q.currency, priceUsd }
     if (sym === GOLD_YAHOO_SYMBOL) entry.usdPerGram = usdPerGramFromOunce(q.price)
     prices[sym] = entry
   }
   return json(
-    { asOf: new Date().toISOString(), usdtry: fx.usdtry, prices },
+    { asOf: new Date().toISOString(), usdtry, prices },
     200,
     origin,
     { 'cache-control': 's-maxage=300' },
