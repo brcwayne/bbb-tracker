@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/svelte'
+import { render, fireEvent } from '@testing-library/svelte'
 import BarChart from './BarChart.svelte'
 
 describe('BarChart', () => {
@@ -19,6 +19,18 @@ describe('BarChart', () => {
     const labels = [...container.querySelectorAll('text')].map((t) => t.textContent)
     expect(labels).toEqual(['XAU', 'ASTOR'])
   })
+  it('hovering a bar reveals a formatted value tooltip', async () => {
+    const { container, getByText, queryByText } = render(BarChart, {
+      props: {
+        bars: [{ label: 'a', value: 10 }, { label: 'b', value: -4 }],
+        width: 200, height: 100, pad: 10, fmt: (v: number) => `${v} usd`,
+      },
+    })
+    expect(queryByText('10 usd')).toBeNull()
+    await fireEvent.mouseEnter(container.querySelector('[data-bar="a"]')!)
+    expect(getByText('10 usd')).toBeInTheDocument()
+  })
+
   it('bar height is proportional to value', () => {
     const { container } = render(BarChart, {
       props: { bars: [{ label: 'a', value: 10 }, { label: 'b', value: 5 }], width: 200, height: 100, pad: 0 },

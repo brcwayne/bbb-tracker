@@ -46,6 +46,7 @@
       ],
       headerNote: `son bilinen — ${dateShort(ds.meta.olusturulma.slice(0, 10))}`,
       equitySeries: ds.snapshots.map((s, i) => ({ x: i, y: s.toplamOzkaynak_usd })),
+      equityLabels: ds.snapshots.map((s) => dateShort(s.tarih.slice(0, 10))),
       classSlices: d.byClass.map((r) => ({ label: r.key, value: r.tutarUsd })),
       classLegend: d.byClass.map((r) => ({
         label: r.key,
@@ -118,20 +119,20 @@
     <SectionHeader title="Panorama" note={vm.headerNote} />
 
     <SectionHeader title="Özkaynak eğrisi" />
-    <LineChart series={vm.equitySeries} />
+    <LineChart series={vm.equitySeries} labels={vm.equityLabels} fmtY={(v) => usd(v)} />
 
     <div class="grid-2">
       <div class="panel">
         <SectionHeader title="Varlık sınıfı dağılımı" note="maliyet bazlı" />
         <div class="donut-row">
-          <Donut slices={vm.classSlices} />
+          <Donut slices={vm.classSlices} fmt={(v) => usd(v)} />
           {@render legend(vm.classLegend)}
         </div>
       </div>
       <div class="panel">
         <SectionHeader title="Portföy dağılımı" note="maliyet bazlı" />
         <div class="donut-row">
-          <Donut slices={vm.portfolioSlices} />
+          <Donut slices={vm.portfolioSlices} fmt={(v) => usd(v)} />
           {@render legend(vm.portfolioLegend)}
         </div>
       </div>
@@ -144,21 +145,21 @@
       <div class="panel">
         <SectionHeader title="Kazanç / kayıp" note="adet" />
         <div class="donut-row">
-          <Donut slices={vm.winLossSlices} size={140} />
+          <Donut slices={vm.winLossSlices} size={140} fmt={(v) => `${v} işlem`} />
           {@render legend(vm.winLossLegend)}
         </div>
       </div>
       <div class="panel">
         <SectionHeader title="Kâr / zarar toplamı" />
         <div class="donut-row">
-          <Donut slices={vm.profitLossSlices} size={140} />
+          <Donut slices={vm.profitLossSlices} size={140} fmt={(v) => usd(v)} />
           {@render legend(vm.profitLossLegend)}
         </div>
       </div>
     </div>
 
     <SectionHeader title="Kümülatif en çok kazandıran / kaybettiren" />
-    <BarChart bars={vm.moverBars} orient="h" />
+    <BarChart bars={vm.moverBars} orient="h" fmt={(v) => usd(v, { sign: true })} />
 
     <SectionHeader title="Dönemsel performans" />
     <DataTable columns={periodColumns} rows={vm.periods} />

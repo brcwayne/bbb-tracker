@@ -125,10 +125,10 @@
     {/if}
 
     <SectionHeader title="Aylık net K/Z" />
-    <BarChart {bars} orient="v" />
+    <BarChart {bars} orient="v" fmt={(v) => usd(v, { sign: true })} />
 
     <SectionHeader title="Özkaynak performans eğrisi" />
-    <LineChart {series} />
+    <LineChart {series} labels={sortedAsc.map((s) => monthLabel(s.tarih))} fmtY={(v) => usd(v)} />
   </section>
 {:else}
   <EmptyState title="Aylık Rapor" detail="Veri bekleniyor." />

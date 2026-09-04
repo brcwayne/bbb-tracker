@@ -60,6 +60,20 @@ describe('Pozisyonlar', () => {
     )
   })
 
+  it('clicking an open row expands its transaction detail', async () => {
+    const d = await v()
+    const { container } = render(Pozisyonlar, {
+      props: { dataset: d.dataset, derived: d.derived },
+    })
+    const openTable = container.querySelector('[data-testid="open-table"]') as HTMLElement
+    expect(openTbody(container).textContent).not.toContain('Alım 200 lot')
+    await fireEvent.click(within(openTable).getByText('ASTOR').closest('tr')!)
+    const body = openTbody(container).textContent!
+    expect(body).toContain('3 işlem')
+    expect(body).toContain('Alım 200 lot')
+    expect(body).toContain('Satım 50 lot')
+  })
+
   it('class filter narrows the open table', async () => {
     const d = await v()
     const { container, getByLabelText } = render(Pozisyonlar, {

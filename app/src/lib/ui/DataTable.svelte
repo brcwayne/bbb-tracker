@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
+
   type Col = {
     key: string
     label: string
@@ -12,15 +14,32 @@
     rows = [],
     initialSort = undefined,
     onRowClick = undefined,
+    detail = undefined,
+    rowKey = (row: any) => row,
   }: {
     columns?: Col[]
     rows?: any[]
     initialSort?: Sort
     onRowClick?: (row: any) => void
+    /** When given, a row toggles open on click and renders this below itself. */
+    detail?: Snippet<[any]>
+    /** Stable identity for expand-state; needed when the caller rebuilds rows. */
+    rowKey?: (row: any) => unknown
   } = $props()
 
   let userSort = $state<Sort | null>(null)
   const sort = $derived<Sort | null>(userSort ?? initialSort ?? null)
+
+  let openKeys = $state<unknown[]>([])
+  const isOpen = (row: any) => openKeys.includes(rowKey(row))
+  function toggleRow(row: any) {
+    const k = rowKey(row)
+    openKeys = openKeys.includes(k) ? openKeys.filter((x) => x !== k) : [...openKeys, k]
+  }
+  function onRow(row: any) {
+    if (detail) toggleRow(row)
+    onRowClick?.(row)
+  }
 
   const sorted = $derived.by(() => {
     if (!sort) return rows
@@ -69,13 +88,24 @@
   </thead>
   <tbody>
     {#each sorted as row}
-      <tr onclick={() => onRowClick?.(row)} class:clickable={!!onRowClick}>
-        {#each columns as col}
+      <tr
+        onclick={() => onRow(row)}
+        class:clickable={!!onRowClick || !!detail}
+        class:expanded={isOpen(row)}
+      >
+        {#each columns as col, ci}
           <td style:text-align={col.align ?? 'left'} class:num={col.align === 'right'}>
-            {col.fmt ? col.fmt(row[col.key], row) : row[col.key]}
+            {#if ci === 0 && detail}<span class="caret" aria-hidden="true"
+                >{isOpen(row) ? '▾' : '▸'}</span
+              >{/if}{col.fmt ? col.fmt(row[col.key], row) : row[col.key]}
           </td>
         {/each}
       </tr>
+      {#if detail && isOpen(row)}
+        <tr class="detail-row">
+          <td colspan={columns.length}>{@render detail(row)}</td>
+        </tr>
+      {/if}
     {/each}
   </tbody>
 </table>
@@ -110,10 +140,28 @@
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
   }
+  .caret {
+    display: inline-block;
+    width: 0.9em;
+    margin-right: 0.15em;
+    color: var(--ink-soft);
+    font-size: 0.8em;
+  }
   tbody tr.clickable {
     cursor: pointer;
   }
   tbody tr.clickable:hover {
     background: var(--surface);
+  }
+  tbody tr.expanded {
+    background: var(--surface);
+  }
+  tbody tr.expanded .caret {
+    color: var(--gold);
+  }
+  tr.detail-row > td {
+    padding: 0;
+    background: var(--surface);
+    border-bottom: 2px solid var(--hairline);
   }
 </style>
