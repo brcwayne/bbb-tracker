@@ -1,0 +1,17 @@
+{
+  "name": "bbb-prices-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "smoke": "node smoke.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1",
+    "wrangler": "^3.78.0"
+  }
+}

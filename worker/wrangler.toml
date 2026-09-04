@@ -1,0 +1,6 @@
+name = "bbb-prices"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+
+[vars]
+ALLOWED_ORIGIN = "https://brcwayne.github.io"
