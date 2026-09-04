@@ -151,4 +151,4 @@ dağılım + holdings), **Kurumlar** (kurum başına holdings; kurum ekleme P2),
 yatırma/çekme + para piyasası hareketleri), **Temettü** (enstrüman bazında temettü + yeniden
 yatırım ipuçları).
 
-Excel sayılarıyla mutabakat kontrolü (CI'da değil): `cd app && node scripts/reconcile-dashboard.mjs`.
+Excel sayılarıyla mutabakat kontrolü (CI'da değil): `cd app && npx vitest run scripts/reconcile-dashboard.test.ts`.
