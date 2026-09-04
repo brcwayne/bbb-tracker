@@ -52,3 +52,14 @@ describe('deriveAll — period range', () => {
     expect(d.positions.realizedTotalUsd).toBeCloseTo(475, 6)
   })
 })
+
+describe('deriveAll — P1.6 blocks', () => {
+  it('carries the dashboard totals, this-month, transfers and dividends', () => {
+    const d = deriveAll(fixture)
+    expect(d.dashboard.toplamSermaye).toBeCloseTo(5000, 6)
+    expect(d.dashboard.gerceklesmemisKz).toBeNull() // priceless in deriveAll
+    expect(d.monthPerf?.ay).toBe('Oca 2024')
+    expect(d.transfers.totalIn).toBeCloseTo(5000, 6)
+    expect(d.divs.total).toBeCloseTo(4, 6)
+  })
+})
