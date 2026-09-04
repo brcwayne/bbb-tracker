@@ -3,6 +3,8 @@
   import type { DerivedBundle } from '../lib/data/store'
   import { pct, lot, dateShort, DASH } from '../lib/format'
   import { money } from '../lib/settings.svelte'
+  import { prices } from '../lib/prices.svelte'
+  import { unrealizedByKod } from '../lib/data/unrealized'
   import KpiBand from '../lib/ui/KpiBand.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
@@ -45,6 +47,8 @@
   }
 
   function buildView(ds: Dataset, d: DerivedBundle) {
+    void prices.status // re-run buildView when a price refresh completes
+
     const instByKod = new Map(ds.instruments.map((i) => [i.kod, i]))
     const latestTx = latestTxByKod(ds.transactions)
 
@@ -52,9 +56,15 @@
     const openRaw = d.positions.open.filter((p) => p.lot > 1e-9)
     const totalCost = openRaw.reduce((s, p) => s + p.toplamMaliyetUsd, 0) || 1
 
+    const unreal = unrealizedByKod(openRaw, ds.instruments, {
+      bySymbol: prices.bySymbol,
+      usdPerGram: prices.usdPerGram,
+    })
+
     const openRows = openRaw.map((p) => {
       const inst = instByKod.get(p.kod)
       const tx = latestTx.get(p.kod)
+      const u = unreal.get(p.kod)
       return {
         kod: p.kod,
         sinif: inst?.sinif ?? DASH,
@@ -64,8 +74,9 @@
         ortMaliyetUsd: p.ortMaliyetUsd,
         toplamMaliyetUsd: p.toplamMaliyetUsd,
         pay: p.toplamMaliyetUsd / totalCost,
-        guncelFiyat: DASH,
-        gerceklesmemisKz: DASH,
+        guncelFiyat: u?.guncelFiyatUsd ?? null,
+        gerceklesmemisKz: u?.kzUsd ?? null,
+        gerceklesmemisPct: u?.kzPct ?? null,
         seviye: seviyeStr(inst),
       }
     })
@@ -147,8 +158,22 @@
       sortable: true,
       fmt: (v: number) => pct(v),
     },
-    { key: 'guncelFiyat', label: 'Güncel Fiyat', align: 'right' as const },
-    { key: 'gerceklesmemisKz', label: 'Gerçekleşmemiş K/Z', align: 'right' as const },
+    {
+      key: 'guncelFiyat',
+      label: 'Güncel Fiyat',
+      align: 'right' as const,
+      fmt: (v: number | null) => (v == null ? DASH : money(v)),
+    },
+    {
+      key: 'gerceklesmemisKz',
+      label: 'Gerçekleşmemiş K/Z',
+      align: 'right' as const,
+      sortable: true,
+      fmt: (v: number | null, row: { gerceklesmemisPct: number | null }) =>
+        v == null
+          ? DASH
+          : `${money(v, { sign: true })} · ${row.gerceklesmemisPct == null ? DASH : pct(row.gerceklesmemisPct)}`,
+    },
     { key: 'seviye', label: 'Seviye' },
   ]
 

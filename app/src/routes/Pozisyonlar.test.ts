@@ -4,6 +4,7 @@ import Pozisyonlar from './Pozisyonlar.svelte'
 import { fixture } from '../fixtures/dataset'
 import { createAppStore, load } from '../lib/data/store'
 import { get } from 'svelte/store'
+import { prices } from '../lib/prices.svelte'
 
 async function v() {
   const s = createAppStore()
@@ -72,6 +73,19 @@ describe('Pozisyonlar', () => {
     expect(body).toContain('3 işlem')
     expect(body).toContain('Alım 200 lot')
     expect(body).toContain('Satım 50 lot')
+  })
+
+  it('fills Güncel Fiyat + Gerçekleşmemiş K/Z from the price store', async () => {
+    const d = await v()
+    // THYAO is open in the fixture; price it.
+    prices.bySymbol = { 'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 12 } }
+    prices.usdPerGram = null
+    prices.status = 'ready'
+    const { container } = render(Pozisyonlar, { props: { dataset: d.dataset, derived: d.derived } })
+    const openBody = openTbody(container).textContent!
+    expect(openBody).toContain('$12.00') // güncel fiyat (THYAO ort maliyet < 12 → pozitif K/Z)
+    prices.bySymbol = {}
+    prices.status = 'idle'
   })
 
   it('class filter narrows the open table', async () => {
