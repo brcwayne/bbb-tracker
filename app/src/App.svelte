@@ -83,11 +83,32 @@
     padding: 0.15rem 0.3rem;
   }
   .loading { padding: 2rem 1.25rem; color: var(--ink-soft); }
-  .tabs { position: sticky; bottom: 0; display: flex; border-top: 1px solid var(--hairline); background: var(--surface); }
-  .tabs a { flex: 1; text-align: center; padding: 0.9rem; color: var(--ink-soft); text-decoration: none; }
-  .tabs a.active { color: var(--ink); box-shadow: inset 0 2px 0 var(--gold); }
-  @media (min-width: 900px) {
-    .tabs { position: fixed; left: 0; top: 0; bottom: 0; flex-direction: column; width: 180px; border-top: 0; border-right: 1px solid var(--hairline); }
-    :global(body) { padding-left: 180px; }
+  /* Excel-style sheet tabs, pinned bottom-left at every width. */
+  .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    padding: 0 0.5rem;
+    border-top: 1px solid var(--hairline);
+    background: var(--surface);
+    z-index: 5;
   }
+  .tabs a {
+    padding: 0.55rem 1.15rem;
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 0.9rem;
+    letter-spacing: 0.01em;
+    border-right: 1px solid var(--hairline);
+  }
+  .tabs a:first-child { border-left: 1px solid var(--hairline); }
+  .tabs a:hover { color: var(--ink); }
+  .tabs a.active {
+    color: var(--ink);
+    background: var(--bg);
+    box-shadow: inset 0 2px 0 var(--gold);
+  }
+  :global(body) { padding-bottom: 2.75rem; }
 </style>
