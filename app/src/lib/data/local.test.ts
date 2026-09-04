@@ -20,7 +20,7 @@ describe('LocalFileSource', () => {
   it('loads and assembles a Dataset from 8 files', async () => {
     vi.stubGlobal('fetch', mockFetchOk())
     const ds = await new LocalFileSource('./data').load()
-    expect(ds.transactions).toHaveLength(6)
+    expect(ds.transactions).toHaveLength(7)
     expect(ds.meta.olusturulma).toBe('2026-09-03T16:24:37')
     expect(Object.keys(ds.fxrates)).toContain('2020-01-06')
     expect(fetch).toHaveBeenCalledTimes(8)

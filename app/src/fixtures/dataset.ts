@@ -8,6 +8,7 @@ export const fixture: Dataset = {
     { id: 't_d', tarih: '2019-07-01', hesap: 'KASA', portfoy: 'ENIS', enstruman: 'XAU', yon: 'AL', lot: 10, girisParaBirimi: 'TL', fiyat_tl: null, fiyat_usd: 50, kur: 5.8, komisyon_usd: 0, brut_usd: 500, net_usd: 500, not: '', kaynak: 'migration', olusturulma: null },
     { id: 't_e', tarih: '2024-01-01', hesap: 'KASA', portfoy: 'ENIS', enstruman: 'XAU', yon: 'SAT', lot: 10, girisParaBirimi: 'TL', fiyat_tl: null, fiyat_usd: 80, kur: 30, komisyon_usd: 0, brut_usd: 800, net_usd: 800, not: '', kaynak: 'migration', olusturulma: null },
     { id: 't_f', tarih: '2023-11-20', hesap: 'GARAN', portfoy: 'ENIS', enstruman: 'THYAO', yon: 'AL', lot: 25, girisParaBirimi: 'TL', fiyat_tl: 1200, fiyat_usd: 40, kur: 30, komisyon_usd: 1.5, brut_usd: 1000, net_usd: 1001.5, not: '', kaynak: 'migration', olusturulma: null },
+    { id: 't_g', tarih: '2025-01-02', hesap: 'KASA', portfoy: 'ENIS', enstruman: 'XAU', yon: 'AL', lot: 5, girisParaBirimi: 'TL', fiyat_tl: null, fiyat_usd: 90, kur: 35, komisyon_usd: 0, brut_usd: 450, net_usd: 450, not: '', kaynak: 'migration', olusturulma: null },
   ],
   cashflows: [
     { id: 'c_a', tarih: '2019-01-02', hesap: 'TOPLU', portfoy: null, tur: 'YATIRMA', enstruman: null, tutar_tl: null, tutar_usd: 5000, kur: null, aciklama: 'ilk', kaynak: 'migration' },
@@ -19,7 +20,7 @@ export const fixture: Dataset = {
   ],
   instruments: [
     { kod: 'ASTOR', ad: 'ASTOR', sinif: 'BIST', girisParaBirimi: 'TL', fiyatKaynagi: 'yahoo', fiyatSembolu: 'ASTOR.IS', seviyeler: null },
-    { kod: 'XAU', ad: 'XAU', sinif: 'ALTIN', girisParaBirimi: 'TL', fiyatKaynagi: 'altin-turev', fiyatSembolu: 'XAUUSD', seviyeler: { destek: 60, direnc: 90, hedef: 110, birim: 'USD' } },
+    { kod: 'XAU', ad: 'XAU', sinif: 'ALTIN', girisParaBirimi: 'TL', fiyatKaynagi: 'altin-turev', fiyatSembolu: 'XAUUSD', seviyeler: { destek: 60, direnc: 90, hedef: 110, birim: 'USD' }, altinKatsayi: 1 },
     { kod: 'THYAO', ad: 'THYAO', sinif: 'BIST', girisParaBirimi: 'TL', fiyatKaynagi: 'yahoo', fiyatSembolu: 'THYAO.IS', seviyeler: null },
   ],
   brokers: [

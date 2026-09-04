@@ -66,7 +66,7 @@ describe('allocation', () => {
   it('by class, cost-weighted, sorted desc', () => {
     const pos = derivePositions(fixture.transactions)
     const a = allocationByClass(pos.open, fixture.instruments)
-    // açık: ASTOR 150@1.5 = 225 (BIST), THYAO 25 net 1001.5 (BIST); XAU tam çıkış -> yok
+    // açık: ASTOR 150@1.5 = 225 (BIST), THYAO 25 net 1001.5 (BIST); XAU 5 lot @ 90 = 450 (ALTIN)
     const bist = a.find((r) => r.key === 'BIST')!
     expect(bist.tutarUsd).toBeCloseTo(1226.5, 6)
     expect(a.reduce((s, r) => s + r.pay, 0)).toBeCloseTo(1, 9)
@@ -76,7 +76,8 @@ describe('allocation', () => {
     const pos = derivePositions(fixture.transactions)
     const a = allocationByPortfolio(pos.open, fixture.transactions)
     expect(a[0].key).toBe('ENIS')
-    expect(a[0].tutarUsd).toBeCloseTo(1001.5, 6)
+    // ENIS: THYAO 1001.5 + open XAU lot 450 (latest XAU txn is t_g @ portfoy ENIS)
+    expect(a[0].tutarUsd).toBeCloseTo(1451.5, 6)
     expect(a.find((r) => r.key === 'ALFA')!.tutarUsd).toBeCloseTo(225, 6)
     expect(a.reduce((s, r) => s + r.pay, 0)).toBeCloseTo(1, 9)
   })

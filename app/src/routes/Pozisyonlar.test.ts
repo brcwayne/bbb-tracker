@@ -15,7 +15,7 @@ const openTbody = (c: HTMLElement) =>
   c.querySelector('[data-testid="open-table"] tbody') as HTMLElement
 
 describe('Pozisyonlar', () => {
-  it('lists open positions with — placeholders, excludes fully-exited names', async () => {
+  it('lists open positions with — placeholders', async () => {
     const d = await v()
     const { container } = render(Pozisyonlar, {
       props: { dataset: d.dataset, derived: d.derived },
@@ -23,8 +23,8 @@ describe('Pozisyonlar', () => {
     const open = within(container.querySelector('[data-testid="open-table"]') as HTMLElement)
     expect(open.getByText('ASTOR')).toBeInTheDocument()
     expect(open.getByText('THYAO')).toBeInTheDocument()
-    // XAU is fully exited -> not in the OPEN table
-    expect(openTbody(container).textContent).not.toContain('XAU')
+    // XAU has a residual open 5-lot lot (t_g) on top of its earlier full exit
+    expect(open.getByText('XAU')).toBeInTheDocument()
     // Güncel Fiyat / Gerçekleşmemiş K/Z placeholder columns
     expect(container.textContent).toContain('—')
   })

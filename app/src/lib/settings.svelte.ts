@@ -57,6 +57,13 @@ export function initRate(ds: Dataset) {
   }
 }
 
+/** Adopt a freshly fetched TCMB rate for this session (not persisted). */
+export function applyLiveRate(usdtry: number): void {
+  if (!Number.isFinite(usdtry) || usdtry <= 0) return
+  settings.rate = usdtry
+  settings.rateDate = new Date().toISOString().slice(0, 10)
+}
+
 /** Format a USD amount in the active display currency. */
 export function money(nUsd: number | null | undefined, opts: { sign?: boolean } = {}): string {
   if (nUsd == null || Number.isNaN(nUsd)) return DASH

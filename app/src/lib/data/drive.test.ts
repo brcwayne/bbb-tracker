@@ -39,7 +39,7 @@ describe('DriveSource', () => {
     await s.connect()
     ;(s as any).folderId = 'FOLDER'
     const ds = await s.load()
-    expect(ds.transactions).toHaveLength(6)
+    expect(ds.transactions).toHaveLength(7)
     expect(ds.meta.olusturulma).toBe('2026-09-03T16:24:37')
   })
 })
