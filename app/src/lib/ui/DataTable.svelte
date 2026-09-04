@@ -61,6 +61,7 @@
   }
 </script>
 
+<div class="dt-wrap">
 <table>
   <thead>
     <tr>
@@ -109,8 +110,12 @@
     {/each}
   </tbody>
 </table>
+</div>
 
 <style>
+  .dt-wrap {
+    overflow-x: auto;
+  }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -121,6 +126,7 @@
     padding: 0.4rem 0.6rem;
     border-bottom: 1px solid var(--hairline);
     text-align: left;
+    white-space: nowrap;
   }
   thead th {
     color: var(--ink-soft);
@@ -163,5 +169,6 @@
     padding: 0;
     background: var(--surface);
     border-bottom: 2px solid var(--hairline);
+    white-space: normal;
   }
 </style>
