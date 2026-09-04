@@ -11,6 +11,8 @@
   import Donut from '../lib/charts/Donut.svelte'
   import Histogram from '../lib/charts/Histogram.svelte'
   import BarChart from '../lib/charts/BarChart.svelte'
+  import { prices } from '../lib/prices.svelte'
+  import { unrealizedTotalUsd } from '../lib/data/unrealized'
 
   // RULING P1-3 annotation form; props optional, guarded in the template.
   // The prop name `derived` collides with the `$derived` rune, so the view
@@ -24,6 +26,12 @@
 
   function buildView(ds: Dataset, d: DerivedBundle) {
     void settings.currency // re-run buildView when the display currency flips
+    void prices.status // re-run buildView when live prices land
+    const openRaw = d.positions.open.filter((pp) => pp.lot > 1e-9)
+    const unrealTotal = unrealizedTotalUsd(openRaw, ds.instruments, {
+      bySymbol: prices.bySymbol,
+      usdPerGram: prices.usdPerGram,
+    })
     const snaps = d.snapshots
     const lastSnap = snaps.at(-1)
     const equityUsd = lastSnap ? lastSnap.toplamOzkaynak_usd : NaN
@@ -50,6 +58,13 @@
           num: Number.isFinite(ytdUsd) ? ytdUsd : 0,
           fmt: (n: number) => money(n),
           tone: toneOf(Number.isFinite(ytdUsd) ? ytdUsd : 0),
+        },
+        {
+          label: 'Gerçekleşmemiş K/Z',
+          value: unrealTotal == null ? DASH : money(unrealTotal),
+          num: unrealTotal == null ? undefined : unrealTotal,
+          fmt: unrealTotal == null ? undefined : (n: number) => money(n),
+          tone: unrealTotal == null ? undefined : toneOf(unrealTotal),
         },
         { label: 'İşlem', value: String(ds.transactions.length) },
       ],

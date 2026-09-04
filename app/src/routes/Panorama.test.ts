@@ -4,6 +4,7 @@ import Panorama from './Panorama.svelte'
 import { fixture } from '../fixtures/dataset'
 import { createAppStore, load } from '../lib/data/store'
 import { get } from 'svelte/store'
+import { prices } from '../lib/prices.svelte'
 
 async function derived() {
   const s = createAppStore()
@@ -25,5 +26,16 @@ describe('Panorama', () => {
     const { container } = render(Panorama, { props: { dataset: v.dataset, derived: v.derived } })
     expect(container.querySelectorAll('svg').length).toBeGreaterThanOrEqual(5)
     expect(container.querySelector('[data-testid="line"]')).toBeTruthy()
+  })
+  it('shows an unrealized-P/L KPI once prices are loaded', async () => {
+    const v = await derived()
+    prices.bySymbol = { 'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 99 } }
+    prices.usdPerGram = null
+    prices.status = 'ready'
+    const { getByText } = render(Panorama, { props: { dataset: v.dataset, derived: v.derived } })
+    expect(getByText('Gerçekleşmemiş K/Z')).toBeInTheDocument()
+    prices.bySymbol = {}
+    prices.usdPerGram = null
+    prices.status = 'idle'
   })
 })
