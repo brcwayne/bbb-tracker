@@ -61,6 +61,8 @@ export interface Instrument {
     not?: string
     guncelleme?: string
   } | null
+  /** grams of fine gold per unit — present only on `fiyatKaynagi: "altin-turev"` rows */
+  altinKatsayi?: number
 }
 
 export interface Broker {
