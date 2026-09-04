@@ -90,3 +90,21 @@ export function dividends(
     .sort((a, b) => b.toplamUsd - a.toplamUsd)
   return { rows, byInstrument, total: divs.reduce((s, c) => s + c.tutar_usd, 0) }
 }
+
+export interface TransferMoveRow {
+  tarih: string
+  kaynakHesap: string
+  hedefHesap: string
+  tutarUsd: number
+  aciklama: string
+}
+
+export function transfers(cashflows: Cashflow[]): TransferMoveRow[] {
+  return byDateDesc(cashflows.filter((c) => c.tur === 'TRANSFER' && c.hedefHesap)).map((c) => ({
+    tarih: c.tarih,
+    kaynakHesap: c.hesap,
+    hedefHesap: c.hedefHesap as string,
+    tutarUsd: c.tutar_usd,
+    aciklama: c.aciklama,
+  }))
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bankTransfers, moneyMarketMoves, dividends } from './cashmoves'
+import { bankTransfers, moneyMarketMoves, dividends, transfers } from './cashmoves'
 import type { Cashflow, Transaction, Instrument } from './types'
 
 const cf = (o: Partial<Cashflow>): Cashflow => ({
@@ -78,5 +78,18 @@ describe('dividends', () => {
       [tx({ yon: 'AL', enstruman: 'FROTO', tarih: '2023-03-12', net_usd: 500 })],
     )
     expect(r.rows[0].reinvestKod).toBeNull()
+  })
+})
+
+describe('transfers', () => {
+  it('lists TRANSFER cashflows only, newest first', () => {
+    const r = transfers([
+      cf({ tur: 'TRANSFER', hesap: 'MIDAS', hedefHesap: 'GARAN', tutar_usd: 100, tarih: '2026-01-01' }),
+      cf({ tur: 'TRANSFER', hesap: 'GARAN', hedefHesap: 'MIDAS', tutar_usd: 50, tarih: '2026-03-01' }),
+      cf({ tur: 'YATIRMA', tutar_usd: 999 }),
+    ])
+    expect(r).toHaveLength(2)
+    expect(r[0].tarih).toBe('2026-03-01')
+    expect(r[0]).toMatchObject({ kaynakHesap: 'GARAN', hedefHesap: 'MIDAS', tutarUsd: 50 })
   })
 })
