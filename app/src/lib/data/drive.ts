@@ -9,6 +9,7 @@ declare const google: any
 declare const gapi: any
 
 const FOLDER_KEY = 'bbb-drive-folder'
+const TOKEN_KEY = 'bbb-drive-token'
 // `drive.readonly` (not `drive.file`): the 8 dataset files are placed in Drive
 // by the migration toolchain / a manual upload — a different origin than this
 // app — so `drive.file` (own-files-only) can't list or read them. P1 only ever
@@ -22,15 +23,35 @@ function readStoredFolder(): string | null {
     return null
   }
 }
+function readSessionToken(): string | null {
+  try {
+    return globalThis.sessionStorage?.getItem(TOKEN_KEY) ?? null
+  } catch {
+    return null
+  }
+}
+function writeSessionToken(t: string | null): void {
+  try {
+    const ss = globalThis.sessionStorage
+    if (!ss) return
+    if (t) ss.setItem(TOKEN_KEY, t)
+    else ss.removeItem(TOKEN_KEY)
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Reads the 8 dataset JSON files from a folder in the user's Google Drive.
- * `connect()` runs the GIS OAuth token flow (scope `drive.readonly`); `chooseFolder()`
- * opens the Google Picker to select the `BBB/` folder; `load()` fetches the files.
+ * `connect()` runs the GIS OAuth token flow (scope `drive.readonly`),
+ * `chooseFolder()` opens the Google Picker, `load()` fetches the files.
+ * The access token is kept in `sessionStorage` and refreshed silently
+ * (`prompt: 'none'`) on reload, so a return visit rarely needs a click.
  */
 export class DriveSource implements DataSource {
   readonly id = 'drive' as const
-  private token: string | null = null
+  private token: string | null = readSessionToken()
+  private tokenClient: any = null
   folderId: string | null = null
 
   constructor(
@@ -44,26 +65,54 @@ export class DriveSource implements DataSource {
     return !!(this.folderId ?? readStoredFolder())
   }
 
-  connect(): Promise<void> {
+  private setToken(t: string | null) {
+    this.token = t
+    writeSessionToken(t)
+  }
+
+  private requestToken(prompt: '' | 'none' | 'consent'): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       try {
-        const client = google.accounts.oauth2.initTokenClient({
-          client_id: this.clientId,
-          scope: DRIVE_SCOPE,
-          callback: (resp: { access_token?: string; error?: string }) => {
-            if (resp && resp.access_token) {
-              this.token = resp.access_token
-              resolve()
-            } else {
-              reject(new NeedsAuthError(resp?.error || 'yetki alınamadı'))
-            }
-          },
-        })
-        client.requestAccessToken()
+        if (!this.tokenClient) {
+          this.tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: this.clientId,
+            scope: DRIVE_SCOPE,
+            callback: () => {},
+          })
+        }
+        let done = false
+        const timer = setTimeout(() => {
+          if (!done) {
+            done = true
+            reject(new NeedsAuthError('yetki zaman aşımı'))
+          }
+        }, 8000)
+        this.tokenClient.callback = (resp: { access_token?: string; error?: string }) => {
+          if (done) return
+          done = true
+          clearTimeout(timer)
+          if (resp && resp.access_token) {
+            this.setToken(resp.access_token)
+            resolve()
+          } else {
+            reject(new NeedsAuthError(resp?.error || 'yetki alınamadı'))
+          }
+        }
+        this.tokenClient.requestAccessToken({ prompt })
       } catch (e) {
         reject(e instanceof Error ? e : new Error(String(e)))
       }
     })
+  }
+
+  /** Interactive — behind the "Google ile bağlan" button. */
+  connect(): Promise<void> {
+    return this.requestToken('')
+  }
+
+  /** Silent refresh on load; rejects (no UI) when a real sign-in is needed. */
+  private trySilent(): Promise<void> {
+    return this.requestToken('none')
   }
 
   chooseFolder(): Promise<string> {
@@ -111,9 +160,16 @@ export class DriveSource implements DataSource {
   }
 
   async load(): Promise<Dataset> {
-    if (!this.token) throw new NeedsAuthError()
     const folderId = this.folderId ?? readStoredFolder()
     if (!folderId) throw new NeedsAuthError('klasör seçilmedi')
+    if (!this.token) {
+      // Stored token gone/expired — try a silent grant before nagging the user.
+      try {
+        await this.trySilent()
+      } catch {
+        throw new NeedsAuthError()
+      }
+    }
 
     const headers = { Authorization: `Bearer ${this.token}` }
     // No mimeType filter — a browser upload can land as text/plain or
@@ -123,7 +179,10 @@ export class DriveSource implements DataSource {
       'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name)',
       { headers },
     )
-    if (listRes.status === 401 || listRes.status === 403) throw new NeedsAuthError('oturum süresi doldu')
+    if (listRes.status === 401 || listRes.status === 403) {
+      this.setToken(null)
+      throw new NeedsAuthError('oturum süresi doldu')
+    }
     if (!listRes.ok) throw new Error(`Drive: dosya listesi alınamadı (${listRes.status})`)
     const { files } = (await listRes.json()) as { files: { id: string; name: string }[] }
 
@@ -132,7 +191,10 @@ export class DriveSource implements DataSource {
         const file = files.find((f) => f.name === `${n}.json`)
         if (!file) throw new Error(`Drive: ${n}.json bulunamadı`)
         const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers })
-        if (res.status === 401 || res.status === 403) throw new NeedsAuthError('oturum süresi doldu')
+        if (res.status === 401 || res.status === 403) {
+          this.setToken(null)
+          throw new NeedsAuthError('oturum süresi doldu')
+        }
         if (!res.ok) throw new Error(`Drive: ${n}.json okunamadı (${res.status})`)
         return [n, await res.json()] as const
       }),

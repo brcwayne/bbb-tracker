@@ -11,7 +11,15 @@ const FILE_MAP: Record<string, unknown> = {
 beforeEach(() => {
   localStorage.clear()
   vi.stubGlobal('google', {
-    accounts: { oauth2: { initTokenClient: ({ callback }: any) => ({ requestAccessToken: () => callback({ access_token: 'tok' }) }) } },
+    accounts: {
+      oauth2: {
+        initTokenClient: () => {
+          const client: any = { callback: () => {} }
+          client.requestAccessToken = () => client.callback({ access_token: 'tok' })
+          return client
+        },
+      },
+    },
   })
   vi.stubGlobal('fetch', vi.fn((url: string) => {
     if (url.includes('files?')) {
