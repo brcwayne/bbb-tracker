@@ -3,6 +3,19 @@ import { readFileSync } from 'node:fs'
 import worker from '../src/index'
 import thyao from './fixtures/yahoo-thyao.json'
 
+// Force a stray synchronous throw from the symbol fan-out for one magic symbol,
+// so the outer try/catch in `fetch` can be exercised. All other calls delegate.
+vi.mock('../src/yahoo', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../src/yahoo')>()
+  return {
+    ...mod,
+    fetchQuotes: (symbols: string[], fetchImpl?: typeof fetch) => {
+      if (symbols.includes('__BOOM__')) throw new Error('boom')
+      return mod.fetchQuotes(symbols, fetchImpl as typeof fetch)
+    },
+  }
+})
+
 const env = { ALLOWED_ORIGIN: 'https://example.test' }
 const ctx = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext
 
@@ -93,9 +106,23 @@ describe('/prices', () => {
     expect(res.headers.get('cache-control')).toContain('s-maxage=300')
   })
 
-  it('rejects more than 60 symbols', async () => {
-    const many = Array.from({ length: 61 }, (_, i) => `S${i}`).join(',')
+  it('rejects more than 45 symbols', async () => {
+    const many = Array.from({ length: 46 }, (_, i) => `S${i}`).join(',')
     const res = await worker.fetch(new Request('https://w/prices?symbols=' + many), env, ctx)
     expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'en fazla 45 sembol' })
+  })
+
+  it('dedupes before the cap check: 46 raw / 3 unique passes', async () => {
+    const many = ['THYAO.IS', 'GC=F', 'THYAO.IS', ...Array(43).fill('GC=F')].join(',')
+    const res = await worker.fetch(new Request('https://w/prices?symbols=' + many), env, ctx)
+    expect(res.status).toBe(200)
+  })
+
+  it('a stray throw in the fan-out still returns 500 with the CORS header', async () => {
+    const res = await worker.fetch(new Request('https://w/prices?symbols=__BOOM__'), env, ctx)
+    expect(res.status).toBe(500)
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://example.test')
+    expect(await res.json()).toEqual({ error: 'boom' })
   })
 })

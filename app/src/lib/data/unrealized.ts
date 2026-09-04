@@ -2,7 +2,7 @@ import type { OpenPosition } from './derive'
 import type { Instrument } from './types'
 
 export interface PriceLookup {
-  bySymbol: Record<string, { priceUsd: number }>
+  bySymbol: Record<string, { priceUsd: number | null }>
   usdPerGram: number | null
 }
 
@@ -20,7 +20,7 @@ function currentUsd(inst: Instrument | undefined, p: PriceLookup): number | null
     return p.usdPerGram * inst.altinKatsayi
   }
   const hit = p.bySymbol[inst.fiyatSembolu]
-  return hit ? hit.priceUsd : null
+  return hit && hit.priceUsd != null ? hit.priceUsd : null
 }
 
 export function unrealizedByKod(

@@ -29,7 +29,9 @@ function save(k: string, v: string) {
 }
 
 /** App-wide display state. `rate` is TRY per USD — the latest known TCMB rate
- *  stands in as "current" until P3 adds a live feed. */
+ *  stands in as "current"; P3's refresh replaces it with a live TCMB rate. */
+let liveRateApplied = false
+
 export const settings = $state({
   currency: (pref('bbb-currency') === 'TRY' ? 'TRY' : 'USD') as Currency,
   period: ((): PeriodKey => {
@@ -50,6 +52,7 @@ export function setPeriod(p: PeriodKey) {
 }
 
 export function initRate(ds: Dataset) {
+  if (liveRateApplied) return
   const entries = Object.entries(ds.fxrates).sort(([a], [b]) => (a < b ? 1 : -1))
   if (entries.length) {
     settings.rate = entries[0][1]
@@ -62,6 +65,12 @@ export function applyLiveRate(usdtry: number): void {
   if (!Number.isFinite(usdtry) || usdtry <= 0) return
   settings.rate = usdtry
   settings.rateDate = new Date().toISOString().slice(0, 10)
+  liveRateApplied = true
+}
+
+/** True once a live TCMB rate has been adopted this session (Fix 9 caption). */
+export function isLiveRate(): boolean {
+  return liveRateApplied
 }
 
 /** Format a USD amount in the active display currency. */

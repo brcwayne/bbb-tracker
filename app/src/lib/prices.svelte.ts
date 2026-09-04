@@ -14,7 +14,7 @@ export function priceApiEnabled(): boolean {
   return !!priceApi()
 }
 
-type Entry = { price: number; currency: string; priceUsd: number }
+type Entry = { price: number; currency: string; priceUsd: number | null }
 
 export const prices = $state<{
   bySymbol: Record<string, Entry>
@@ -86,10 +86,13 @@ export async function refreshPrices(ds: Dataset): Promise<void> {
     let usdPerGram: number | null = null
     for (const [sym, v] of Object.entries(body.prices)) {
       if ('error' in v) continue
-      bySymbol[sym] = { price: v.price, currency: v.currency, priceUsd: v.priceUsd }
+      bySymbol[sym] = { price: v.price, currency: v.currency, priceUsd: v.priceUsd ?? null }
       if (sym === GOLD_API_SYMBOL && typeof (v as { usdPerGram?: number }).usdPerGram === 'number') {
         usdPerGram = (v as { usdPerGram: number }).usdPerGram
       }
+    }
+    if (symbols.length > 0 && Object.keys(bySymbol).length === 0) {
+      throw new Error('hiçbir sembol fiyatlanamadı')
     }
     prices.bySymbol = bySymbol
     prices.usdPerGram = usdPerGram
@@ -120,6 +123,9 @@ export function hydratePrices(): void {
     prices.usdtry = snap.usdtry ?? null
     prices.asOf = snap.asOf
     prices.status = 'ready'
+    if (typeof snap.usdtry === 'number' && Number.isFinite(snap.usdtry) && snap.usdtry > 0) {
+      applyLiveRate(snap.usdtry)
+    }
   } catch {
     /* ignore */
   }

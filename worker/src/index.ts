@@ -27,15 +27,12 @@ async function handlePrices(url: URL, origin: string): Promise<Response> {
   if (!raw) return json({ error: 'symbols parametresi gerekli' }, 400, origin)
   const symbols = raw.split(',').map((s) => s.trim()).filter(Boolean)
   if (symbols.length === 0) return json({ error: 'symbols parametresi gerekli' }, 400, origin)
-  if (symbols.length > 60) return json({ error: 'en fazla 60 sembol' }, 400, origin)
+  const uniq = [...new Set(symbols)]
+  if (uniq.length > 45) return json({ error: 'en fazla 45 sembol' }, 400, origin)
 
-  const quotes = await fetchQuotes(symbols)
-  let usdtry: number | null = null
-  try {
-    usdtry = (await fetchUsdTry()).usdtry
-  } catch {
-    usdtry = null
-  }
+  const quotesP = fetchQuotes(uniq)
+  const fxP = fetchUsdTry().then((r) => r.usdtry).catch(() => null)
+  const [quotes, usdtry] = await Promise.all([quotesP, fxP])
 
   const prices: Record<string, unknown> = {}
   for (const [sym, q] of Object.entries(quotes)) {
@@ -69,25 +66,29 @@ async function handleFx(origin: string): Promise<Response> {
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const origin = env.ALLOWED_ORIGIN
-    if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) })
+    try {
+      if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) })
 
-    const url = new URL(req.url)
-    if (url.pathname === '/health') return json({ ok: true }, 200, origin)
-    if (req.method !== 'GET') return json({ error: 'bilinmeyen uç' }, 404, origin)
+      const url = new URL(req.url)
+      if (url.pathname === '/health') return json({ ok: true }, 200, origin)
+      if (req.method !== 'GET') return json({ error: 'bilinmeyen uç' }, 404, origin)
 
-    const cache = (globalThis as typeof globalThis & { caches?: CacheStorage }).caches?.default
-    const fresh = url.searchParams.get('fresh') === '1'
-    if (cache && !fresh) {
-      const hit = await cache.match(req)
-      if (hit) return hit
+      const cache = (globalThis as typeof globalThis & { caches?: CacheStorage }).caches?.default
+      const fresh = url.searchParams.get('fresh') === '1'
+      if (cache && !fresh) {
+        const hit = await cache.match(req)
+        if (hit) return hit
+      }
+
+      let res: Response
+      if (url.pathname === '/prices') res = await handlePrices(url, origin)
+      else if (url.pathname === '/fx/latest') res = await handleFx(origin)
+      else res = json({ error: 'bilinmeyen uç' }, 404, origin)
+
+      if (cache && res.status === 200 && !fresh) ctx.waitUntil(cache.put(req, res.clone()))
+      return res
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : 'sunucu hatası' }, 500, origin)
     }
-
-    let res: Response
-    if (url.pathname === '/prices') res = await handlePrices(url, origin)
-    else if (url.pathname === '/fx/latest') res = await handleFx(origin)
-    else res = json({ error: 'bilinmeyen uç' }, 404, origin)
-
-    if (cache && res.status === 200 && !fresh) ctx.waitUntil(cache.put(req, res.clone()))
-    return res
   },
 }

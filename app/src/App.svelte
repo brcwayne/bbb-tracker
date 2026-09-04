@@ -12,6 +12,7 @@
     setPeriod,
     PERIODS,
     periodRange,
+    isLiveRate,
     type PeriodKey,
   } from './lib/settings.svelte'
   import { dateShort, tryFmt } from './lib/format'
@@ -40,6 +41,16 @@
         ? $store.derived
         : deriveAll($store.dataset, periodRange(settings.period))
       : undefined,
+  )
+
+  // `isLiveRate()` isn't reactive on its own — read `prices.asOf` here so the
+  // caption recomputes after a refresh adopts a live TCMB rate.
+  const rateNote = $derived(
+    (() => {
+      void prices.asOf
+      const d = settings.rateDate ? dateShort(settings.rateDate) : ''
+      return `1 USD = ${tryFmt(settings.rate)} · ${d} (TCMB, ${isLiveRate() ? 'canlı' : 'son bilinen'} kur)`
+    })(),
   )
 
   const priceStamp = $derived(
@@ -97,9 +108,7 @@
   </div>
 </header>
 {#if settings.currency === 'TRY' && settings.rate > 1}
-  <p class="ratenote">
-    1 USD = {tryFmt(settings.rate)} · {settings.rateDate ? dateShort(settings.rateDate) : ''} (TCMB, son bilinen kur)
-  </p>
+  <p class="ratenote">{rateNote}</p>
 {/if}
 
 {#if $store.status === 'loading'}
