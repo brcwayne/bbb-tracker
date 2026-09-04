@@ -38,4 +38,28 @@ describe('Panorama', () => {
     prices.usdPerGram = null
     prices.status = 'idle'
   })
+  it('renders the Excel top-block with the 7 fields', async () => {
+    const v = await derived()
+    const { getByText, container } = render(Panorama, {
+      props: { dataset: v.dataset, derived: v.derived, view: v.derived },
+    })
+    expect(getByText('Toplam Sermaye')).toBeInTheDocument()
+    expect(getByText('Dönem Sonu Sermayesi')).toBeInTheDocument()
+    expect(getByText('Nakit Bakiyesi')).toBeInTheDocument()
+    expect(getByText(/İçeride Kalan/i)).toBeInTheDocument()
+    // fixture: toplamSermaye 5000
+    expect(container.textContent).toContain('$5,000.00')
+    // unrealized unknown → dash on field 5/6
+    expect(getByText('Gerçekleşmemiş Kazanç/Kayıp')).toBeInTheDocument()
+  })
+
+  it('shows THIS MONTH block from the newest snapshot', async () => {
+    const v = await derived()
+    const { getByText, container } = render(Panorama, {
+      props: { dataset: v.dataset, derived: v.derived, view: v.derived },
+    })
+    // "Bu Ay" also appears as a period label in the periods table, so use textContent here.
+    expect(container.textContent).toContain('Bu Ay')
+    expect(getByText('Oca 2024')).toBeInTheDocument()
+  })
 })

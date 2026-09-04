@@ -17,7 +17,7 @@
   // RULING P1-3 annotation form; props optional, guarded in the template.
   // The prop name `derived` collides with the `$derived` rune, so the view
   // model is assembled by a plain function under a template guard.
-  let { dataset, derived }: { dataset?: Dataset; derived?: DerivedBundle } = $props()
+  let { dataset, derived, view }: { dataset?: Dataset; derived?: DerivedBundle; view?: DerivedBundle } = $props()
 
   const PALETTE = ['var(--gain)', 'var(--gold)', 'var(--loss)', 'var(--ink-soft)']
 
@@ -114,6 +114,38 @@
         value: c.gerceklesmisKzUsd,
       })),
       periods: d.periods,
+      hero:
+        view == null
+          ? null
+          : (() => {
+              const b = view.dashboard
+              const gerceklesmemisKz = unrealTotal
+              const gerceklesmemisOzkaynak = unrealTotal == null ? null : b.donemSonu + unrealTotal
+              return {
+                fields: [
+                  { label: 'Toplam Sermaye', v: money(b.toplamSermaye) },
+                  { label: 'İçeride Kalan Gerçekleşmiş Kâr', v: money(b.icerideKalan), tone: toneOf(b.icerideKalan) },
+                  { label: 'Kâr/Sermaye Çekimleri', v: b.cekimler === 0 ? DASH : money(b.cekimler) },
+                  { label: 'Dönem Sonu Sermayesi', v: money(b.donemSonu) },
+                  {
+                    label: 'Gerçekleşmemiş Kazanç/Kayıp',
+                    v: gerceklesmemisKz == null ? DASH : money(gerceklesmemisKz),
+                    tone: gerceklesmemisKz == null ? undefined : toneOf(gerceklesmemisKz),
+                  },
+                  { label: 'Gerçekleşmemiş Özkaynak Değeri', v: gerceklesmemisOzkaynak == null ? DASH : money(gerceklesmemisOzkaynak) },
+                  { label: 'Nakit Bakiyesi', v: money(b.nakitBakiyesi) },
+                ],
+                summary: {
+                  realized: b.realized,
+                  unreal: unrealTotal,
+                  capital: b.toplamSermaye,
+                  totalProfit: b.icerideKalan,
+                  endCapital: b.donemSonu,
+                },
+                overall: { totalGain: b.totalGain, totalLoss: b.totalLoss, gainLoss: b.gainLoss },
+              }
+            })(),
+      month: view?.monthPerf ?? null,
     }
   }
 
@@ -149,6 +181,49 @@
 {#if dataset && derived}
   {@const vm = buildView(dataset, derived)}
   <section class="panorama">
+    {#if vm.hero}
+      <div class="hero">
+        {#each vm.hero.fields as f}
+          <div class="hf" class:pos={f.tone === 'gain'} class:neg={f.tone === 'loss'}>
+            <span class="hl">{f.label}</span>
+            <span class="hv num">{f.v}</span>
+          </div>
+        {/each}
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <SectionHeader title="Hesap Özeti" />
+          <dl class="mini">
+            <div><dt>Realized</dt><dd class="num">{money(vm.hero.summary.realized)} · {pct(vm.hero.summary.realized / (vm.hero.summary.capital || 1))}</dd></div>
+            <div><dt>Unrealized</dt><dd class="num">{vm.hero.summary.unreal == null ? DASH : `${money(vm.hero.summary.unreal)} · ${pct(vm.hero.summary.unreal / (vm.hero.summary.capital || 1))}`}</dd></div>
+            <div><dt>Total</dt><dd class="num">{money(vm.hero.summary.realized + (vm.hero.summary.unreal ?? 0))}</dd></div>
+            <div><dt>Capital</dt><dd class="num">{money(vm.hero.summary.capital)}</dd></div>
+            <div><dt>Total Profit</dt><dd class="num">{money(vm.hero.summary.totalProfit)}</dd></div>
+            <div><dt>End Capital</dt><dd class="num">{money(vm.hero.summary.endCapital)}</dd></div>
+          </dl>
+        </div>
+        <div class="panel">
+          <SectionHeader title="Genel Performans" />
+          <dl class="mini">
+            <div><dt>Toplam Kazanç</dt><dd class="num pos">{money(vm.hero.overall.totalGain)}</dd></div>
+            <div><dt>Toplam Kayıp</dt><dd class="num neg">{money(vm.hero.overall.totalLoss)}</dd></div>
+            <div><dt>Net</dt><dd class="num">{money(vm.hero.overall.gainLoss)} · {pct(vm.hero.overall.gainLoss / (vm.hero.summary.capital || 1))}</dd></div>
+          </dl>
+        </div>
+      </div>
+      {#if vm.month}
+        <SectionHeader title="Bu Ay" />
+        <dl class="mini month">
+          <div><dt>Ay</dt><dd>{vm.month.ay}</dd></div>
+          <div><dt>Başlangıç Sermaye</dt><dd class="num">{money(vm.month.begCapital as number)}</dd></div>
+          <div><dt>Eklenen Mevduat</dt><dd class="num">{money(vm.month.addDeposit)}</dd></div>
+          <div><dt>Alınan Temettü</dt><dd class="num">{money(vm.month.divReceived)}</dd></div>
+          <div><dt>Net K/Z</dt><dd class="num" class:pos={vm.month.netKz > 0} class:neg={vm.month.netKz < 0}>{money(vm.month.netKz, { sign: true })}</dd></div>
+          <div><dt>Çekim</dt><dd class="num">{money(vm.month.withdrawal)}</dd></div>
+          <div><dt>Dönem Sonu</dt><dd class="num">{money(vm.month.endCapital)}</dd></div>
+        </dl>
+      {/if}
+    {/if}
     <KpiBand items={vm.kpiItems} />
 
     <SectionHeader title="Panorama" note={vm.headerNote} />
@@ -262,5 +337,70 @@
     .grid-2 {
       grid-template-columns: 1fr 1fr;
     }
+  }
+  .hero {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 1.25rem;
+  }
+  .hf {
+    background: #0c0f13;
+    color: var(--ink);
+    padding: 0.6rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .hf .hl {
+    font-size: 0.68rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+  }
+  .hf .hv {
+    font-size: 1.05rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .hf.pos .hv {
+    color: var(--gain);
+  }
+  .hf.neg .hv {
+    color: var(--loss);
+  }
+  .mini {
+    margin: 0.25rem 0 0.5rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.25rem 1.5rem;
+  }
+  .mini div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid var(--hairline);
+    padding: 0.3rem 0;
+  }
+  .mini dt {
+    color: var(--ink-soft);
+    font-size: 0.82em;
+  }
+  .mini dd {
+    margin: 0;
+    font-weight: 600;
+  }
+  .mini dd.pos {
+    color: var(--gain);
+  }
+  .mini dd.neg {
+    color: var(--loss);
+  }
+  .mini.month {
+    grid-template-columns: 1fr 1fr;
   }
 </style>
