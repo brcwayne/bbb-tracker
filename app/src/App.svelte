@@ -15,6 +15,7 @@
     type PeriodKey,
   } from './lib/settings.svelte'
   import { dateShort, tryFmt } from './lib/format'
+  import { prices, refreshPrices, hydratePrices, priceApiEnabled } from './lib/prices.svelte'
   import Panorama from './routes/Panorama.svelte'
   import Pozisyonlar from './routes/Pozisyonlar.svelte'
   import AylikRapor from './routes/AylikRapor.svelte'
@@ -24,6 +25,7 @@
   const source = pickSource()
   const drive = source instanceof DriveSource ? source : null
   onMount(() => {
+    hydratePrices()
     load(store, source)
     return onRouteChange((r) => (route = r))
   })
@@ -39,6 +41,15 @@
         : deriveAll($store.dataset, periodRange(settings.period))
       : undefined,
   )
+
+  const priceStamp = $derived(
+    prices.asOf
+      ? new Date(prices.asOf).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+      : null,
+  )
+  function onRefreshPrices() {
+    if ($store.status === 'ready' && $store.dataset) refreshPrices($store.dataset)
+  }
 
   function onSrcChange(e: Event) {
     const value = (e.currentTarget as HTMLSelectElement).value
@@ -71,6 +82,17 @@
       <option value="local">local</option>
       <option value="drive">Drive</option>
     </select>
+    {#if priceApiEnabled()}
+      <button
+        class="pricebtn"
+        onclick={onRefreshPrices}
+        disabled={prices.status === 'loading'}
+      >
+        {prices.status === 'loading' ? 'Yenileniyor…' : 'Fiyatları yenile'}
+      </button>
+      {#if priceStamp}<span class="stamp num">{priceStamp}</span>{/if}
+      {#if prices.status === 'error'}<span class="priceerr">fiyat alınamadı</span>{/if}
+    {/if}
     <ThemeToggle />
   </div>
 </header>
@@ -157,6 +179,28 @@
   }
   .stamp {
     color: var(--ink-soft);
+    font-size: 0.75rem;
+  }
+  .pricebtn {
+    appearance: none;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    cursor: pointer;
+  }
+  .pricebtn:hover:not(:disabled) {
+    border-color: var(--gold);
+  }
+  .pricebtn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  .priceerr {
+    color: var(--loss);
     font-size: 0.75rem;
   }
   .ratenote {
