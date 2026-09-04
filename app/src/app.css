@@ -13,8 +13,8 @@
   --ink: #e8e4dc;
   --ink-soft: #9aa0a8;
   --hairline: #2a2f37;
-  --gain: #7fb08a;
-  --loss: #c77b6b;
+  --gain: #5fbf85;
+  --loss: #e0736a;
   --gold: #c9a86a;
   --font-num: ui-monospace, 'SF Mono', Menlo, monospace;
 }
@@ -49,8 +49,8 @@
   --ink: #e8e4dc;
   --ink-soft: #9aa0a8;
   --hairline: #2a2f37;
-  --gain: #7fb08a;
-  --loss: #c77b6b;
+  --gain: #5fbf85;
+  --loss: #e0736a;
   --gold: #c9a86a;
 }
 * {

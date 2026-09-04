@@ -166,13 +166,19 @@
     },
     {
       key: 'gerceklesmemisKz',
-      label: 'Gerçekleşmemiş K/Z',
+      label: 'Gerç.mmiş K/Z',
       align: 'right' as const,
       sortable: true,
-      fmt: (v: number | null, row: { gerceklesmemisPct: number | null }) =>
-        v == null
-          ? DASH
-          : `${money(v, { sign: true })} · ${row.gerceklesmemisPct == null ? DASH : pct(row.gerceklesmemisPct)}`,
+      tone: 'sign' as const,
+      fmt: (v: number | null) => (v == null ? DASH : money(v, { sign: true })),
+    },
+    {
+      key: 'gerceklesmemisPct',
+      label: 'Gerç.mmiş %',
+      align: 'right' as const,
+      sortable: true,
+      tone: 'sign' as const,
+      fmt: (v: number | null) => (v == null ? DASH : pct(v)),
     },
     { key: 'seviye', label: 'Seviye' },
   ]
@@ -200,6 +206,7 @@
       label: 'Gerçekleşmiş K/Z',
       align: 'right' as const,
       sortable: true,
+      tone: 'sign' as const,
       fmt: (v: number) => money(v, { sign: true }),
     },
     {
@@ -207,6 +214,7 @@
       label: '%',
       align: 'right' as const,
       sortable: true,
+      tone: 'sign' as const,
       fmt: (v: number | null) => (v == null ? DASH : pct(v)),
     },
   ]
@@ -333,7 +341,7 @@
 <style>
   .pozisyonlar {
     padding: 1.25rem 1.25rem 2rem;
-    max-width: 900px;
+    max-width: min(1240px, 96vw);
     margin: 0 auto;
   }
   .filters {

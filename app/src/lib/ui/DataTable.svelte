@@ -7,6 +7,8 @@
     align?: 'left' | 'right'
     sortable?: boolean
     fmt?: (v: any, row: any) => string
+    /** 'sign' → colour the cell green when row[key] > 0, red when < 0 */
+    tone?: 'sign'
   }
   type Sort = { key: string; dir: 'asc' | 'desc' }
   let {
@@ -95,7 +97,12 @@
         class:expanded={isOpen(row)}
       >
         {#each columns as col, ci}
-          <td style:text-align={col.align ?? 'left'} class:num={col.align === 'right'}>
+          <td
+            style:text-align={col.align ?? 'left'}
+            class:num={col.align === 'right'}
+            class:pos={col.tone === 'sign' && typeof row[col.key] === 'number' && row[col.key] > 0}
+            class:neg={col.tone === 'sign' && typeof row[col.key] === 'number' && row[col.key] < 0}
+          >
             {#if ci === 0 && detail}<span class="caret" aria-hidden="true"
                 >{isOpen(row) ? '▾' : '▸'}</span
               >{/if}{col.fmt ? col.fmt(row[col.key], row) : row[col.key]}
@@ -145,6 +152,12 @@
   td.num {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
+  }
+  td.pos {
+    color: var(--gain);
+  }
+  td.neg {
+    color: var(--loss);
   }
   .caret {
     display: inline-block;
