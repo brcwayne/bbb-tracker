@@ -139,3 +139,16 @@ küçük bir Cloudflare Worker gerekir (`worker/` klasörü). Kimlik/anahtar yok
 
 Worker'ı elle doğrulamak: `cd worker && npx wrangler dev` (ayrı terminal) + `npm run smoke`.
 Worker kodu değişince `wrangler deploy`'u tekrar çalıştır (CI yalnızca testini koşar, deploy etmez).
+
+## P1.6 — yeni sayfalar
+
+Panorama'nın üst bloğu Excel Dashboard'unun 7 alanını birebir gösterir (Toplam Sermaye = Σ
+para yatırma, Dönem Sonu = Sermaye + İçeride Kalan Kâr − Çekimler, …). Gerçekleşmemiş K/Z ve
+Özkaynak Değeri "Fiyatları yenile" sonrası dolar.
+
+Yeni sekmeler (hepsi salt-okunur, mevcut veriden türetilir): **Portföyler** (portföy başına
+dağılım + holdings), **Kurumlar** (kurum başına holdings; kurum ekleme P2), **Banka** (para
+yatırma/çekme + para piyasası hareketleri), **Temettü** (enstrüman bazında temettü + yeniden
+yatırım ipuçları).
+
+Excel sayılarıyla mutabakat kontrolü (CI'da değil): `cd app && node scripts/reconcile-dashboard.mjs`.
