@@ -18,8 +18,12 @@
   import { dateShort, tryFmt } from './lib/format'
   import { prices, refreshPrices, hydratePrices, priceApiEnabled } from './lib/prices.svelte'
   import Panorama from './routes/Panorama.svelte'
+  import Portfoyler from './routes/Portfoyler.svelte'
+  import Kurumlar from './routes/Kurumlar.svelte'
   import Pozisyonlar from './routes/Pozisyonlar.svelte'
   import AylikRapor from './routes/AylikRapor.svelte'
+  import Banka from './routes/Banka.svelte'
+  import Temettu from './routes/Temettu.svelte'
 
   let route = $state<Route>(currentRoute())
   const store = createAppStore()
@@ -30,7 +34,15 @@
     load(store, source)
     return onRouteChange((r) => (route = r))
   })
-  const pages = { panorama: Panorama, pozisyonlar: Pozisyonlar, aylik: AylikRapor }
+  const pages = {
+    panorama: Panorama,
+    portfoyler: Portfoyler,
+    kurumlar: Kurumlar,
+    pozisyonlar: Pozisyonlar,
+    aylik: AylikRapor,
+    banka: Banka,
+    temettu: Temettu,
+  }
   const Active = $derived(pages[route])
   const title = $derived(ROUTES.find((r) => r.id === route)!.label)
 
@@ -231,12 +243,14 @@
     right: 0;
     bottom: 0;
     display: flex;
+    overflow-x: auto;
     padding: 0 0.5rem;
     border-top: 1px solid var(--hairline);
     background: var(--surface);
     z-index: 5;
   }
   .tabs a {
+    flex: 0 0 auto;
     padding: 0.55rem 1.15rem;
     color: var(--ink-soft);
     text-decoration: none;
