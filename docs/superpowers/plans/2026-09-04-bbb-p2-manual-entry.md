@@ -530,17 +530,17 @@ git commit -m "feat(app): assetTransfers.json toleranslı yükleme (yoksa boş d
 
 **Interfaces:**
 - Consumes: `cashBalanceByHesap` (Task 2), `transfers` (Task 3), yeni `holdingsByPortfolio`/`holdingsByBroker` imzaları (Task 4).
-- Produces: `DerivedBundle` iki yeni alan kazanır: `cashByHesap: Record<string, number>`, `assetTransferMoves: TransferMoveRow[]`.
+- Produces: `DerivedBundle` iki yeni alan kazanır: `cashByHesap: Record<string, number>`, `moneyTransfers: TransferMoveRow[]` (kurumlar arası PARA transferleri — varlık transferi değil; `cashmoves.ts`'deki `transfers()` fonksiyonundan gelir, isim çakışmasını önlemek için `deriveAll`'daki alan adı `moneyTransfers`'dır).
 
 - [ ] **Step 1: `store.test.ts`'e başarısız assertion ekle**
 
 Mevcut `describe('deriveAll — P1.6 blocks', ...)` bloğunun yanına (veya içine) ekle:
 
 ```ts
-it('carries cashByHesap and assetTransferMoves', () => {
+it('carries cashByHesap and moneyTransfers', () => {
   const d = deriveAll(fixture)
   expect(d.cashByHesap).toBeDefined()
-  expect(d.assetTransferMoves).toEqual([])
+  expect(d.moneyTransfers).toEqual([])
 })
 ```
 
@@ -551,12 +551,11 @@ Expected: FAIL — `d.cashByHesap` undefined.
 
 - [ ] **Step 3: `store.ts`'i güncelle**
 
-İmportlara ekle:
+İmportlara ekle (`cashmoves.ts`'den gelen `transfers` fonksiyonu, `deriveAll`'ın zaten var olan `transfers: bankTransfers(ds.cashflows)` alan adıyla çakışmasın diye baştan `moneyTransfers` olarak yeniden adlandırılarak import edilir):
 ```ts
 import { cashBalanceByHesap } from './cashBalances'
-import { bankTransfers, moneyMarketMoves, dividends, transfers } from './cashmoves'
+import { bankTransfers, moneyMarketMoves, dividends, transfers as moneyTransfersOf } from './cashmoves'
 ```
-(`transfers` zaten var olan `bankTransfers, moneyMarketMoves, dividends` importuna eklenir — ayrı bir import satırı açma.)
 
 `deriveAll`'ın döndürdüğü objeye iki alan ekle:
 
@@ -567,10 +566,8 @@ import { bankTransfers, moneyMarketMoves, dividends, transfers } from './cashmov
     mmMoves: moneyMarketMoves(ds.transactions, ds.instruments),
     divs: dividends(ds.cashflows, ds.transactions),
     cashByHesap: cashBalanceByHesap(ds),
-    assetTransferMoves: transfers(ds.cashflows),
+    moneyTransfers: moneyTransfersOf(ds.cashflows),
 ```
-
-**Dikkat — isim çakışması:** `cashmoves.ts`'den import edilen `transfers` fonksiyonu ile `deriveAll`'ın zaten var olan `transfers: bankTransfers(ds.cashflows)` alan adı ÇAKIŞIR (ikisi de `transfers` kelimesini kullanıyor, biri fonksiyon importu, diğeri obje alan adı — TypeScript bunu obje literal içinde sorunsuz ayırt eder çünkü biri sol taraftaki alan adı, diğeri sağ taraftaki değer, ama okunabilirlik için import'u yeniden adlandır: `import { transfers as assetTransferMoves } from './cashmoves'` yaparak çağrıyı `assetTransferMoves: assetTransferMoves(ds.cashflows)` şekline getir — daha net.
 
 - [ ] **Step 4: Testleri çalıştır — PASS beklenir**
 
@@ -646,11 +643,11 @@ it('shows a cash balance for each broker', async () => {
 Template'e, mevcut para piyasası bölümünden sonra ekle:
 
 ```svelte
-    <SectionHeader title="Transferler" note={`${view.assetTransferMoves.length} kayıt`} />
-    <DataTable columns={transferCols} rows={view.assetTransferMoves} initialSort={{ key: 'tarih', dir: 'desc' }} />
+    <SectionHeader title="Transferler" note={`${view.moneyTransfers.length} kayıt`} />
+    <DataTable columns={transferCols} rows={view.moneyTransfers} initialSort={{ key: 'tarih', dir: 'desc' }} />
 ```
 
-**Not:** `view.assetTransferMoves` burada kurumlar arası PARA transferlerini (Task 3'ün `transfers()` fonksiyonundan gelen `TransferMoveRow[]`) ifade eder — Task 6'nın `deriveAll` alan adı olarak `assetTransferMoves` seçilmiş olsa da içeriği para transferidir, varlık transferi değil (isimlendirme `cashmoves.ts`'deki `transfers()` fonksiyonundan geldiği için böyle; karışıklığı önlemek adına Step 3'teki alan adını gözden geçir — burada tutarlılık için alan adını `moneyTransfers` yap, `assetTransferMoves` DEĞİL. Step 3'ü şuna göre düzelt: `moneyTransfers: assetTransferMoves(ds.cashflows)` ve Step 1 testindeki `d.assetTransferMoves` assertion'ını `d.moneyTransfers` olarak güncelle.**
+**Not:** `view.moneyTransfers` kurumlar arası PARA transferlerini gösterir (Task 3'ün `transfers()` fonksiyonundan gelen `TransferMoveRow[]`) — varlık transferi değil.
 
 - [ ] **Step 8: `Banka.test.ts`'e test ekle**
 
@@ -1032,8 +1029,8 @@ git commit -m "feat(app): router — 8. rota 'Ekle'"
 - Modify: `app/src/App.svelte`
 
 **Interfaces:**
-- Consumes: `Route`/`ROUTES` (Task 9), `appendRecord` (Task 8).
-- Produces: `EkleKaydi.svelte` — `let { dataset, view, source }: { dataset?: Dataset; view?: DerivedBundle; source?: DataSource } = $props()`. 4 seçenekten birine tıklanınca ilgili alt bileşen (Task 11-14'te yazılacak) gösterilir. Bu task, alt formları HENÜZ İÇERMEZ — sadece tür seçici + "yakında" placeholder'ları kurar; Task 11-14 her biri kendi formunu ekler.
+- Consumes: `Route`/`ROUTES` (Task 9), `appendRecord` (Task 8), `AppState`/`Writable` (`store.ts`/`svelte/store`).
+- Produces: `EkleKaydi.svelte` — `let { dataset, view, source, store }: { dataset?: Dataset; view?: DerivedBundle; source?: DataSource; store?: Writable<AppState> } = $props()`. `store` bu task'ta henüz KULLANILMAZ (sadece prop olarak alınıp bekletilir) — Task 11-14'ün her biri kendi formuna bu prop'u aktarırken `appendRecord`'a gerçek uygulama store'unu geçirebilmesi için baştan buraya eklenir; bu sayede Task 11-14 App.svelte'ye tekrar dokunmak ZORUNDA KALMAZ. 4 seçenekten birine tıklanınca ilgili alt bileşen (Task 11-14'te yazılacak) gösterilir. Bu task, alt formları HENÜZ İÇERMEZ — sadece tür seçici + "yakında" placeholder'ları kurar; Task 11-14 her biri kendi formunu ekler.
 
 - [ ] **Step 1: Yazılacak test**
 
@@ -1048,14 +1045,19 @@ import { get } from 'svelte/store'
 async function v() {
   const s = createAppStore()
   await load(s, { id: 'local', load: () => Promise.resolve(fixture) })
-  return get(s)
+  return { state: get(s), store: s }
 }
 
 describe('EkleKaydi', () => {
   it('shows 4 record-type choices, switches to the picked form area', async () => {
-    const d = await v()
+    const { state, store } = await v()
     const { getByText } = render(EkleKaydi, {
-      props: { dataset: d.dataset, view: d.derived, source: { id: 'local', load: () => Promise.resolve(fixture) } },
+      props: {
+        dataset: state.dataset,
+        view: state.derived,
+        source: { id: 'local', load: () => Promise.resolve(fixture) },
+        store,
+      },
     })
     expect(getByText('İşlem (Al/Sat)')).toBeInTheDocument()
     expect(getByText('Nakit Hareketi')).toBeInTheDocument()
@@ -1084,10 +1086,17 @@ Expected: FAIL — `./EkleKaydi.svelte` çözülemiyor.
   import type { Dataset } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
+  import type { Writable } from 'svelte/store'
+  import type { AppState } from '../lib/data/store'
   import EmptyState from '../lib/ui/EmptyState.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
 
-  let { dataset, view, source }: { dataset?: Dataset; view?: DerivedBundle; source?: DataSource } = $props()
+  let {
+    dataset,
+    view,
+    source,
+    store,
+  }: { dataset?: Dataset; view?: DerivedBundle; source?: DataSource; store?: Writable<AppState> } = $props()
 
   type Kind = 'islem' | 'nakit' | 'transfer' | 'kurum'
   let kind = $state<Kind | null>(null)
@@ -1100,7 +1109,7 @@ Expected: FAIL — `./EkleKaydi.svelte` çözülemiyor.
   }
 </script>
 
-{#if dataset && view && source}
+{#if dataset && view && source && store}
   <section class="ekle">
     <SectionHeader title="Yeni Kayıt Ekle" />
     <div class="picker">
@@ -1164,7 +1173,7 @@ Run: `cd app && npm test -- EkleKaydi`
 
 - [ ] **Step 5: `App.svelte`'i güncelle**
 
-İmporta ekle: `import EkleKaydi from './routes/EkleKaydi.svelte'`. `pages` objesine ekle: `ekle: EkleKaydi`. `<Active .../>` satırına `source={source}` prop'unu ekle (mevcut satır `<Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} />` idi, şimdi `source={source}` de eklenir — `source` değişkeni zaten `App.svelte`'nin script bloğunda `const source = pickSource()` olarak tanımlı, sadece template'e prop olarak geçirilmesi gerekiyor). Diğer 6 sayfa bu ekstra prop'u görmezden gelir (Svelte 5'te kullanılmayan prop hata vermez).
+İmporta ekle: `import EkleKaydi from './routes/EkleKaydi.svelte'`. `pages` objesine ekle: `ekle: EkleKaydi`. `<Active .../>` satırına HEM `source={source}` HEM `store={store}` prop'larını ekle — mevcut satır `<Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} />` idi, şimdi `<Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} source={source} store={store} />` olur (`source` ve `store` değişkenleri zaten `App.svelte`'nin script bloğunda `const source = pickSource()` ve `const store = createAppStore()` olarak tanımlı, sadece template'e prop olarak geçirilmeleri gerekiyor). Bu iki prop, App.svelte'nin bu tek satırına EK OLARAK bir kereliğine eklenir — Task 11-14'ün hiçbiri App.svelte'ye tekrar dokunmaz, hepsi bu prop'ları `EkleKaydi.svelte` üzerinden zincirleme alır. Diğer 6 sayfa bu ekstra prop'ları görmezden gelir (Svelte 5'te kullanılmayan prop hata vermez).
 
 - [ ] **Step 6: Full suite + check + build**
 
@@ -1186,8 +1195,8 @@ git commit -m "feat(app): Ekle sekmesi — tür seçici iskeleti"
 - Modify: `app/src/routes/EkleKaydi.svelte` — `kind === 'islem'` dalı gerçek formu render eder.
 
 **Interfaces:**
-- Consumes: `appendRecord` (Task 8).
-- Produces: `let { dataset, view, source, onSaved }: { dataset: Dataset; view: DerivedBundle; source: DataSource; onSaved: () => void } = $props()`.
+- Consumes: `appendRecord` (Task 8), `store` prop deseni kurulan (Task 10).
+- Produces: `let { dataset, view, source, store, onSaved }: { dataset: Dataset; view: DerivedBundle; source: DataSource; store: Writable<AppState>; onSaved: () => void } = $props()`.
 
 - [ ] **Step 1: Yazılacak test**
 
@@ -1202,16 +1211,16 @@ import { get } from 'svelte/store'
 async function v() {
   const s = createAppStore()
   await load(s, { id: 'local', load: () => Promise.resolve(fixture) })
-  return get(s)
+  return { state: get(s), store: s }
 }
 
 describe('IslemFormu', () => {
   it('rejects a SAT beyond the open lot', async () => {
-    const d = await v()
+    const { state, store } = await v()
     const onSaved = vi.fn()
     const source = { id: 'local' as const, load: () => Promise.resolve(fixture) }
     const { getByLabelText, getByText } = render(IslemFormu, {
-      props: { dataset: d.dataset!, view: d.derived!, source, onSaved },
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved },
     })
     await fireEvent.change(getByLabelText('Yön'), { target: { value: 'SAT' } })
     await fireEvent.change(getByLabelText('Enstrüman'), { target: { value: 'THYAO' } })
@@ -1221,8 +1230,8 @@ describe('IslemFormu', () => {
     expect(onSaved).not.toHaveBeenCalled()
   })
 
-  it('saves a valid AL after confirm', async () => {
-    const d = await v()
+  it('saves a valid AL after confirm and updates the real store', async () => {
+    const { state, store } = await v()
     const onSaved = vi.fn()
     let saved: unknown
     const source = {
@@ -1233,7 +1242,7 @@ describe('IslemFormu', () => {
       },
     }
     const { getByLabelText, getByText } = render(IslemFormu, {
-      props: { dataset: d.dataset!, view: d.derived!, source, onSaved },
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved },
     })
     await fireEvent.change(getByLabelText('Yön'), { target: { value: 'AL' } })
     await fireEvent.change(getByLabelText('Enstrüman'), { target: { value: 'THYAO' } })
@@ -1245,11 +1254,12 @@ describe('IslemFormu', () => {
     await fireEvent.click(getByText('Onayla ve Kaydet'))
     expect(onSaved).toHaveBeenCalled()
     expect((saved as any[])?.some((t) => t.enstruman === 'THYAO' && t.yon === 'AL')).toBe(true)
+    expect(get(store).dataset?.transactions.some((t) => t.enstruman === 'THYAO' && t.yon === 'AL')).toBe(true)
   })
 })
 ```
 
-(Fixture'daki gerçek `THYAO`/`GARAN`/`ENIS` değerlerini kullan — bu değerler `app/src/fixtures/dataset.ts`'de zaten mevcut, P1.6'daki testlerle aynı fixture.)
+(Fixture'daki gerçek `THYAO`/`GARAN`/`ENIS` değerlerini kullan — bu değerler `app/src/fixtures/dataset.ts`'de zaten mevcut, P1.6'daki testlerle aynı fixture. İkinci testin son satırı, `appendRecord`'un GERÇEKTEN geçirilen `store`'u güncellediğini doğrular — bu, `IslemFormu`'nun kendi başına bir store yaratmadığının kanıtıdır.)
 
 - [ ] **Step 2: Testi çalıştır — FAIL beklenir**
 
@@ -1259,18 +1269,25 @@ Run: `cd app && npm test -- IslemFormu`
 
 ```svelte
 <script lang="ts">
+  import type { Writable } from 'svelte/store'
   import type { Dataset } from '../../lib/data/types'
-  import type { DerivedBundle } from '../../lib/data/store'
+  import type { DerivedBundle, AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord } from '../../lib/data/store'
-  import { createAppStore } from '../../lib/data/store'
 
   let {
     dataset,
     view,
     source,
+    store,
     onSaved,
-  }: { dataset: Dataset; view: DerivedBundle; source: DataSource; onSaved: () => void } = $props()
+  }: {
+    dataset: Dataset
+    view: DerivedBundle
+    source: DataSource
+    store: Writable<AppState>
+    onSaved: () => void
+  } = $props()
 
   let yon = $state<'AL' | 'SAT'>('AL')
   let enstruman = $state('')
@@ -1308,7 +1325,7 @@ Run: `cd app && npm test -- IslemFormu`
     try {
       const rand = crypto.getRandomValues(new Uint8Array(8))
       const id = 't_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
-      await appendRecord(createAppStore(), source, 'transactions', {
+      await appendRecord(store, source, 'transactions', {
         id,
         tarih: new Date().toISOString().slice(0, 10),
         hesap,
@@ -1441,9 +1458,7 @@ Run: `cd app && npm test -- IslemFormu`
 </style>
 ```
 
-**Dikkat implementer için:** `confirmSave` içinde `appendRecord(createAppStore(), source, ...)` YANLIŞ — yeni, boş bir store yaratıp onu güncelliyor, gerçek uygulama store'unu DEĞİL. Bu bilinçli bir plan hatası değil, düzeltilmesi gereken bir tasarım eksikliği: `IslemFormu` (ve Task 12-14'teki diğer formlar) gerçek uygulama `AppState` store'una erişebilmeli. Bunu düzeltmek için `EkleKaydi.svelte`'ye (Task 10) ve oradan alt formlara bir `appStore: Writable<AppState>` prop'u geçirilmeli — `App.svelte`'nin zaten sahip olduğu `store` değişkeni `<Active store={store} ... />` şeklinde ilave bir prop olarak akıtılmalı, `EkleKaydi.svelte` bunu alıp her forma iletmeli. **Bu task'ın implementer'ı şunu yapmalı:** (1) `App.svelte`'de `<Active ... source={source} store={store} />`; (2) `EkleKaydi.svelte`'nin prop tipine `store: Writable<AppState>` eklenip alt formlara `store={store}` olarak geçirilmesi; (3) `IslemFormu.svelte`'nin prop tipine de `store: Writable<AppState>` eklenip `confirmSave` içinde `appendRecord(store, source, ...)` kullanılması (yeni `createAppStore()` çağrısı SİLİNMELİDİR). Yukarıdaki kod bloğu ve testler bu düzeltmeyle tutarlı hale getirilmeli — testlerde de `store` prop'u olarak gerçek bir `createAppStore()` + `load()` sonrası elde edilen store geçirilmeli, `appendRecord`'un GERÇEKTEN o store'u güncellediği doğrulanmalı (örn. `get(store).dataset?.transactions` üzerinden).
-
-- [ ] **Step 4: Testleri çalıştır — PASS beklenir (yukarıdaki düzeltme uygulandıktan sonra)**
+- [ ] **Step 4: Testleri çalıştır — PASS beklenir**
 
 Run: `cd app && npm test -- IslemFormu`
 
@@ -1459,7 +1474,7 @@ Run: `cd app && npm test -- IslemFormu`
     {:else if kind}
 ```
 
-(`IslemFormu` import edilmeli: `import IslemFormu from './forms/IslemFormu.svelte'`. `EkleKaydi.svelte`'nin kendi prop listesine de Task 11'in gerektirdiği `store` prop'u eklenmeli — Step 3'teki düzeltmeyle tutarlı.)
+(`IslemFormu` import edilmeli: `import IslemFormu from './forms/IslemFormu.svelte'`. `store` prop'u Task 10'dan beri `EkleKaydi.svelte`'nin kendi prop listesinde zaten var — bu task sadece onu `IslemFormu`'ya aktarır, `App.svelte`'ye DOKUNMAZ.)
 
 - [ ] **Step 6: Full suite + check + build**
 
@@ -1468,7 +1483,7 @@ Run: `cd app && npm test && npm run check && npm run build`
 - [ ] **Step 7: Commit**
 
 ```bash
-git add app/src/routes/forms/IslemFormu.svelte app/src/routes/forms/IslemFormu.test.ts app/src/routes/EkleKaydi.svelte app/src/App.svelte
+git add app/src/routes/forms/IslemFormu.svelte app/src/routes/forms/IslemFormu.test.ts app/src/routes/EkleKaydi.svelte
 git commit -m "feat(app): İşlem (AL/SAT) formu"
 ```
 
@@ -1481,7 +1496,7 @@ git commit -m "feat(app): İşlem (AL/SAT) formu"
 - Modify: `app/src/routes/EkleKaydi.svelte` — `kind === 'nakit'` dalı.
 
 **Interfaces:**
-- Consumes: `appendRecord` (Task 8), `store` prop deseni (Task 11'in düzeltmesiyle aynı).
+- Consumes: `appendRecord` (Task 8), `store` prop deseni (Task 10/11'de kurulan — `EkleKaydi.svelte` zaten `store` prop'unu tutuyor, bu form da onu Task 11'deki `IslemFormu` ile aynı şekilde alır).
 - Produces: `let { dataset, source, store, onSaved }: { dataset: Dataset; source: DataSource; store: Writable<AppState>; onSaved: () => void } = $props()`.
 
 - [ ] **Step 1: Yazılacak test**
