@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - 'worker/**'
       - '.github/workflows/pages.yml'
 
 permissions:
@@ -37,12 +38,28 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_API_KEY: ${{ vars.VITE_GOOGLE_API_KEY }}
           VITE_GOOGLE_APP_ID: ${{ vars.VITE_GOOGLE_APP_ID }}
+          VITE_PRICE_API: ${{ vars.VITE_PRICE_API }}
       # Permanent guard: no data file may ever land in the bundle. Fails the
       # build if any .json other than the PWA manifest is in dist/.
       - run: 'test -z "$(find dist -name "*.json" ! -name "manifest.webmanifest")"'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app/dist
+
+  worker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - run: npm ci
+      - run: npm test
 
   deploy:
     needs: build
