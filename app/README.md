@@ -120,3 +120,22 @@ aşağıdaki 6. adımdaki URL'yi güncelle.
 
 > Repo adı `bbb-tracker` değilse: `app/vite.config.ts` içindeki `base` ve yukarıdaki
 > 6. adımın URL'si buna göre değişmeli.
+
+## P3 — canlı fiyat (fiyat proxy'si)
+
+Açık pozisyonlarda **Güncel Fiyat** / **Gerçekleşmemiş K/Z** ve TL modunda canlı kur için
+küçük bir Cloudflare Worker gerekir (`worker/` klasörü). Kimlik/anahtar yok.
+
+1. Ücretsiz **Cloudflare** hesabı aç.
+2. `npm i -g wrangler` → `wrangler login`.
+3. `cd worker && npm install && wrangler deploy` → çıkan
+   `https://bbb-prices.<subdomain>.workers.dev` adresini kopyala.
+4. `worker/wrangler.toml` içindeki `ALLOWED_ORIGIN`, repo adın `bbb-tracker` değilse
+   `https://<kullanıcı>.github.io` olacak şekilde güncelle, tekrar `wrangler deploy`.
+5. GitHub repo → Settings → Secrets and variables → **Actions → Variables** →
+   `VITE_PRICE_API` = Worker URL'i.
+6. Actions → son "Deploy dashboard to Pages" çalışması → **Re-run all jobs**.
+7. Sitede başlıkta **"Fiyatları yenile"** düğmesi çıkar; bas → fiyatlar dolar.
+
+Worker'ı elle doğrulamak: `cd worker && npx wrangler dev` (ayrı terminal) + `npm run smoke`.
+Worker kodu değişince `wrangler deploy`'u tekrar çalıştır (CI yalnızca testini koşar, deploy etmez).
