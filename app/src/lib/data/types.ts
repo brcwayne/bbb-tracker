@@ -23,11 +23,25 @@ export interface Cashflow {
   tarih: string
   hesap: string
   portfoy: string | null
-  tur: 'YATIRMA' | 'CEKME' | 'TEMETTU'
+  tur: 'YATIRMA' | 'CEKME' | 'TEMETTU' | 'TRANSFER'
   enstruman: string | null
   tutar_tl: number | null
   tutar_usd: number
   kur: number | null
+  aciklama: string
+  kaynak: string
+  hedefHesap?: string
+}
+
+export interface AssetTransfer {
+  id: string
+  tarih: string
+  enstruman: string
+  lot: number
+  kaynakHesap: string
+  hedefHesap: string
+  kaynakPortfoy: string | null
+  hedefPortfoy: string | null
   aciklama: string
   kaynak: string
 }
@@ -98,4 +112,5 @@ export interface Dataset {
   portfolios: Portfolio[]
   meta: Meta
   fxrates: FxRates
+  assetTransfers: AssetTransfer[]
 }
