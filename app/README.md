@@ -81,10 +81,16 @@ aşağıdaki 6. adımdaki URL'yi güncelle.
 
 3. **Google Cloud OAuth.** [console.cloud.google.com](https://console.cloud.google.com)
    → yeni proje → **APIs & Services**:
-   - **OAuth consent screen** → **External** → uygulama adı + destek e-postası →
-     Scopes'a `https://www.googleapis.com/auth/drive.file` ekle → **Publish app**
-     (production'a al). `drive.file` doğrulama gerektirmez; ilk girişte çıkan
-     "unverified app" ekranını **Advanced → continue** ile geç.
+   - **OAuth consent screen / Branding** → **External** → uygulama adı + destek
+     e-postası + developer e-postası. **Audience** sekmesinde **Publishing status =
+     Testing** bırak ve **Test users**'a kendi Google hesabını ekle. (Production +
+     `drive.readonly` = Google doğrulaması + homepage/privacy URL ister; tek
+     kullanıcı için gereksiz. Testing'de her girişte "unverified app" ekranı çıkar
+     → **Advanced → continue**.)
+   - Kapsam (**Data access → Add scopes**): `https://www.googleapis.com/auth/drive.readonly`.
+     `drive.file` yetmez — 8 JSON'u Drive'a başka bir araç/elle koyduğun için
+     uygulama onları ancak `drive.readonly` ile listeleyip okuyabilir. P1 hiç
+     yazmaz, salt-okunur en dar yetki budur.
    - **Credentials** → **Create OAuth client ID** → **Web application** →
      Authorized JavaScript origins: `https://<kullanıcı>.github.io` → **Client ID**'yi
      kopyala.
@@ -92,7 +98,8 @@ aşağıdaki 6. adımdaki URL'yi güncelle.
      **Picker API**'ye kısıtla → kopyala. Bu senin `VITE_GOOGLE_API_KEY`'in.
    - **App ID**, Google Cloud **proje numarandır** (proje ayarları / kadran
      sayfasında görünür) → `VITE_GOOGLE_APP_ID`.
-   - **Enabled APIs & services** → **Google Picker API**'yi de etkinleştir.
+   - **Enabled APIs & services** → **Google Picker API** ve **Google Drive API**'yi
+     etkinleştir.
 
 4. **Repo değişkenleri.** Repo → Settings → Secrets and variables → **Actions** →
    **Variables** sekmesi → **New repository variable** ile üçünü ekle:

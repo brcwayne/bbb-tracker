@@ -9,7 +9,11 @@ declare const google: any
 declare const gapi: any
 
 const FOLDER_KEY = 'bbb-drive-folder'
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
+// `drive.readonly` (not `drive.file`): the 8 dataset files are placed in Drive
+// by the migration toolchain / a manual upload — a different origin than this
+// app — so `drive.file` (own-files-only) can't list or read them. P1 only ever
+// reads, so read-only whole-Drive access is the right least privilege here.
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 
 function readStoredFolder(): string | null {
   try {
@@ -21,7 +25,7 @@ function readStoredFolder(): string | null {
 
 /**
  * Reads the 8 dataset JSON files from a folder in the user's Google Drive.
- * `connect()` runs the GIS OAuth token flow (scope `drive.file`); `chooseFolder()`
+ * `connect()` runs the GIS OAuth token flow (scope `drive.readonly`); `chooseFolder()`
  * opens the Google Picker to select the `BBB/` folder; `load()` fetches the files.
  */
 export class DriveSource implements DataSource {
@@ -76,9 +80,8 @@ export class DriveSource implements DataSource {
           let builder = new google.picker.PickerBuilder()
             .addView(view)
             .setOAuthToken(this.token)
-          // Google requires both for the `drive.file` scope: the developer key
-          // and the Cloud project number (App ID) are what grant the app access
-          // to the folder the user picks.
+          // Picker needs the developer key (Picker API) and the Cloud project
+          // number (App ID); harmless to pass alongside the drive.readonly token.
           if (this.apiKey) builder = builder.setDeveloperKey(this.apiKey)
           if (this.appId) builder = builder.setAppId(this.appId)
           const picker = builder
