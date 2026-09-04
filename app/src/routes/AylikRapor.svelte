@@ -1,20 +1,22 @@
 <script lang="ts">
   import type { Dataset, Snapshot } from '../lib/data/types'
-  import { usd, pct, monthLabel, DASH } from '../lib/format'
+  import type { DerivedBundle } from '../lib/data/store'
+  import { pct, monthLabel, DASH } from '../lib/format'
+  import { money } from '../lib/settings.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
   import BarChart from '../lib/charts/BarChart.svelte'
   import LineChart from '../lib/charts/LineChart.svelte'
 
-  // RULING P1-3: annotation form, optional + guarded. This page takes only
-  // `dataset` (no `derived`), so the runes below carry no store_rune_conflict.
-  let { dataset }: { dataset?: Dataset } = $props()
+  // RULING P1-3: annotation form, optional + guarded. The bundle prop is named
+  // `view` (not `derived`) so the $derived runes below stay legal (P1-10).
+  let { dataset, view }: { dataset?: Dataset; view?: DerivedBundle } = $props()
 
   // Selected row for the month card; null falls back to the newest month.
   let selectedMonth = $state<Snapshot | null>(null)
 
-  const snaps = $derived(dataset?.snapshots ?? [])
+  const snaps = $derived(view?.snapshots ?? dataset?.snapshots ?? [])
   // Newest month first for the table.
   const rows = $derived([...snaps].sort((a, b) => (b.tarih < a.tarih ? -1 : 1)))
   // Ascending by date for the left-to-right chart timelines.
@@ -39,43 +41,43 @@
       key: 'baslangicSermayesi_usd',
       label: 'Başlangıç Sermaye',
       align: 'right' as const,
-      fmt: (v: number | null) => usd(v as number),
+      fmt: (v: number | null) => money(v as number),
     },
     {
       key: 'netMevduatCekim_usd',
       label: 'Net Mevduat/Çekim',
       align: 'right' as const,
-      fmt: (v: number) => usd(v),
+      fmt: (v: number) => money(v),
     },
     {
       key: 'netKZ_usd',
       label: 'Kazanç',
       align: 'right' as const,
-      fmt: (v: number) => (v > 0 ? usd(v) : DASH),
+      fmt: (v: number) => (v > 0 ? money(v) : DASH),
     },
     {
       key: 'netKZ_usd',
       label: 'Kayıp',
       align: 'right' as const,
-      fmt: (v: number) => (v < 0 ? usd(v) : DASH),
+      fmt: (v: number) => (v < 0 ? money(v) : DASH),
     },
     {
       key: 'nakitTemettu_usd',
       label: 'Nakit Temettü',
       align: 'right' as const,
-      fmt: (v: number) => usd(v),
+      fmt: (v: number) => money(v),
     },
     {
       key: 'toplamOzkaynak_usd',
       label: 'Dönem Sonu',
       align: 'right' as const,
-      fmt: (v: number) => usd(v),
+      fmt: (v: number) => money(v),
     },
     {
       key: 'vergiKomisyon_usd',
       label: 'Vergi & Komisyon',
       align: 'right' as const,
-      fmt: (v: number) => usd(v),
+      fmt: (v: number) => money(v),
     },
     {
       key: '_getiri',
@@ -98,37 +100,37 @@
         <div><dt>Ay</dt><dd>{monthLabel(current.tarih)}</dd></div>
         <div>
           <dt>Başlangıç Sermaye</dt>
-          <dd class="num">{usd(current.baslangicSermayesi_usd as number)}</dd>
+          <dd class="num">{money(current.baslangicSermayesi_usd as number)}</dd>
         </div>
         <div>
           <dt>Net Mevduat/Çekim</dt>
-          <dd class="num">{usd(current.netMevduatCekim_usd)}</dd>
+          <dd class="num">{money(current.netMevduatCekim_usd)}</dd>
         </div>
         <div>
           <dt>Net K/Z</dt>
-          <dd class="num">{usd(current.netKZ_usd, { sign: true })}</dd>
+          <dd class="num">{money(current.netKZ_usd, { sign: true })}</dd>
         </div>
         <div>
           <dt>Nakit Temettü</dt>
-          <dd class="num">{usd(current.nakitTemettu_usd)}</dd>
+          <dd class="num">{money(current.nakitTemettu_usd)}</dd>
         </div>
         <div>
           <dt>Dönem Sonu</dt>
-          <dd class="num">{usd(current.toplamOzkaynak_usd)}</dd>
+          <dd class="num">{money(current.toplamOzkaynak_usd)}</dd>
         </div>
         <div>
           <dt>Vergi & Komisyon</dt>
-          <dd class="num">{usd(current.vergiKomisyon_usd)}</dd>
+          <dd class="num">{money(current.vergiKomisyon_usd)}</dd>
         </div>
         <div><dt>% Getiri</dt><dd class="num">{getiri(current)}</dd></div>
       </dl>
     {/if}
 
     <SectionHeader title="Aylık net K/Z" />
-    <BarChart {bars} orient="v" fmt={(v) => usd(v, { sign: true })} />
+    <BarChart {bars} orient="v" fmt={(v) => money(v, { sign: true })} />
 
     <SectionHeader title="Özkaynak performans eğrisi" />
-    <LineChart {series} labels={sortedAsc.map((s) => monthLabel(s.tarih))} fmtY={(v) => usd(v)} />
+    <LineChart {series} labels={sortedAsc.map((s) => monthLabel(s.tarih))} fmtY={(v) => money(v)} />
   </section>
 {:else}
   <EmptyState title="Aylık Rapor" detail="Veri bekleniyor." />
@@ -136,8 +138,9 @@
 
 <style>
   .aylik {
-    padding: 1.25rem;
-    max-width: 960px;
+    padding: 1.25rem 1.25rem 2rem;
+    max-width: 900px;
+    margin: 0 auto;
   }
   .month-card {
     display: grid;

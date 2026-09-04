@@ -14,6 +14,22 @@ export function usd(n: number, opts: { sign?: boolean } = {}): string {
   return opts.sign ? '+' + body : body
 }
 
+export function tryFmt(n: number, opts: { sign?: boolean } = {}): string {
+  if (nullish(n)) return DASH
+  const neg = n < 0
+  const body =
+    '₺' +
+    Math.abs(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (neg) return '-' + body
+  return opts.sign ? '+' + body : body
+}
+
+/** Lot count — strips float noise (e.g. 56.330807992000004) and groups. */
+export function lot(n: number): string {
+  if (nullish(n)) return DASH
+  return Number(n.toFixed(6)).toLocaleString('en-US', { maximumFractionDigits: 6 })
+}
+
 export function pct(n: number, digits = 1): string {
   if (nullish(n)) return DASH
   return (n * 100).toFixed(digits) + '%'

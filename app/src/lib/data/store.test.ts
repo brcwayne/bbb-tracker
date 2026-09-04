@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { get } from 'svelte/store'
-import { createAppStore, load } from './store'
+import { createAppStore, load, deriveAll } from './store'
 import { NeedsAuthError } from './drive'
 import { fixture } from '../../fixtures/dataset'
 import type { DataSource } from './source'
@@ -32,5 +32,23 @@ describe('app store', () => {
     const v = get(s)
     expect(v.status).toBe('error')
     expect(v.errorKind).toBe('auth')
+  })
+})
+
+describe('deriveAll — period range', () => {
+  it('all-time keeps every snapshot and closed trade', () => {
+    const d = deriveAll(fixture)
+    expect(d.snapshots).toHaveLength(fixture.snapshots.length)
+    expect(d.closedInRange.map((c) => c.kod).sort()).toEqual(['ASTOR', 'XAU'])
+  })
+
+  it('a 2023+ window drops the older snapshot and the 2021 ASTOR exit', () => {
+    const d = deriveAll(fixture, { from: '2023-01-01', to: '9999-12-31' })
+    expect(d.snapshots).toHaveLength(1)
+    expect(d.snapshots[0].tarih).toBe('2024-01-31')
+    expect(d.closedInRange.map((c) => c.kod)).toEqual(['XAU'])
+    expect(d.winLoss.wins).toBe(1)
+    // open positions + realized total stay all-time
+    expect(d.positions.realizedTotalUsd).toBeCloseTo(475, 6)
   })
 })

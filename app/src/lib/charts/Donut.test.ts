@@ -9,6 +9,18 @@ describe('Donut', () => {
     expect(container.querySelector('[data-slice="BIST"]')).toBeTruthy()
   })
 
+  it('shows the total in the centre at rest', () => {
+    const { getByText } = render(Donut, {
+      props: {
+        slices: [{ label: 'BIST', value: 3 }, { label: 'ALTIN', value: 1 }],
+        fmt: (v: number) => `$${v}`,
+        totalLabel: 'Toplam',
+      },
+    })
+    expect(getByText('Toplam')).toBeInTheDocument()
+    expect(getByText('$4')).toBeInTheDocument() // 3 + 1
+  })
+
   it('hovering a slice reveals its label + formatted value', async () => {
     const { container, getByText, queryByText } = render(Donut, {
       props: { slices: [{ label: 'BIST', value: 3 }, { label: 'ALTIN', value: 1 }], fmt: (v: number) => `$${v}` },

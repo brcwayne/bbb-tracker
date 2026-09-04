@@ -23,6 +23,8 @@
   const sx = $derived(scaleLinear().domain([Math.min(...xs), Math.max(...xs)]).range([pad, width - pad]))
   const sy = $derived(scaleLinear().domain([Math.min(...ys, 0), Math.max(...ys)]).range([height - pad, pad]))
   const pts = $derived(series.map((d) => [sx(d.x), sy(d.y)] as [number, number]))
+  // Thin horizontal reference lines at nice round values.
+  const grid = $derived(series.length ? sy.ticks(4).map((v) => ({ v, y: sy(v) })) : [])
 
   let hoverI = $state<number | null>(null)
 
@@ -56,6 +58,18 @@
   onmouseleave={() => (hoverI = null)}
 >
   <rect x="0" y="0" {width} {height} fill="transparent" />
+  {#each grid as g}
+    <line
+      x1={pad}
+      x2={width - pad}
+      y1={g.y}
+      y2={g.y}
+      stroke="var(--hairline)"
+      stroke-width="1"
+      stroke-dasharray="1 3"
+    />
+    <text x={pad} y={g.y - 3} style="font-size:8px; fill:var(--ink-soft);">{fmtY(g.v)}</text>
+  {/each}
   <path class="area" d={areaPath(pts, height - pad)} fill="var(--gain)" fill-opacity="0.08" />
   <path
     class="line"

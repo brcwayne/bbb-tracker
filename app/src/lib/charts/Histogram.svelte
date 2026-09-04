@@ -6,7 +6,7 @@
     height = 200,
     pad = 24,
   }: {
-    buckets?: { label: string; count: number }[]
+    buckets?: { label: string; count: number; items?: string[] }[]
     width?: number
     height?: number
     pad?: number
@@ -54,17 +54,26 @@
   {/each}
   {#if hoverI != null}
     {@const b = buckets[hoverI]}
-    {@const cx = Math.min(Math.max((band(b.label) ?? 0) + band.bandwidth() / 2, 52), width - 52)}
-    <g transform={`translate(${cx}, ${pad + 2})`} style="pointer-events:none;">
-      <rect x="-50" y="0" width="100" height="28" rx="3" fill="var(--surface)" stroke="var(--hairline)" />
-      <rect x="-50" y="0" width="100" height="2" fill="var(--gold)" />
+    {@const rows = b.items ?? []}
+    {@const boxH = 30 + rows.length * 12}
+    {@const cx = Math.min(Math.max((band(b.label) ?? 0) + band.bandwidth() / 2, 72), width - 72)}
+    <g transform={`translate(${cx}, ${pad})`} style="pointer-events:none;">
+      <rect x="-68" y="0" width="136" height={boxH} rx="3" fill="var(--surface)" stroke="var(--hairline)" />
+      <rect x="-68" y="0" width="136" height="2" fill="var(--gold)" />
       <text x="0" y="12" text-anchor="middle" style="font-size:9px; fill:var(--ink-soft);">{b.label}</text>
       <text
         x="0"
-        y="23"
+        y="24"
         text-anchor="middle"
         style="font-size:11px; fill:var(--ink); font-variant-numeric:tabular-nums;">{b.count} işlem</text
       >
+      {#each rows as row, ri}
+        <text
+          x="-60"
+          y={38 + ri * 12}
+          style="font-size:9px; fill:var(--ink-soft); font-variant-numeric:tabular-nums;">{row}</text
+        >
+      {/each}
     </g>
   {/if}
 </svg>

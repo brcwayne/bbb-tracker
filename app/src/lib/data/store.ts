@@ -4,9 +4,10 @@ import type { DataSource } from './source'
 import { describeSource } from './source'
 import { LocalFileSource } from './local'
 import { DriveSource, NeedsAuthError } from './drive'
+import { initRate } from '../settings.svelte'
 import {
   derivePositions, allocationByClass, allocationByPortfolio, gainBuckets,
-  periodPerformance, topMovers, winLoss, positionStats,
+  periodPerformance, topMovers, winLoss, positionStats, type ClosedPosition,
 } from './derive'
 
 export type DerivedBundle = ReturnType<typeof deriveAll>
@@ -20,17 +21,29 @@ export interface AppState {
   sourceText?: string
 }
 
-function deriveAll(ds: Dataset) {
+/**
+ * Everything the pages render. `range` (inclusive ISO dates) scopes the
+ * time-series and the closed trades; open positions and their allocation are
+ * always "now". Called all-time from `load()`, then re-run reactively by
+ * App.svelte when the global period changes.
+ */
+export function deriveAll(ds: Dataset, range?: { from: string; to: string }) {
+  const r = range ?? { from: '0000-01-01', to: '9999-12-31' }
+  const inR = (iso: string) => iso >= r.from && iso <= r.to
   const positions = derivePositions(ds.transactions)
+  const closedInRange: ClosedPosition[] = positions.closed.filter((c) => inR(c.sonSatisTarih))
+  const snaps = ds.snapshots.filter((s) => inR(s.tarih))
   return {
     positions,
+    closedInRange,
+    snapshots: snaps,
     byClass: allocationByClass(positions.open, ds.instruments),
     byPortfolio: allocationByPortfolio(positions.open, ds.transactions),
-    buckets: gainBuckets(positions.closed),
+    buckets: gainBuckets(closedInRange),
     periods: periodPerformance(ds.snapshots),
-    movers: topMovers(positions.closed),
-    winLoss: winLoss(positions.closed),
-    stats: positionStats(positions.closed),
+    movers: topMovers(closedInRange),
+    winLoss: winLoss(closedInRange),
+    stats: positionStats(closedInRange),
   }
 }
 
@@ -42,6 +55,7 @@ export async function load(store: Writable<AppState>, source: DataSource): Promi
   store.set({ status: 'loading' })
   try {
     const dataset = await source.load()
+    initRate(dataset)
     store.set({
       status: 'ready',
       dataset,

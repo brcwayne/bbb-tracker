@@ -4,6 +4,7 @@ export interface OpenPosition { kod: string; lot: number; ortMaliyetUsd: number;
 export interface ClosedPosition {
   kod: string; alisLot: number; alisTutarUsd: number
   satisLot: number; satisTutarUsd: number; satisMaliyetUsd: number; gerceklesmisKzUsd: number
+  ilkAlisTarih: string; sonSatisTarih: string
 }
 export interface Positions {
   open: OpenPosition[]; closed: ClosedPosition[]; realizedTotalUsd: number; errors: string[]
@@ -22,7 +23,12 @@ export function derivePositions(txns: Transaction[]): Positions {
 
   const cl = (kod: string) =>
     closed.get(kod) ??
-    closed.set(kod, { kod, alisLot: 0, alisTutarUsd: 0, satisLot: 0, satisTutarUsd: 0, satisMaliyetUsd: 0, gerceklesmisKzUsd: 0 }).get(kod)!
+    closed
+      .set(kod, {
+        kod, alisLot: 0, alisTutarUsd: 0, satisLot: 0, satisTutarUsd: 0,
+        satisMaliyetUsd: 0, gerceklesmisKzUsd: 0, ilkAlisTarih: '', sonSatisTarih: '',
+      })
+      .get(kod)!
 
   for (const x of ordered) {
     const pos = open.get(x.enstruman) ?? { kod: x.enstruman, lot: 0, ortMaliyetUsd: 0, toplamMaliyetUsd: 0 }
@@ -35,6 +41,7 @@ export function derivePositions(txns: Transaction[]): Positions {
       const c = cl(x.enstruman)
       c.alisLot += x.lot
       c.alisTutarUsd += x.net_usd
+      if (!c.ilkAlisTarih) c.ilkAlisTarih = x.tarih
     } else {
       let sell = x.lot
       if (sell > pos.lot + EPS) {
@@ -52,6 +59,7 @@ export function derivePositions(txns: Transaction[]): Positions {
       c.satisTutarUsd += x.fiyat_usd * sell - x.komisyon_usd
       c.satisMaliyetUsd += ort * sell
       c.gerceklesmisKzUsd += kz
+      c.sonSatisTarih = x.tarih
       if (pos.lot <= EPS) open.delete(x.enstruman)
     }
   }
@@ -100,6 +108,7 @@ export function gainBuckets(closed: ClosedPosition[]) {
       hi,
       label: lo === -Infinity ? '<-22%' : hi === Infinity ? '>20%' : `${(lo * 100) | 0}%–${(hi * 100) | 0}%`,
       count: 0,
+      items: [] as { kod: string; r: number; tarih: string }[],
     }
   })
   for (const c of closed) {
@@ -107,6 +116,7 @@ export function gainBuckets(closed: ClosedPosition[]) {
     const r = c.gerceklesmisKzUsd / c.satisMaliyetUsd
     const b = buckets.find((b) => r > b.lo && r <= b.hi) ?? buckets.at(-1)!
     b.count++
+    b.items.push({ kod: c.kod, r, tarih: c.sonSatisTarih })
   }
   return buckets
 }

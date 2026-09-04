@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Dataset, Instrument, Transaction } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
-  import { usd, pct, dateShort, DASH } from '../lib/format'
+  import { pct, lot, dateShort, DASH } from '../lib/format'
+  import { money } from '../lib/settings.svelte'
   import KpiBand from '../lib/ui/KpiBand.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
@@ -88,8 +89,8 @@
         { label: 'Kazanma Oranı', value: pct(s.kazanmaOrani) },
         { label: 'Ort. Kazanç %', value: pct(s.ortKazancPct) },
         { label: 'Ort. Kayıp %', value: pct(s.ortKayipPct) },
-        { label: 'En Büyük Kazanç', value: usd(s.enBuyukKazanc) },
-        { label: 'En Büyük Kayıp', value: usd(s.enBuyukKayip) },
+        { label: 'En Büyük Kazanç', value: money(s.enBuyukKazanc) },
+        { label: 'En Büyük Kayıp', value: money(s.enBuyukKayip) },
         {
           label: 'Risk/Ödül',
           value: s.riskOdul == null ? DASH : s.riskOdul.toFixed(2),
@@ -103,7 +104,7 @@
     }
   }
 
-  const num = (v: number | null) => usd(v as number)
+  const num = (v: number | null) => money(v as number)
 
   type OpenRow = ReturnType<typeof buildView>['openRows'][number]
   function applyFilters(
@@ -124,7 +125,7 @@
     { key: 'kod', label: 'Hisse', sortable: true },
     { key: 'sinif', label: 'Sınıf', sortable: true },
     { key: 'portfoy', label: 'Portföy', sortable: true },
-    { key: 'lot', label: 'Lot', align: 'right' as const, sortable: true },
+    { key: 'lot', label: 'Lot', align: 'right' as const, sortable: true, fmt: (v: number) => lot(v) },
     {
       key: 'ortMaliyetUsd',
       label: 'Ort. Maliyet',
@@ -174,7 +175,7 @@
       label: 'Gerçekleşmiş K/Z',
       align: 'right' as const,
       sortable: true,
-      fmt: (v: number) => usd(v, { sign: true }),
+      fmt: (v: number) => money(v, { sign: true }),
     },
     {
       key: 'pctVal',
@@ -199,8 +200,8 @@
   <div class="rowdetail">
     <div class="rd-sum">
       <span>{txns.length} işlem</span>
-      <span>Alım {alLot} lot · {usd(alUsd)}</span>
-      <span>Satım {satLot} lot · {usd(satUsd)}</span>
+      <span>Alım {lot(alLot)} lot · {money(alUsd)}</span>
+      <span>Satım {lot(satLot)} lot · {money(satUsd)}</span>
     </div>
     {#if txns.length}
       <table class="subtable">
@@ -216,10 +217,10 @@
             <tr>
               <td>{dateShort(t.tarih)}</td>
               <td class="yon" class:al={t.yon === 'AL'} class:sat={t.yon === 'SAT'}>{t.yon}</td>
-              <td class="r num">{t.lot}</td>
-              <td class="r num">{t.fiyat_usd.toFixed(4)}</td>
-              <td class="r num">{usd(t.komisyon_usd)}</td>
-              <td class="r num">{usd(t.net_usd)}</td>
+              <td class="r num">{lot(t.lot)}</td>
+              <td class="r num">{money(t.fiyat_usd)}</td>
+              <td class="r num">{money(t.komisyon_usd)}</td>
+              <td class="r num">{money(t.net_usd)}</td>
               <td>{t.hesap}</td>
               <td>{t.portfoy}</td>
               <td class="note">{t.not || DASH}</td>
@@ -306,8 +307,9 @@
 
 <style>
   .pozisyonlar {
-    padding: 1.25rem;
-    max-width: 960px;
+    padding: 1.25rem 1.25rem 2rem;
+    max-width: 900px;
+    margin: 0 auto;
   }
   .filters {
     display: flex;
