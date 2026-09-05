@@ -88,3 +88,46 @@ describe('VarlikTransferiFormu', () => {
     expect(record?.kaynak).toBe('manual')
   })
 })
+
+describe('VarlikTransferiFormu edit mode', () => {
+  it('pre-fills fields from editing and updates the record on confirm', async () => {
+    const editingTransfer = {
+      id: 'at_manual', tarih: '2026-01-08', enstruman: 'THYAO', lot: 5,
+      kaynakHesap: 'GARAN', hedefHesap: 'MIDAS', kaynakPortfoy: 'ENIS', hedefPortfoy: null,
+      aciklama: 'eski açıklama', kaynak: 'manual',
+    }
+    const ds = { ...fixture, assetTransfers: [editingTransfer] }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(store)
+    const onSaved = vi.fn()
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+    const { getByLabelText, getByText } = render(VarlikTransferiFormu, {
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved, editing: editingTransfer },
+    })
+    expect((getByLabelText('Açıklama') as HTMLInputElement).value).toBe('eski açıklama')
+    await fireEvent.input(getByLabelText('Açıklama'), { target: { value: 'yeni açıklama' } })
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByText('Onayla ve Güncelle'))
+    expect(onSaved).toHaveBeenCalled()
+    expect(get(store).dataset?.assetTransfers.find((a) => a.id === 'at_manual')?.aciklama).toBe('yeni açıklama')
+  })
+
+  it('rejects a future date', async () => {
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    const state = get(store)
+    const source = { id: 'local' as const, load: () => Promise.resolve(fixture) }
+    const { getByLabelText, getByText } = render(VarlikTransferiFormu, {
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved: vi.fn() },
+    })
+    await fireEvent.change(getByLabelText('Enstrüman'), { target: { value: 'THYAO' } })
+    await fireEvent.change(getByLabelText('Kaynak Hesap'), { target: { value: 'GARAN' } })
+    await fireEvent.change(getByLabelText('Hedef Hesap'), { target: { value: 'MIDAS' } })
+    await fireEvent.input(getByLabelText('Lot'), { target: { value: '5' } })
+    const future = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    await fireEvent.input(getByLabelText('Tarih'), { target: { value: future } })
+    await fireEvent.click(getByText('İncele'))
+    expect(getByText('Tarih gelecekte olamaz.')).toBeInTheDocument()
+  })
+})

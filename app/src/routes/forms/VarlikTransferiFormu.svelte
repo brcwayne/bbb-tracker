@@ -3,7 +3,7 @@
   import type { Dataset, AssetTransfer } from '../../lib/data/types'
   import type { DerivedBundle, AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord } from '../../lib/data/store'
+  import { appendRecord, updateRecord } from '../../lib/data/store'
 
   let {
     dataset,
@@ -11,21 +11,28 @@
     source,
     store,
     onSaved,
+    editing,
   }: {
     dataset: Dataset
     view: DerivedBundle
     source: DataSource
     store: Writable<AppState>
     onSaved: () => void
+    editing?: AssetTransfer
   } = $props()
 
-  let enstruman = $state('')
-  let kaynakHesap = $state('')
-  let hedefHesap = $state('')
-  let kaynakPortfoy = $state('')
-  let hedefPortfoy = $state('')
-  let lot = $state('')
-  let aciklama = $state('')
+  function todayIso() {
+    return new Date().toISOString().slice(0, 10)
+  }
+
+  let enstruman = $state(editing?.enstruman ?? '')
+  let kaynakHesap = $state(editing?.kaynakHesap ?? '')
+  let hedefHesap = $state(editing?.hedefHesap ?? '')
+  let kaynakPortfoy = $state(editing?.kaynakPortfoy ?? '')
+  let hedefPortfoy = $state(editing?.hedefPortfoy ?? '')
+  let lot = $state(editing ? String(editing.lot) : '')
+  let aciklama = $state(editing?.aciklama ?? '')
+  let tarih = $state(editing?.tarih ?? todayIso())
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
   let saving = $state(false)
@@ -34,6 +41,10 @@
     error = null
     if (!enstruman || !kaynakHesap || !hedefHesap || !lot) {
       error = 'Tüm alanları doldurun.'
+      return
+    }
+    if (tarih > todayIso()) {
+      error = 'Tarih gelecekte olamaz.'
       return
     }
     const openLot = view.positions.open.find((p) => p.kod === enstruman)?.lot ?? 0
@@ -52,11 +63,9 @@
     saving = true
     error = null
     try {
-      const rand = crypto.getRandomValues(new Uint8Array(8))
-      const id = 'at_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
-      const record: AssetTransfer = {
-        id,
-        tarih: new Date().toISOString().slice(0, 10),
+      const base: AssetTransfer = {
+        id: editing?.id ?? '',
+        tarih,
         enstruman,
         lot: Number(lot),
         kaynakHesap,
@@ -66,10 +75,19 @@
         aciklama,
         kaynak: 'manual',
       }
-      await appendRecord(store, source, 'assetTransfers', record)
+      if (editing) {
+        await updateRecord<AssetTransfer>(store, source, 'assetTransfers', (a) => a.id === editing!.id, { ...base, id: editing.id })
+      } else {
+        const rand = crypto.getRandomValues(new Uint8Array(8))
+        const id = 'at_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
+        await appendRecord(store, source, 'assetTransfers', { ...base, id })
+      }
       onSaved()
-      enstruman = kaynakHesap = hedefHesap = kaynakPortfoy = hedefPortfoy = lot = aciklama = ''
-      step = 'form'
+      if (!editing) {
+        enstruman = kaynakHesap = hedefHesap = kaynakPortfoy = hedefPortfoy = lot = aciklama = ''
+        tarih = todayIso()
+        step = 'form'
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -119,6 +137,10 @@
       Lot
       <input type="number" bind:value={lot} aria-label="Lot" min="0" step="any" />
     </label>
+    <label>
+      Tarih
+      <input type="date" bind:value={tarih} aria-label="Tarih" max={todayIso()} />
+    </label>
     <label class="wide">
       Açıklama
       <input type="text" bind:value={aciklama} aria-label="Açıklama" />
@@ -138,7 +160,9 @@
   </div>
   {#if error}<p class="error">{error}</p>{/if}
   <button onclick={() => (step = 'form')} disabled={saving}>Geri</button>
-  <button onclick={confirmSave} disabled={saving}>{saving ? 'Kaydediliyor…' : 'Onayla ve Kaydet'}</button>
+  <button onclick={confirmSave} disabled={saving}>
+    {saving ? 'Kaydediliyor…' : editing ? 'Onayla ve Güncelle' : 'Onayla ve Kaydet'}
+  </button>
 {/if}
 
 <style>
