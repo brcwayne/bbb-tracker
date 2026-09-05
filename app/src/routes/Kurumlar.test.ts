@@ -21,4 +21,10 @@ describe('Kurumlar', () => {
     expect(container.textContent).toContain('ASTOR')
     expect(container.textContent).toContain('Kurum ekleme')
   })
+
+  it('shows a cash balance for each broker', async () => {
+    const d = await v()
+    const { container } = render(Kurumlar, { props: { dataset: d.dataset, view: d.derived } })
+    expect(container.textContent).toContain('Nakit')
+  })
 })

@@ -29,6 +29,13 @@
     { key: 'lot', label: 'Lot', align: 'right' as const, fmt: (v: number) => lot(v) },
     { key: 'tutarUsd', label: 'Tutar', align: 'right' as const, sortable: true, fmt: (v: number) => money(v) },
   ]
+  const transferCols = [
+    { key: 'tarih', label: 'Tarih', sortable: true, fmt: (v: string) => dateShort(v) },
+    { key: 'kaynakHesap', label: 'Kaynak' },
+    { key: 'hedefHesap', label: 'Hedef' },
+    { key: 'tutarUsd', label: 'Tutar', align: 'right' as const, sortable: true, fmt: (v: number) => money(v) },
+    { key: 'aciklama', label: 'Açıklama' },
+  ]
 </script>
 
 {#if view}
@@ -39,6 +46,8 @@
     <DataTable columns={cols} rows={view.transfers.rows} initialSort={{ key: 'tarih', dir: 'desc' }} />
     <SectionHeader title="Para piyasası hareketleri" note={`${view.mmMoves.length} işlem`} />
     <DataTable columns={mmCols} rows={view.mmMoves} initialSort={{ key: 'tarih', dir: 'desc' }} />
+    <SectionHeader title="Transferler" note={`${view.moneyTransfers.length} kayıt`} />
+    <DataTable columns={transferCols} rows={view.moneyTransfers} initialSort={{ key: 'tarih', dir: 'desc' }} />
     <p class="muted">
       Para piyasası fonu alım/satımları bilgi amaçlı listelenir; yatan/çekilen toplamına dahil değildir.
     </p>

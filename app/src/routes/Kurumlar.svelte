@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Dataset } from '../lib/data/types'
+  import type { Dataset, Broker } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
   import { holdingsByBroker, type HoldingGroup } from '../lib/data/breakdowns'
   import { prices } from '../lib/prices.svelte'
@@ -11,6 +11,10 @@
 
   let { dataset, view }: { dataset?: Dataset; view?: DerivedBundle } = $props()
 
+  function findBrokerKod(ad: string, brokers: Broker[]): string {
+    return brokers.find((b) => b.ad === ad)?.kod ?? ad
+  }
+
   const groups = $derived.by<HoldingGroup[]>(() => {
     if (!dataset || !view) return []
     void prices.status
@@ -19,6 +23,7 @@
       dataset.transactions,
       dataset.instruments,
       dataset.brokers,
+      dataset.assetTransfers,
       { bySymbol: prices.bySymbol, usdPerGram: prices.usdPerGram },
     )
   })
@@ -58,7 +63,10 @@
     <DataTable columns={summaryCols} rows={summaryRows} initialSort={{ key: 'maliyet', dir: 'desc' }} />
     {#each groups as g}
       <div class="panel">
-        <SectionHeader title={g.key} note={g.sahip} />
+        <SectionHeader
+          title={g.key}
+          note={`${g.sahip} · Nakit: ${money(view.cashByHesap[findBrokerKod(g.key, dataset.brokers)] ?? 0)}`}
+        />
         {#if g.rows.length}
           <DataTable columns={cols} rows={g.rows} initialSort={{ key: 'toplamMaliyetUsd', dir: 'desc' }} />
         {:else}

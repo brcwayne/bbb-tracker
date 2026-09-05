@@ -10,7 +10,8 @@ import {
   periodPerformance, topMovers, winLoss, positionStats, type ClosedPosition,
 } from './derive'
 import { dashboardTotals, thisMonthPerf } from './dashboard'
-import { bankTransfers, moneyMarketMoves, dividends } from './cashmoves'
+import { bankTransfers, moneyMarketMoves, dividends, transfers as moneyTransfersOf } from './cashmoves'
+import { cashBalanceByHesap } from './cashBalances'
 
 export type DerivedBundle = ReturnType<typeof deriveAll>
 export interface AppState {
@@ -51,6 +52,8 @@ export function deriveAll(ds: Dataset, range?: { from: string; to: string }) {
     transfers: bankTransfers(ds.cashflows),
     mmMoves: moneyMarketMoves(ds.transactions, ds.instruments),
     divs: dividends(ds.cashflows, ds.transactions),
+    cashByHesap: cashBalanceByHesap(ds),
+    moneyTransfers: moneyTransfersOf(ds.cashflows),
   }
 }
 

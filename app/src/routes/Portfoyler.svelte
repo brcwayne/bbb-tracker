@@ -15,7 +15,7 @@
   const groups = $derived.by<HoldingGroup[]>(() => {
     if (!dataset || !view) return []
     void prices.status
-    return holdingsByPortfolio(view.positions.open, dataset.transactions, dataset.instruments, {
+    return holdingsByPortfolio(view.positions.open, dataset.transactions, dataset.instruments, dataset.assetTransfers, {
       bySymbol: prices.bySymbol,
       usdPerGram: prices.usdPerGram,
     })

@@ -62,4 +62,10 @@ describe('deriveAll — P1.6 blocks', () => {
     expect(d.transfers.totalIn).toBeCloseTo(5000, 6)
     expect(d.divs.total).toBeCloseTo(4, 6)
   })
+
+  it('carries cashByHesap and moneyTransfers', () => {
+    const d = deriveAll(fixture)
+    expect(d.cashByHesap).toBeDefined()
+    expect(d.moneyTransfers).toEqual([])
+  })
 })

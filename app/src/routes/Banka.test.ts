@@ -19,4 +19,10 @@ describe('Banka', () => {
     expect(container.textContent).toContain('$5,000.00') // fixture single YATIRMA
     expect(container.textContent).toContain('Para piyasası')
   })
+
+  it('shows the Transferler section', async () => {
+    const d = await v()
+    const { getByText } = render(Banka, { props: { view: d.derived } })
+    expect(getByText(/Transferler/i)).toBeInTheDocument()
+  })
 })
