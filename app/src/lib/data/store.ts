@@ -1,9 +1,9 @@
-import { writable, type Writable } from 'svelte/store'
+import { writable, type Writable, get } from 'svelte/store'
 import type { Dataset } from './types'
 import type { DataSource } from './source'
 import { describeSource } from './source'
 import { LocalFileSource } from './local'
-import { DriveSource, NeedsAuthError } from './drive'
+import { DriveSource, NeedsAuthError, ConflictError } from './drive'
 import { initRate } from '../settings.svelte'
 import {
   derivePositions, allocationByClass, allocationByPortfolio, gainBuckets,
@@ -97,4 +97,37 @@ export function pickSource(): DataSource {
     }
   } catch {}
   return new LocalFileSource()
+}
+
+export async function appendRecord<T>(
+  store: Writable<AppState>,
+  source: DataSource,
+  file: 'transactions' | 'cashflows' | 'assetTransfers' | 'brokers',
+  record: T,
+): Promise<void> {
+  if (!source.save) throw new Error("Bu kaynakta kayıt eklenemez — sadece Google Drive'a yazılabilir.")
+  const state = get(store)
+  if (!state.dataset) throw new Error('Veri henüz yüklenmedi.')
+
+  const attempt = async (ds: Dataset): Promise<Dataset> => {
+    const updatedArray = [...(ds[file] as unknown as T[]), record]
+    await source.save!(file, updatedArray)
+    return { ...ds, [file]: updatedArray }
+  }
+
+  let newDataset: Dataset
+  try {
+    newDataset = await attempt(state.dataset)
+  } catch (e) {
+    if (!(e instanceof ConflictError)) throw e
+    const fresh = await source.load()
+    newDataset = await attempt(fresh)
+  }
+
+  store.set({
+    status: 'ready',
+    dataset: newDataset,
+    derived: deriveAll(newDataset),
+    sourceText: state.sourceText,
+  })
 }

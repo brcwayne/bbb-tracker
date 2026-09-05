@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { get } from 'svelte/store'
-import { createAppStore, load, deriveAll } from './store'
-import { NeedsAuthError } from './drive'
+import { createAppStore, load, deriveAll, appendRecord } from './store'
+import { NeedsAuthError, ConflictError } from './drive'
 import { fixture } from '../../fixtures/dataset'
 import type { DataSource } from './source'
 
@@ -67,5 +67,63 @@ describe('deriveAll — P1.6 blocks', () => {
     const d = deriveAll(fixture)
     expect(d.cashByHesap).toBeDefined()
     expect(d.moneyTransfers).toEqual([])
+  })
+})
+
+describe('appendRecord', () => {
+  it('throws when the source cannot save (e.g. local)', async () => {
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    const local = { id: 'local' as const, load: () => Promise.resolve(fixture) }
+    await expect(appendRecord(store, local, 'transactions', {} as any)).rejects.toThrow(/sadece Google Drive/)
+  })
+
+  it('appends the record, saves, and updates the store on success', async () => {
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let saved: unknown
+    const drive = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (_name: string, data: unknown) => {
+        saved = data
+      },
+    }
+    const newTx = { id: 't_new', tarih: '2026-05-01' } as any
+    await appendRecord(store, drive, 'transactions', newTx)
+    expect((saved as any[]).some((t) => t.id === 't_new')).toBe(true)
+    const state = get(store)
+    expect(state.dataset?.transactions.some((t) => t.id === 't_new')).toBe(true)
+  })
+
+  it('retries once on ConflictError by reloading fresh data', async () => {
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let saveCalls = 0
+    const drive = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async () => {
+        saveCalls++
+        if (saveCalls === 1) throw new ConflictError('transactions')
+      },
+    }
+    await appendRecord(store, drive, 'transactions', { id: 't_new2' } as any)
+    expect(saveCalls).toBe(2)
+  })
+
+  it('surfaces an error after a second ConflictError', async () => {
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    const drive = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async () => {
+        throw new ConflictError('transactions')
+      },
+    }
+    await expect(appendRecord(store, drive, 'transactions', { id: 't_new3' } as any)).rejects.toBeInstanceOf(
+      ConflictError,
+    )
   })
 })
