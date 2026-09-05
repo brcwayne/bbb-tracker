@@ -3,7 +3,7 @@
   import type { Dataset, Cashflow } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord } from '../../lib/data/store'
+  import { appendRecord, updateRecord } from '../../lib/data/store'
   import { money } from '../../lib/settings.svelte'
 
   let {
@@ -11,19 +11,26 @@
     source,
     store,
     onSaved,
+    editing,
   }: {
     dataset: Dataset
     source: DataSource
     store: Writable<AppState>
     onSaved: () => void
+    editing?: Cashflow
   } = $props()
 
-  let tur = $state<'YATIRMA' | 'CEKME' | 'TEMETTU' | 'TRANSFER'>('YATIRMA')
-  let hesap = $state('')
-  let hedefHesap = $state('')
-  let enstruman = $state('')
-  let tutarUsd = $state('')
-  let aciklama = $state('')
+  function todayIso() {
+    return new Date().toISOString().slice(0, 10)
+  }
+
+  let tur = $state<'YATIRMA' | 'CEKME' | 'TEMETTU' | 'TRANSFER'>(editing?.tur ?? 'YATIRMA')
+  let hesap = $state(editing?.hesap ?? '')
+  let hedefHesap = $state(editing?.hedefHesap ?? '')
+  let enstruman = $state(editing?.enstruman ?? '')
+  let tutarUsd = $state(editing ? String(editing.tutar_usd) : '')
+  let aciklama = $state(editing?.aciklama ?? '')
+  let tarih = $state(editing?.tarih ?? todayIso())
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
   let saving = $state(false)
@@ -32,6 +39,10 @@
     error = null
     if (!hesap || !tutarUsd) {
       error = 'Tüm alanları doldurun.'
+      return
+    }
+    if (tarih > todayIso()) {
+      error = 'Tarih gelecekte olamaz.'
       return
     }
     if (tur === 'TEMETTU' && !enstruman) {
@@ -55,11 +66,9 @@
     saving = true
     error = null
     try {
-      const rand = crypto.getRandomValues(new Uint8Array(8))
-      const id = 'c_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
-      const record: Cashflow = {
-        id,
-        tarih: new Date().toISOString().slice(0, 10),
+      const base: Cashflow = {
+        id: editing?.id ?? '',
+        tarih,
         hesap,
         portfoy: null,
         tur,
@@ -71,11 +80,20 @@
         kaynak: 'manual',
         ...(tur === 'TRANSFER' ? { hedefHesap } : {}),
       }
-      await appendRecord(store, source, 'cashflows', record)
+      if (editing) {
+        await updateRecord<Cashflow>(store, source, 'cashflows', (c) => c.id === editing!.id, { ...base, id: editing.id })
+      } else {
+        const rand = crypto.getRandomValues(new Uint8Array(8))
+        const id = 'c_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
+        await appendRecord(store, source, 'cashflows', { ...base, id })
+      }
       onSaved()
-      tur = 'YATIRMA'
-      hesap = hedefHesap = enstruman = tutarUsd = aciklama = ''
-      step = 'form'
+      if (!editing) {
+        tur = 'YATIRMA'
+        hesap = hedefHesap = enstruman = tutarUsd = aciklama = ''
+        tarih = todayIso()
+        step = 'form'
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -128,6 +146,10 @@
       Açıklama
       <input type="text" bind:value={aciklama} aria-label="Açıklama" />
     </label>
+    <label>
+      Tarih
+      <input type="date" bind:value={tarih} aria-label="Tarih" max={todayIso()} />
+    </label>
   </div>
   {#if error}<p class="error">{error}</p>{/if}
   <button onclick={review}>İncele</button>
@@ -139,7 +161,9 @@
   </div>
   {#if error}<p class="error">{error}</p>{/if}
   <button onclick={() => (step = 'form')} disabled={saving}>Geri</button>
-  <button onclick={confirmSave} disabled={saving}>{saving ? 'Kaydediliyor…' : 'Onayla ve Kaydet'}</button>
+  <button onclick={confirmSave} disabled={saving}>
+    {saving ? 'Kaydediliyor…' : editing ? 'Onayla ve Güncelle' : 'Onayla ve Kaydet'}
+  </button>
 {/if}
 
 <style>
