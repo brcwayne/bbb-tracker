@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, fireEvent } from '@testing-library/svelte'
+import { render, fireEvent, waitFor } from '@testing-library/svelte'
 import EkleKaydi from './EkleKaydi.svelte'
 import { fixture } from '../fixtures/dataset'
 import { createAppStore, load } from '../lib/data/store'
@@ -58,9 +58,67 @@ describe('EkleKaydi', () => {
     await fireEvent.input(getByLabelText('Sahip'), { target: { value: 'ENIS' } })
     await fireEvent.click(getByText('İncele'))
     await fireEvent.click(getByText('Onayla ve Kaydet'))
-    expect(getByText('Kayıt başarıyla eklendi.')).toBeInTheDocument()
+    await waitFor(() => expect(getByText('Kayıt başarıyla eklendi.')).toBeInTheDocument())
     // Picking a new record type clears the confirmation instead of leaving it stale.
     await fireEvent.click(getByText('İşlem (Al/Sat)'))
     expect(queryByText('Kayıt başarıyla eklendi.')).not.toBeInTheDocument()
+  })
+})
+
+describe('EkleKaydi manage lists', () => {
+  it('lists only manual transactions and hides migration rows', async () => {
+    const editingTxn = { ...fixture.transactions[0], id: 't_manual', kaynak: 'manual' }
+    const ds = { ...fixture, transactions: [...fixture.transactions, editingTxn] }
+    const { state, store } = await (async () => {
+      const s = createAppStore()
+      await load(s, { id: 'local', load: () => Promise.resolve(ds) })
+      return { state: get(s), store: s }
+    })()
+    const source = { id: 'local' as const, load: () => Promise.resolve(ds) }
+    const { getByText, getAllByText } = render(EkleKaydi, {
+      props: { dataset: state.dataset, view: state.derived, source, store },
+    })
+    await fireEvent.click(getByText('İşlemlerim'))
+    // Only the manual clone renders — the original migration row (t_a, same shape) does not.
+    expect(getAllByText(/AL ASTOR · 100 lot/)).toHaveLength(1)
+  })
+
+  it('calls deleteRecord after the two-step confirm', async () => {
+    const editingTxn = { ...fixture.transactions[0], id: 't_manual', kaynak: 'manual' }
+    const ds = { ...fixture, transactions: [...fixture.transactions, editingTxn] }
+    const s = createAppStore()
+    await load(s, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(s)
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+    const { getByText, queryByText, rerender } = render(EkleKaydi, {
+      props: { dataset: state.dataset, view: state.derived, source, store: s },
+    })
+    await fireEvent.click(getByText('İşlemlerim'))
+    await fireEvent.click(getByText('Sil'))
+    expect(getByText(/kalıcı olarak silinsin mi/)).toBeInTheDocument()
+    await fireEvent.click(getByText('Evet, sil'))
+    await waitFor(() => expect(getByText('Kayıt silindi.')).toBeInTheDocument())
+    expect(get(s).dataset?.transactions.some((t) => t.id === 't_manual')).toBe(false)
+    // The component only re-renders its manual-record rows when its `dataset` prop is
+    // refreshed (as App.svelte does reactively via `$store.dataset`) — mirror that here.
+    await rerender({ dataset: get(s).dataset, view: get(s).derived, source, store: s })
+    expect(queryByText(/AL ASTOR · 100 lot/)).not.toBeInTheDocument()
+  })
+
+  it('opens the İşlem form pre-filled when Düzenle is clicked', async () => {
+    const editingTxn = { ...fixture.transactions[0], id: 't_manual', kaynak: 'manual' }
+    const ds = { ...fixture, transactions: [...fixture.transactions, editingTxn] }
+    const s = createAppStore()
+    await load(s, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(s)
+    const source = { id: 'local' as const, load: () => Promise.resolve(ds) }
+    const { getByText, getByLabelText } = render(EkleKaydi, {
+      props: { dataset: state.dataset, view: state.derived, source, store: s },
+    })
+    await fireEvent.click(getByText('İşlemlerim'))
+    await fireEvent.click(getByText('Düzenle'))
+    expect((getByLabelText('Lot') as HTMLInputElement).value).toBe('100')
+    await fireEvent.click(getByText('İncele'))
+    expect(getByText('Onayla ve Güncelle')).toBeInTheDocument()
   })
 })
