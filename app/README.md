@@ -168,3 +168,11 @@ desteklenmez.
 Kurum bazlı nakit bakiyesi (Kurumlar sayfasındaki "Nakit" satırı), Excel'den gelen son
 bilinen bakiyeleri başlangıç noktası kabul edip bu andan sonraki her manuel hareketle
 güncellenir — geçmiş, hesap bazında ayrıştırılamayan veri olduğu için hesaba katılmaz.
+
+## P3.5 — düzenleme/silme + geçmişe dönük tarih
+
+Manuel olarak eklenmiş kayıtlar (Excel'den gelen migration verisi hariç) artık "Kayıtlar" sekmesinden düzenlenebilir veya silinebilir: İşlemlerim / Nakit Hareketlerim / Transferlerim / Kurumlarım listelerinden bir kayıt seçilip Düzenle veya Sil'e basılabilir. Silme kalıcıdır ve geri alınamaz — iki adımlı bir onay ister. Düzenleme, ilgili formu kaydın mevcut değerleriyle önceden doldurur; kaydın kimliği (işlem/nakit/transfer id'si, kurum kodu) değiştirilemez.
+
+Tüm 4 giriş formu artık bir tarih alanı içeriyor (varsayılan: bugün) — geçmişe dönük kayıt girmek mümkün, ancak gelecek bir tarih girilemez.
+
+Excel'den gelen (migration) kayıtlar bu ekrandan hiçbir zaman düzenlenemez veya silinemez — onlar için hâlâ doğrudan Drive dosyası düzenlemesi gerekir.
