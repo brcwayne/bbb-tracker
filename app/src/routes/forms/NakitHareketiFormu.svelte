@@ -4,6 +4,7 @@
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord } from '../../lib/data/store'
+  import { money } from '../../lib/settings.svelte'
 
   let {
     dataset,
@@ -132,7 +133,7 @@
   <button onclick={review}>İncele</button>
 {:else}
   <div class="summary">
-    <p><strong>{tur}</strong> — {hesap}{tur === 'TRANSFER' ? ` → ${hedefHesap}` : ''} · ${Number(tutarUsd).toFixed(2)}</p>
+    <p><strong>{tur}</strong> — {hesap}{tur === 'TRANSFER' ? ` → ${hedefHesap}` : ''} · {money(Number(tutarUsd))}</p>
     {#if tur === 'TEMETTU'}<p>{enstruman}</p>{/if}
     {#if aciklama}<p>{aciklama}</p>{/if}
   </div>

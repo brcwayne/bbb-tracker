@@ -4,6 +4,7 @@
   import type { DerivedBundle, AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord } from '../../lib/data/store'
+  import { money } from '../../lib/settings.svelte'
 
   let {
     dataset,
@@ -133,7 +134,7 @@
   <button onclick={review}>İncele</button>
 {:else}
   <div class="summary">
-    <p><strong>{yon}</strong> — {enstruman} · {lot} lot · {fiyatUsd} USD/lot · toplam ${netUsd.toFixed(2)}</p>
+    <p><strong>{yon}</strong> — {enstruman} · {lot} lot · {fiyatUsd} USD/lot · toplam {money(netUsd)}</p>
     <p>{hesap} / {portfoy}</p>
   </div>
   {#if error}<p class="error">{error}</p>{/if}
