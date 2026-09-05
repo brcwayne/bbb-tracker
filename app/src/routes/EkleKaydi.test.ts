@@ -4,6 +4,7 @@ import EkleKaydi from './EkleKaydi.svelte'
 import { fixture } from '../fixtures/dataset'
 import { createAppStore, load } from '../lib/data/store'
 import { get } from 'svelte/store'
+import type { Broker, Dataset } from '../lib/data/types'
 
 async function v() {
   const s = createAppStore()
@@ -120,5 +121,53 @@ describe('EkleKaydi manage lists', () => {
     expect((getByLabelText('Lot') as HTMLInputElement).value).toBe('100')
     await fireEvent.click(getByText('İncele'))
     expect(getByText('Onayla ve Güncelle')).toBeInTheDocument()
+  })
+
+  it('rejects deleting a transaction that would oversell a later SAT, and does not delete it', async () => {
+    // Minimal two-transaction dataset: editingTxn is a manual clone of t_a (AL 100 ASTOR),
+    // satTxn is the real t_c (SAT 50 ASTOR). Baseline (AL 100, SAT 50) has zero derivePositions
+    // errors. Deleting the AL entirely leaves SAT 50 with nothing to sell — a genuine oversell,
+    // so prospectiveErrors (1) > baselineErrors (0) and the delete must be blocked.
+    const editingTxn = { ...fixture.transactions.find((t) => t.id === 't_a')!, id: 't_manual', kaynak: 'manual' }
+    const satTxn = fixture.transactions.find((t) => t.id === 't_c')!
+    const ds = { ...fixture, transactions: [editingTxn, satTxn] }
+    const s = createAppStore()
+    await load(s, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(s)
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+    const { getByText } = render(EkleKaydi, {
+      props: { dataset: state.dataset, view: state.derived, source, store: s },
+    })
+    await fireEvent.click(getByText('İşlemlerim'))
+    await fireEvent.click(getByText('Sil'))
+    await fireEvent.click(getByText('Evet, sil'))
+    await waitFor(() => expect(getByText(/daha sonraki bir satış geçersiz hale gelir/i)).toBeInTheDocument())
+    expect(get(s).dataset?.transactions.some((t) => t.id === 't_manual')).toBe(true)
+  })
+})
+
+describe('EkleKaydi broker delete referential guard', () => {
+  it('blocks deleting a broker referenced by a transaction, and keeps the broker', async () => {
+    const manualBroker: Broker = { kod: 'YENIKURUM', ad: 'Yeni Kurum', tur: 'BROKER', sahip: 'Enis', aktif: true, kaynak: 'manual' }
+    const refTxn = { ...fixture.transactions[0], id: 't_ref', hesap: 'YENIKURUM', kaynak: 'manual' }
+    const ds: Dataset = {
+      ...fixture,
+      brokers: [...fixture.brokers, manualBroker],
+      transactions: [...fixture.transactions, refTxn],
+    }
+    const s = createAppStore()
+    await load(s, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(s)
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+    const { getByText } = render(EkleKaydi, {
+      props: { dataset: state.dataset, view: state.derived, source, store: s },
+    })
+    await fireEvent.click(getByText('Kurumlarım'))
+    await fireEvent.click(getByText('Sil'))
+    await fireEvent.click(getByText('Evet, sil'))
+    await waitFor(() =>
+      expect(getByText(/işlem, nakit hareketi veya transfer kayıtlarında kullanılıyor/i)).toBeInTheDocument(),
+    )
+    expect(get(s).dataset?.brokers.some((b) => b.kod === 'YENIKURUM')).toBe(true)
   })
 })

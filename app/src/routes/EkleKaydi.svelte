@@ -5,6 +5,7 @@
   import type { Writable } from 'svelte/store'
   import type { AppState } from '../lib/data/store'
   import { deleteRecord } from '../lib/data/store'
+  import { derivePositions } from '../lib/data/derive'
   import { money } from '../lib/settings.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
@@ -114,15 +115,35 @@
   }
 
   async function confirmDelete() {
-    if (!deleteTarget || !source || !store) return
+    if (!deleteTarget || !source || !store || !dataset) return
     deleting = true
     deleteError = null
     try {
       const { kind: k, key } = deleteTarget
-      if (k === 'islem') await deleteRecord<Transaction>(store, source, 'transactions', (t) => t.id === key)
-      else if (k === 'nakit') await deleteRecord<Cashflow>(store, source, 'cashflows', (c) => c.id === key)
+      if (k === 'islem') {
+        const prospective = dataset.transactions.filter((t) => t.id !== key)
+        const baselineErrors = derivePositions(dataset.transactions).errors.length
+        const prospectiveErrors = derivePositions(prospective).errors.length
+        if (prospectiveErrors > baselineErrors) {
+          deleteError = 'Bu kayıt silinirse daha sonraki bir satış geçersiz hale gelir.'
+          deleting = false
+          return
+        }
+        await deleteRecord<Transaction>(store, source, 'transactions', (t) => t.id === key)
+      } else if (k === 'nakit') await deleteRecord<Cashflow>(store, source, 'cashflows', (c) => c.id === key)
       else if (k === 'transfer') await deleteRecord<AssetTransfer>(store, source, 'assetTransfers', (a) => a.id === key)
-      else await deleteRecord<Broker>(store, source, 'brokers', (b) => b.kod === key)
+      else {
+        const referenced =
+          dataset.transactions.some((t) => t.hesap === key) ||
+          dataset.cashflows.some((c) => c.hesap === key || c.hedefHesap === key) ||
+          dataset.assetTransfers.some((a) => a.kaynakHesap === key || a.hedefHesap === key)
+        if (referenced) {
+          deleteError = 'Bu kurum işlem, nakit hareketi veya transfer kayıtlarında kullanılıyor — önce onları düzenleyin veya silin.'
+          deleting = false
+          return
+        }
+        await deleteRecord<Broker>(store, source, 'brokers', (b) => b.kod === key)
+      }
       deleteTarget = null
       successMessage = 'Kayıt silindi.'
     } catch (e) {

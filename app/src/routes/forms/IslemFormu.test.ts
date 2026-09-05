@@ -96,6 +96,26 @@ describe('IslemFormu edit mode', () => {
     expect(queryByText(/açık pozisyondan fazla/i)).toBeNull()
   })
 
+  it('rejects an AL edit that would oversell a later SAT', async () => {
+    // Minimal two-transaction dataset: editingTxn is a manual clone of t_a (AL 100 ASTOR),
+    // satTxn is the real t_c (SAT 50 ASTOR). Baseline (AL 100, SAT 50) has zero derivePositions
+    // errors. Editing the AL down to 10 lots means AL 10 vs SAT 50 — a genuine oversell that
+    // derivePositions records as an error, so prospectiveErrors (1) > baselineErrors (0).
+    const editingTxn = { ...fixture.transactions.find((t) => t.id === 't_a')!, id: 't_manual', kaynak: 'manual' }
+    const satTxn = fixture.transactions.find((t) => t.id === 't_c')!
+    const ds = { ...fixture, transactions: [editingTxn, satTxn] }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(store)
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+    const { getByLabelText, getByText } = render(IslemFormu, {
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved: vi.fn(), editing: editingTxn },
+    })
+    await fireEvent.input(getByLabelText('Lot'), { target: { value: '10' } })
+    await fireEvent.click(getByText('İncele'))
+    expect(getByText(/daha sonraki bir satışı geçersiz kılar/i)).toBeInTheDocument()
+  })
+
   it('rejects a future date', async () => {
     const store = createAppStore()
     await load(store, { id: 'local', load: () => Promise.resolve(fixture) })

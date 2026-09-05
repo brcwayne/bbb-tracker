@@ -24,7 +24,8 @@
   } = $props()
 
   function todayIso() {
-    return new Date().toISOString().slice(0, 10)
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
   let yon = $state<'AL' | 'SAT'>(editing?.yon ?? 'AL')
@@ -59,6 +60,28 @@
       const open = openPositions.find((p) => p.kod === enstruman)?.lot ?? 0
       if (lotNum > open + 1e-9) {
         error = `Bu enstrümanda açık pozisyondan fazla satamazsınız (açık: ${open}).`
+        return
+      }
+    }
+    if (editing) {
+      const draftPatch: Transaction = {
+        ...editing,
+        tarih,
+        hesap,
+        portfoy,
+        enstruman,
+        yon,
+        lot: lotNum,
+        fiyat_usd: Number(fiyatUsd),
+        brut_usd: netUsd,
+        net_usd: netUsd,
+        not: not_,
+      }
+      const prospective = dataset.transactions.map((t) => (t.id === editing!.id ? draftPatch : t))
+      const baselineErrors = derivePositions(dataset.transactions).errors.length
+      const prospectiveErrors = derivePositions(prospective).errors.length
+      if (prospectiveErrors > baselineErrors) {
+        error = 'Bu değişiklik daha sonraki bir satışı geçersiz kılar (yetersiz pozisyon oluşturur).'
         return
       }
     }
