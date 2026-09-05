@@ -4,6 +4,7 @@ import { dateShort } from '../format'
 export interface DataSource {
   readonly id: 'local' | 'drive'
   load(): Promise<Dataset>
+  save?(name: string, data: unknown): Promise<void>
 }
 
 /** The 8 dataset file basenames — shared by every DataSource adapter (DRY). */

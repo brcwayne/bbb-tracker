@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { DriveSource, NeedsAuthError } from './drive'
+import { DriveSource, NeedsAuthError, ConflictError } from './drive'
 import { fixture } from '../../fixtures/dataset'
 
 const FILE_MAP: Record<string, unknown> = {
@@ -69,5 +69,96 @@ describe('DriveSource', () => {
     ;(s as any).folderId = 'FOLDER'
     const ds = await s.load()
     expect(ds.assetTransfers).toEqual(SAMPLE_ASSET_TRANSFERS)
+  })
+})
+
+describe('DriveSource.save', () => {
+  // A fetch mock shared by the checksum-match and checksum-mismatch tests: `load()` populates
+  // the fileIds cache from a listing that carries an md5Checksum per file, then `save('meta', ...)`
+  // re-checks that checksum before PATCHing. `checksumOnRecheck` controls what the recheck sees.
+  function stubFetchWithChecksums(checksumOnRecheck: string) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, options?: { method?: string }) => {
+        const method = options?.method
+        if (url.includes('fields=files(id,name,md5Checksum)')) {
+          // load() file listing — every file carries a checksum.
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                files: Object.keys(FILE_MAP).map((n) => ({ id: n, name: `${n}.json`, md5Checksum: `${n}-sum` })),
+              }),
+          })
+        }
+        if (url.includes('alt=media')) {
+          const id = url.match(/files\/(\w+)/)![1]
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(FILE_MAP[id]) })
+        }
+        if (method === 'PATCH') {
+          // media-upload overwrite
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ md5Checksum: 'meta-sum-v2' }) })
+        }
+        if (url.includes('fields=md5Checksum')) {
+          // pre-write checksum recheck
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ md5Checksum: checksumOnRecheck }) })
+        }
+        throw new Error('unexpected fetch in save() test: ' + url)
+      }),
+    )
+  }
+
+  it('overwrites an existing file when checksums match, updates cache', async () => {
+    stubFetchWithChecksums('meta-sum')
+    const src = new DriveSource('CID')
+    await src.connect()
+    ;(src as any).folderId = 'FOLDER'
+    await src.load()
+    await expect(src.save('meta', { foo: 1 })).resolves.toBeUndefined()
+    expect((src as any).fileIds.meta).toEqual({ id: 'meta', md5Checksum: 'meta-sum-v2' })
+  })
+
+  it('throws ConflictError when the remote checksum changed since last read', async () => {
+    stubFetchWithChecksums('meta-sum-CHANGED-ELSEWHERE')
+    const src = new DriveSource('CID')
+    await src.connect()
+    ;(src as any).folderId = 'FOLDER'
+    await src.load()
+    await expect(src.save('meta', { foo: 1 })).rejects.toBeInstanceOf(ConflictError)
+  })
+
+  it('creates the file via multipart upload when it does not exist yet (assetTransfers)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, options?: { method?: string }) => {
+        const method = options?.method
+        if (url.includes('fields=files(id,name,md5Checksum)')) {
+          // load() listing — assetTransfers.json is absent, same as the default beforeEach mock.
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ files: Object.keys(FILE_MAP).map((n) => ({ id: n, name: `${n}.json` })) }),
+          })
+        }
+        if (url.includes('alt=media')) {
+          const id = url.match(/files\/(\w+)/)![1]
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(FILE_MAP[id]) })
+        }
+        if (method === 'POST') {
+          // multipart create
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 'newAT', md5Checksum: 'at-sum' }) })
+        }
+        if (url.includes('fields=files(id,md5Checksum)')) {
+          // save()'s by-name lookup, since assetTransfers isn't cached from load() — not found.
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ files: [] }) })
+        }
+        throw new Error('unexpected fetch in save() test: ' + url)
+      }),
+    )
+    const src = new DriveSource('CID')
+    await src.connect()
+    ;(src as any).folderId = 'FOLDER'
+    await src.load()
+    await expect(src.save('assetTransfers', [])).resolves.toBeUndefined()
+    expect((src as any).fileIds.assetTransfers).toEqual({ id: 'newAT', md5Checksum: 'at-sum' })
   })
 })
