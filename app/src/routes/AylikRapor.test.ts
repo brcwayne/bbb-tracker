@@ -4,11 +4,17 @@ import AylikRapor from './AylikRapor.svelte'
 import { fixture } from '../fixtures/dataset'
 
 describe('AylikRapor', () => {
-  it('renders one row per snapshot, newest first', () => {
-    const { getAllByRole } = render(AylikRapor, { props: { dataset: fixture } })
+  it('renders one row per year, newest first, expandable into its months', async () => {
+    // fixture has 2 snapshots, one in 2021 and one in 2024 — 2 year rows expected.
+    const { getAllByRole, container } = render(AylikRapor, { props: { dataset: fixture } })
     const rows = getAllByRole('row')
-    expect(rows).toHaveLength(1 + fixture.snapshots.length)
-    expect(rows[1].textContent).toContain('Oca 2024') // en yeni
+    expect(rows).toHaveLength(1 + 2) // header + 2 years
+    expect(rows[1].textContent).toContain('2024') // en yeni yıl önce
+    expect(container.querySelector('.year-detail')).toBeNull() // henüz açılmadı
+    await fireEvent.click(rows[1])
+    // Expanding renders a nested month-level table scoped under .year-detail — check that,
+    // rather than a bare text query (month labels also appear as bar-chart text elsewhere).
+    expect(container.querySelector('.year-detail')?.textContent).toContain('Oca 2024')
   })
 
   it('% getiri is — when baslangicSermayesi is 0/null', () => {
@@ -18,11 +24,13 @@ describe('AylikRapor', () => {
     expect(container.textContent).toContain('—')
   })
 
-  it('clicking a row updates the selected-month card', async () => {
-    const { getAllByRole, getByTestId } = render(AylikRapor, {
+  it('clicking a month row (after expanding its year) updates the selected-month card', async () => {
+    const { getAllByRole, getByTestId, container } = render(AylikRapor, {
       props: { dataset: fixture },
     })
-    await fireEvent.click(getAllByRole('row')[2]) // 2021-03
+    await fireEvent.click(getAllByRole('row')[2]) // expand 2021 (older year, second row)
+    const monthRow = container.querySelector('.year-detail tbody tr')!
+    await fireEvent.click(monthRow)
     expect(getByTestId('month-card').textContent).toContain('Mar 2021')
   })
 })

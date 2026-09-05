@@ -35,6 +35,81 @@
     return b == null || b === 0 ? DASH : pct(s.netKZ_usd / b)
   }
 
+  // Group the flat month list by year so the default view is ~10 rows, not 124 — each
+  // year expands (DataTable's built-in detail mechanism) into its own months, still with
+  // every original column.
+  type YearGroup = {
+    year: string
+    months: Snapshot[]
+    startCapital: number | null
+    endCapital: number
+    netMevduatCekim: number
+    netKZ: number
+    nakitTemettu: number
+    vergiKomisyon: number
+  }
+
+  const yearGroups = $derived.by<YearGroup[]>(() => {
+    const byYear = new Map<string, Snapshot[]>()
+    for (const s of rows) {
+      const arr = byYear.get(s.tarih.slice(0, 4)) ?? []
+      arr.push(s)
+      byYear.set(s.tarih.slice(0, 4), arr)
+    }
+    // `rows` is newest-first, so years come out of the map newest-first too.
+    return [...byYear.entries()].map(([year, months]) => {
+      const ascInYear = [...months].sort((a, b) => (a.tarih < b.tarih ? -1 : 1))
+      const first = ascInYear[0]
+      const last = ascInYear[ascInYear.length - 1]
+      return {
+        year,
+        months,
+        startCapital: first.baslangicSermayesi_usd,
+        endCapital: last.toplamOzkaynak_usd,
+        netMevduatCekim: months.reduce((s, m) => s + m.netMevduatCekim_usd, 0),
+        netKZ: months.reduce((s, m) => s + m.netKZ_usd, 0),
+        nakitTemettu: months.reduce((s, m) => s + m.nakitTemettu_usd, 0),
+        vergiKomisyon: months.reduce((s, m) => s + m.vergiKomisyon_usd, 0),
+      }
+    })
+  })
+
+  function yearGetiri(g: YearGroup): string {
+    return g.startCapital == null || g.startCapital === 0 ? DASH : pct(g.netKZ / g.startCapital)
+  }
+
+  const yearColumns = [
+    { key: 'year', label: 'Yıl', sortable: true },
+    {
+      key: 'startCapital',
+      label: 'Başlangıç Sermaye',
+      align: 'right' as const,
+      sortable: true,
+      fmt: (v: number | null) => money(v as number),
+    },
+    {
+      key: 'endCapital',
+      label: 'Dönem Sonu',
+      align: 'right' as const,
+      sortable: true,
+      fmt: (v: number) => money(v),
+    },
+    {
+      key: 'netKZ',
+      label: 'Net K/Z',
+      align: 'right' as const,
+      sortable: true,
+      tone: 'sign' as const,
+      fmt: (v: number) => money(v, { sign: true }),
+    },
+    {
+      key: '_getiri',
+      label: '% Getiri',
+      align: 'right' as const,
+      fmt: (_v: unknown, row: YearGroup) => yearGetiri(row),
+    },
+  ]
+
   const columns = [
     { key: 'tarih', label: 'Ay', fmt: (v: string) => monthLabel(v) },
     {
@@ -88,11 +163,23 @@
   ]
 </script>
 
+{#snippet monthDetail(g: YearGroup)}
+  <div class="year-detail">
+    <DataTable {columns} rows={g.months} onRowClick={(row) => (selectedMonth = row)} />
+  </div>
+{/snippet}
+
 {#if dataset}
   <section class="aylik">
-    <SectionHeader title="Aylık Rapor" note={`${rows.length} ay`} />
+    <SectionHeader title="Aylık Rapor" note={`${rows.length} ay · ${yearGroups.length} yıl — bir yıla tıklayın`} />
 
-    <DataTable {columns} rows={rows} onRowClick={(row) => (selectedMonth = row)} />
+    <DataTable
+      columns={yearColumns}
+      rows={yearGroups}
+      rowKey={(g) => g.year}
+      detail={monthDetail}
+      initialSort={{ key: 'year', dir: 'desc' }}
+    />
 
     {#if current}
       <SectionHeader title="Seçili ay" />
@@ -139,8 +226,18 @@
 <style>
   .aylik {
     padding: 1.25rem 1.25rem 2rem;
-    max-width: 900px;
+    max-width: min(1100px, 96vw);
     margin: 0 auto;
+    font-size: 1.05rem;
+  }
+  .year-detail {
+    margin: 0.4rem 0 0.6rem;
+  }
+  /* Slightly roomier cells than the shared DataTable default, scoped to this page only
+     (other pages' tables are dense by design and shouldn't inherit this). */
+  .aylik :global(.dt-wrap th),
+  .aylik :global(.dt-wrap td) {
+    padding: 0.55rem 0.75rem;
   }
   .month-card {
     display: grid;
