@@ -26,14 +26,13 @@ describe('EkleKaydi', () => {
     expect(getByText('Nakit Hareketi')).toBeInTheDocument()
     expect(getByText('Varlık Transferi')).toBeInTheDocument()
     expect(getByText('Kurum Ekle')).toBeInTheDocument()
-    // Task 12 replaced the 'nakit' placeholder with a real NakitHareketiFormu, so this
+    // Task 13 replaced the 'transfer' placeholder with a real VarlikTransferiFormu, so this
     // generic "picker switches to a placeholder form area" check is retargeted to
-    // 'Varlık Transferi' (kind === 'transfer'), which remains a placeholder — same fix
-    // pattern Task 11 used when it retargeted this test from 'İşlem (Al/Sat)' to
-    // 'Nakit Hareketi'. Whichever kind is targeted here should remain a placeholder
-    // until its own task lands (currently: 'transfer' and 'kurum').
-    await fireEvent.click(getByText('Varlık Transferi'))
-    expect(getByText(/Varlık Transferi formu/i)).toBeInTheDocument()
+    // 'Kurum Ekle' (kind === 'kurum'), which remains a placeholder — same fix pattern
+    // Task 11/12 used when they retargeted this test to 'Nakit Hareketi' then
+    // 'Varlık Transferi'. 'kurum' is now the only kind left as a placeholder.
+    await fireEvent.click(getByText('Kurum Ekle'))
+    expect(getByText(/Kurum Ekle formu/i)).toBeInTheDocument()
   })
 
   it('renders an empty state without data', () => {
