@@ -1,5 +1,5 @@
 import type { OpenPosition } from './derive'
-import type { Transaction, Instrument, Broker } from './types'
+import type { Transaction, Instrument, Broker, AssetTransfer } from './types'
 import { unrealizedByKod, type PriceLookup } from './unrealized'
 
 export interface HoldingRow {
@@ -23,19 +23,40 @@ export interface HoldingGroup {
   unrealUsd: number | null
 }
 
+interface AttrEvent {
+  kod: string
+  tarih: string
+  id: string
+  hesap: string
+  portfoy: string
+}
+
+function attributionEvents(txns: Transaction[], transfers: AssetTransfer[]): AttrEvent[] {
+  return [
+    ...txns.map((t) => ({ kod: t.enstruman, tarih: t.tarih, id: t.id, hesap: t.hesap, portfoy: t.portfoy })),
+    ...transfers.map((tr) => ({
+      kod: tr.enstruman,
+      tarih: tr.tarih,
+      id: tr.id,
+      hesap: tr.hedefHesap,
+      portfoy: tr.hedefPortfoy ?? '',
+    })),
+  ]
+}
+
 function latestFieldByKod<K extends 'portfoy' | 'hesap'>(
-  txns: Transaction[],
+  events: AttrEvent[],
   field: K,
 ): Map<string, string> {
-  const latest = new Map<string, Transaction>()
-  for (const t of txns) {
-    const prev = latest.get(t.enstruman)
-    if (!prev || t.tarih > prev.tarih || (t.tarih === prev.tarih && t.id > prev.id)) {
-      latest.set(t.enstruman, t)
+  const latest = new Map<string, AttrEvent>()
+  for (const e of events) {
+    const prev = latest.get(e.kod)
+    if (!prev || e.tarih > prev.tarih || (e.tarih === prev.tarih && e.id > prev.id)) {
+      latest.set(e.kod, e)
     }
   }
   const out = new Map<string, string>()
-  for (const [kod, t] of latest) out.set(kod, t[field] as string)
+  for (const [kod, e] of latest) out.set(kod, e[field])
   return out
 }
 
@@ -83,9 +104,10 @@ export function holdingsByPortfolio(
   open: OpenPosition[],
   txns: Transaction[],
   instruments: Instrument[],
+  transfers: AssetTransfer[],
   p: PriceLookup,
 ): HoldingGroup[] {
-  const byKod = latestFieldByKod(txns, 'portfoy')
+  const byKod = latestFieldByKod(attributionEvents(txns, transfers), 'portfoy')
   const groups = new Map<string, OpenPosition[]>()
   for (const pos of open) {
     const key = byKod.get(pos.kod) ?? '?'
@@ -101,9 +123,10 @@ export function holdingsByBroker(
   txns: Transaction[],
   instruments: Instrument[],
   brokers: Broker[],
+  transfers: AssetTransfer[],
   p: PriceLookup,
 ): HoldingGroup[] {
-  const byKod = latestFieldByKod(txns, 'hesap')
+  const byKod = latestFieldByKod(attributionEvents(txns, transfers), 'hesap')
   const byBrokerKod = new Map<string, OpenPosition[]>()
   for (const pos of open) {
     const key = byKod.get(pos.kod) ?? '?'
