@@ -25,6 +25,7 @@
   import Banka from './routes/Banka.svelte'
   import Temettu from './routes/Temettu.svelte'
   import EkleKaydi from './routes/EkleKaydi.svelte'
+  import Log from './routes/Log.svelte'
 
   let route = $state<Route>(currentRoute())
   const store = createAppStore()
@@ -44,6 +45,7 @@
     banka: Banka,
     temettu: Temettu,
     ekle: EkleKaydi,
+    log: Log,
   }
   const Active = $derived(pages[route])
   const title = $derived(ROUTES.find((r) => r.id === route)!.label)

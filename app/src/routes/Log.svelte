@@ -1,0 +1,279 @@
+<script lang="ts">
+  import type { Dataset, Transaction } from '../lib/data/types'
+  import type { DerivedBundle, AppState } from '../lib/data/store'
+  import type { DataSource } from '../lib/data/source'
+  import type { Writable } from 'svelte/store'
+  import { deleteRecord } from '../lib/data/store'
+  import { derivePositions } from '../lib/data/derive'
+  import { lot, dateShort, DASH } from '../lib/format'
+  import { money } from '../lib/settings.svelte'
+  import SectionHeader from '../lib/ui/SectionHeader.svelte'
+  import EmptyState from '../lib/ui/EmptyState.svelte'
+  import IslemFormu from './forms/IslemFormu.svelte'
+
+  let {
+    dataset,
+    view,
+    source,
+    store,
+  }: { dataset?: Dataset; view?: DerivedBundle; source?: DataSource; store?: Writable<AppState> } = $props()
+
+  let editing = $state<Transaction | null>(null)
+  let deleteTarget = $state<Transaction | null>(null)
+  let deleteError = $state<string | null>(null)
+  let deleting = $state(false)
+  let message = $state<string | null>(null)
+
+  const instName = (kod: string) => dataset?.instruments.find((i) => i.kod === kod)?.ad ?? kod
+
+  // Oldest → newest, by trade date then id for a stable order.
+  const rows = $derived(
+    [...(dataset?.transactions ?? [])].sort((a, b) =>
+      a.tarih < b.tarih ? -1 : a.tarih > b.tarih ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    ),
+  )
+
+  const fiyatStr = (t: Transaction) =>
+    t.girisParaBirimi !== 'USD' && t.fiyat_tl != null
+      ? `₺${t.fiyat_tl.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : money(t.fiyat_usd)
+
+  function requestEdit(t: Transaction) {
+    deleteTarget = null
+    message = null
+    editing = t
+  }
+  function requestDelete(t: Transaction) {
+    editing = null
+    message = null
+    deleteError = null
+    deleteTarget = t
+  }
+  function editSaved() {
+    editing = null
+    message = 'İşlem güncellendi.'
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget || !source || !store || !dataset) return
+    deleting = true
+    deleteError = null
+    try {
+      const id = deleteTarget.id
+      const prospective = dataset.transactions.filter((t) => t.id !== id)
+      const baselineErrors = derivePositions(dataset.transactions).errors.length
+      const prospectiveErrors = derivePositions(prospective).errors.length
+      if (prospectiveErrors > baselineErrors) {
+        deleteError = 'Bu kayıt silinirse daha sonraki bir satış geçersiz hale gelir.'
+        deleting = false
+        return
+      }
+      await deleteRecord<Transaction>(store, source, 'transactions', (t) => t.id === id)
+      deleteTarget = null
+      message = 'İşlem silindi.'
+    } catch (e) {
+      deleteError = e instanceof Error ? e.message : String(e)
+    } finally {
+      deleting = false
+    }
+  }
+</script>
+
+{#if dataset && view}
+  <section class="log">
+    <SectionHeader title="Log" note={`${rows.length} işlem · eski → yeni`} />
+    {#if message}<p class="ok">{message}</p>{/if}
+
+    {#if editing}
+      {#key editing.id}
+        <div class="form-area">
+          <IslemFormu {dataset} {view} source={source!} store={store!} editing={editing} onSaved={editSaved} />
+        </div>
+      {/key}
+      <button class="cancel" onclick={() => (editing = null)}>Vazgeç</button>
+    {/if}
+
+    {#if deleteTarget}
+      <div class="confirm-delete">
+        <p>
+          <strong>{dateShort(deleteTarget.tarih)} · {deleteTarget.yon} {instName(deleteTarget.enstruman)} · {lot(deleteTarget.lot)} lot</strong>
+          kalıcı olarak silinsin mi? Bu işlem geri alınamaz.
+        </p>
+        {#if deleteError}<p class="error">{deleteError}</p>{/if}
+        <button onclick={() => (deleteTarget = null)} disabled={deleting}>Vazgeç</button>
+        <button class="danger" onclick={confirmDelete} disabled={deleting}>{deleting ? 'Siliniyor…' : 'Evet, sil'}</button>
+      </div>
+    {/if}
+
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Tarih</th>
+            <th>Yön</th>
+            <th>Varlık</th>
+            <th>Kurum</th>
+            <th>Portföy</th>
+            <th class="r">Adet</th>
+            <th class="r">Fiyat</th>
+            <th aria-label="işlemler"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each rows as t (t.id)}
+            <tr class:editing={editing?.id === t.id}>
+              <td class="nowrap">{dateShort(t.tarih)}</td>
+              <td class:pos={t.yon === 'AL'} class:neg={t.yon === 'SAT'}>{t.yon}</td>
+              <td>
+                {instName(t.enstruman)}
+                {#if instName(t.enstruman) !== t.enstruman}<span class="sub">{t.enstruman}</span>{/if}
+              </td>
+              <td>{t.hesap || DASH}</td>
+              <td>{t.portfoy || DASH}</td>
+              <td class="r num">{lot(t.lot)}</td>
+              <td class="r num">{fiyatStr(t)}</td>
+              <td class="act">
+                {#if t.kaynak === 'manual'}
+                  <button class="icon" title="Düzenle" aria-label="Düzenle" onclick={() => requestEdit(t)}>✎</button>
+                  <button class="icon danger" title="Sil" aria-label="Sil" onclick={() => requestDelete(t)}>🗑</button>
+                {:else}
+                  <span class="lock" title="Excel'den gelen kayıt — uygulamadan düzenlenemez">🔒</span>
+                {/if}
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{:else}
+  <EmptyState title="Log" detail="Veri bekleniyor." />
+{/if}
+
+<style>
+  .log {
+    padding: 1.25rem 1.25rem 2rem;
+    max-width: min(1100px, 96vw);
+    margin: 0 auto;
+  }
+  .ok {
+    color: var(--gain);
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0.75rem;
+  }
+  .form-area {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  .cancel {
+    appearance: none;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    padding: 0.4rem 0.9rem;
+    margin-bottom: 1rem;
+    cursor: pointer;
+  }
+  .confirm-delete {
+    border: 1px solid var(--loss);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+  }
+  .confirm-delete .error {
+    color: var(--loss);
+  }
+  .confirm-delete button {
+    appearance: none;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    padding: 0.4rem 0.8rem;
+    margin-right: 0.5rem;
+    margin-top: 0.4rem;
+    cursor: pointer;
+  }
+  .confirm-delete button.danger {
+    color: var(--loss);
+    border-color: var(--loss);
+  }
+  .tbl-wrap {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--ink);
+    font-size: 0.9rem;
+  }
+  th,
+  td {
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--hairline);
+    text-align: left;
+    white-space: nowrap;
+  }
+  thead th {
+    color: var(--ink-soft);
+    font-weight: 600;
+    font-size: 0.82em;
+    letter-spacing: 0.02em;
+    border-bottom-color: var(--ink-soft);
+  }
+  th.r,
+  td.r {
+    text-align: right;
+  }
+  td.num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+  td.pos {
+    color: var(--gain);
+    font-weight: 600;
+  }
+  td.neg {
+    color: var(--loss);
+    font-weight: 600;
+  }
+  td .sub {
+    color: var(--ink-soft);
+    font-size: 0.82em;
+    margin-left: 0.35rem;
+  }
+  tbody tr.editing {
+    background: var(--surface);
+  }
+  td.act {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .icon {
+    appearance: none;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0.25rem 0.45rem;
+    margin-left: 0.3rem;
+    cursor: pointer;
+  }
+  .icon.danger {
+    border-color: var(--loss);
+  }
+  .lock {
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+  }
+</style>

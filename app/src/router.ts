@@ -7,6 +7,7 @@ export type Route =
   | 'banka'
   | 'temettu'
   | 'ekle'
+  | 'log'
 
 export const ROUTES: { id: Route; path: string; label: string }[] = [
   { id: 'panorama', path: '#/', label: 'Panorama' },
@@ -17,11 +18,12 @@ export const ROUTES: { id: Route; path: string; label: string }[] = [
   { id: 'banka', path: '#/banka', label: 'Banka' },
   { id: 'temettu', path: '#/temettu', label: 'Temettü' },
   { id: 'ekle', path: '#/ekle', label: 'Ekle' },
+  { id: 'log', path: '#/log', label: 'Log' },
 ]
 
 export function currentRoute(): Route {
   const h = location.hash.replace(/^#\/?/, '')
-  const ids = ['portfoyler', 'kurumlar', 'pozisyonlar', 'aylik', 'banka', 'temettu', 'ekle'] as const
+  const ids = ['portfoyler', 'kurumlar', 'pozisyonlar', 'aylik', 'banka', 'temettu', 'ekle', 'log'] as const
   return (ids.find((r) => r === h) as Route) ?? 'panorama'
 }
 
