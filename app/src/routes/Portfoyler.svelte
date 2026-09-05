@@ -25,20 +25,6 @@
     (view?.byPortfolio ?? []).map((r) => ({ label: r.key, value: r.tutarUsd })),
   )
 
-  // Mirrors the slice palette in Donut.svelte so the legend swatches line up.
-  const PALETTE = ['var(--gain)', 'var(--gold)', 'var(--loss)', 'var(--ink-soft)']
-
-  // Legend entries for a set of donut slices: amount (no kuruş) + share of the whole.
-  function legendFor(slices: { label: string; value: number }[]) {
-    const sum = slices.reduce((s, x) => s + x.value, 0)
-    return slices.map((s, i) => ({
-      label: s.label,
-      color: PALETTE[i % PALETTE.length],
-      amount: money(s.value, { whole: true }),
-      share: sum ? pct(s.value / sum) : DASH,
-    }))
-  }
-
   // Top 4 holdings by cost, the rest bucketed into "Diğer" — keeps slice count at or under
   // the shared Donut palette's 4 colors, so a portfolio with many small positions doesn't
   // end up with repeated, indistinguishable slice colors.
@@ -85,17 +71,7 @@
     <div class="pie-row">
       <div class="pie-item">
         <span class="pie-label">Tümü</span>
-        <Donut slices={overall} fmt={(v) => money(v, { whole: true })} />
-        <ul class="legend">
-          {#each legendFor(overall) as e}
-            <li>
-              <span class="sw" style:background={e.color}></span>
-              <span class="lg-label">{e.label}</span>
-              <span class="lg-amt">{e.amount}</span>
-              <span class="lg-pct">{e.share}</span>
-            </li>
-          {/each}
-        </ul>
+        <Donut slices={overall} captionBelow fmt={(v) => money(v, { whole: true })} />
       </div>
       {#each groups as g}
         <div class="pie-item">
@@ -104,18 +80,9 @@
             slices={instrumentMix(g)}
             size={104}
             thickness={16}
+            captionBelow
             fmt={(v) => money(v, { whole: true })}
           />
-          <ul class="legend">
-            {#each legendFor(instrumentMix(g)) as e}
-              <li>
-                <span class="sw" style:background={e.color}></span>
-                <span class="lg-label">{e.label}</span>
-                <span class="lg-amt">{e.amount}</span>
-                <span class="lg-pct">{e.share}</span>
-              </li>
-            {/each}
-          </ul>
         </div>
       {/each}
     </div>
@@ -156,42 +123,6 @@
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--ink-soft);
-  }
-  .legend {
-    list-style: none;
-    margin: 0.5rem 0 0;
-    padding: 0;
-    display: grid;
-    gap: 0.2rem;
-    min-width: 160px;
-  }
-  .legend li {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    align-items: baseline;
-    column-gap: 0.5rem;
-    font-size: 0.78rem;
-    font-variant-numeric: tabular-nums;
-  }
-  .sw {
-    width: 8px;
-    height: 8px;
-    border-radius: 2px;
-    align-self: center;
-  }
-  .lg-label {
-    color: var(--ink-soft);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .lg-amt {
-    color: var(--ink);
-  }
-  .lg-pct {
-    color: var(--ink-soft);
-    min-width: 3.2em;
-    text-align: right;
   }
   .panel {
     background: var(--surface);
