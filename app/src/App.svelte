@@ -24,6 +24,7 @@
   import AylikRapor from './routes/AylikRapor.svelte'
   import Banka from './routes/Banka.svelte'
   import Temettu from './routes/Temettu.svelte'
+  import EkleKaydi from './routes/EkleKaydi.svelte'
 
   let route = $state<Route>(currentRoute())
   const store = createAppStore()
@@ -42,6 +43,7 @@
     aylik: AylikRapor,
     banka: Banka,
     temettu: Temettu,
+    ekle: EkleKaydi,
   }
   const Active = $derived(pages[route])
   const title = $derived(ROUTES.find((r) => r.id === route)!.label)
@@ -135,7 +137,7 @@
 {:else if $store.status === 'error'}
   <EmptyState title="Veri yüklenemedi" detail={$store.error} />
 {:else}
-  <Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} />
+  <Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} source={source} store={store} />
 {/if}
 
 <nav class="tabs">
