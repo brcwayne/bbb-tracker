@@ -124,7 +124,9 @@ aşağıdaki 6. adımdaki URL'yi güncelle.
 ## P3 — canlı fiyat (fiyat proxy'si)
 
 Açık pozisyonlarda **Güncel Fiyat** / **Gerçekleşmemiş K/Z** ve TL modunda canlı kur için
-küçük bir Cloudflare Worker gerekir (`worker/` klasörü). Kimlik/anahtar yok.
+küçük bir Cloudflare Worker gerekir (`worker/` klasörü). BIST/ABD/altın için anahtar yok;
+TEFAS yatırım fonları için `worker/` bir fonoloji.com anahtarı ister (ücretsiz, opsiyonel —
+bkz. `worker/README.md`). Anahtar yoksa fonlar `—` kalır, gerisi çalışır.
 
 1. Ücretsiz **Cloudflare** hesabı aç.
 2. `npm i -g wrangler` → `wrangler login`.

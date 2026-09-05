@@ -4,3 +4,7 @@ compatibility_date = "2024-09-01"
 
 [vars]
 ALLOWED_ORIGIN = "https://brcwayne.github.io"
+
+# TEFAS fund prices (fonoloji.com) need a key — set it as a secret, not here:
+#   wrangler secret put FONOLOJI_API_KEY
+# Unset → tefas:* symbols come back {error}, everything else still works.

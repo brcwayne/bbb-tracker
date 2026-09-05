@@ -21,6 +21,27 @@ describe('symbolsForHeldInstruments', () => {
     expect(syms).toContain('THYAO.IS')
     expect(syms).toContain('GC=F') // XAU is held (fixture t_g) → gold folds to GC=F
   })
+
+  it('marks a held TEFAS fund as tefas:<code>', () => {
+    const ds = {
+      ...fixture,
+      transactions: [
+        { ...fixture.transactions[0], id: 't_mac', enstruman: 'MAC', yon: 'AL' as const, lot: 1000 },
+      ],
+      instruments: [
+        {
+          kod: 'MAC',
+          ad: 'MAC',
+          sinif: 'FON_HISSE' as const,
+          girisParaBirimi: 'TL',
+          fiyatKaynagi: 'tefas',
+          fiyatSembolu: 'MAC',
+          seviyeler: null,
+        },
+      ],
+    }
+    expect(symbolsForHeldInstruments(ds)).toEqual(['tefas:MAC'])
+  })
 })
 
 describe('refreshPrices', () => {
@@ -48,6 +69,23 @@ describe('refreshPrices', () => {
     expect(prices.usdPerGram).toBe(100)
     expect(settings.rate).toBe(40)
     expect(JSON.parse(sessionStorage.getItem('bbb-prices')!).asOf).toBe('2999-01-01T00:00:00Z')
+  })
+
+  it('de-prefixes a tefas:<code> entry into bySymbol by its bare code', async () => {
+    vi.stubEnv('VITE_PRICE_API', 'https://api.test')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      asOf: '2999-01-01T00:00:00Z',
+      usdtry: 40,
+      prices: {
+        'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 10 },
+        'GC=F': { price: 3110.34768, currency: 'USD', priceUsd: 3110.34768, usdPerGram: 100 },
+        'tefas:MAC': { price: 12.5, currency: 'TRY', priceUsd: 0.3125 },
+      },
+    }))))
+    await refreshPrices(fixture)
+    expect(prices.status).toBe('ready')
+    expect(prices.bySymbol['MAC'].priceUsd).toBe(0.3125)
+    expect(prices.bySymbol['tefas:MAC']).toBeUndefined()
   })
 
   it('sets status "error" when the request fails', async () => {

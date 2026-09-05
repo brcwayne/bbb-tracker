@@ -21,4 +21,12 @@ for (const [sym, v] of Object.entries(p.prices)) {
     process.exit(1)
   }
 }
+
+// TEFAS fund path — only meaningful once FONOLOJI_API_KEY is set; a missing
+// key comes back {error:'fon anahtarı yok'} and is reported, not failed.
+const f = await hit('/prices?symbols=tefas:MAC')
+const mac = f.prices['tefas:MAC']
+if (mac.error) console.log(`\n(fon fiyatı atlandı: ${mac.error})`)
+else console.log(`\ntefas:MAC → ${mac.price} TRY / ${mac.priceUsd} USD`)
+
 console.log('\nsmoke OK')

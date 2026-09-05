@@ -126,3 +126,57 @@ describe('/prices', () => {
     expect(await res.json()).toEqual({ error: 'boom' })
   })
 })
+
+describe('/prices — TEFAS funds (tefas: prefix)', () => {
+  function stubFetch(fundOk = true) {
+    vi.stubGlobal('fetch', vi.fn(async (u: string | URL) => {
+      const s = String(u)
+      if (s.includes('tcmb.gov.tr')) return new Response(tcmbXml)
+      if (s.includes('THYAO')) return new Response(JSON.stringify(thyao))
+      if (s.includes('fonoloji.com/v1/funds/MAC'))
+        return fundOk
+          ? new Response(JSON.stringify({ fund: { current_price: 12.5 } }))
+          : new Response('nope', { status: 401 })
+      return new Response('x', { status: 404 })
+    }))
+  }
+
+  it('prices a fund via fonoloji, keyed by its tefas: symbol, converted at the TCMB rate', async () => {
+    stubFetch()
+    const withKey = { ...env, FONOLOJI_API_KEY: 'k-123' }
+    const res = await worker.fetch(
+      new Request('https://w/prices?symbols=THYAO.IS,tefas:MAC'),
+      withKey,
+      ctx,
+    )
+    expect(res.status).toBe(200)
+    const b = (await res.json()) as any
+    expect(b.prices['tefas:MAC'].currency).toBe('TRY')
+    expect(b.prices['tefas:MAC'].price).toBe(12.5)
+    expect(b.prices['tefas:MAC'].priceUsd).toBeCloseTo(12.5 / 48.2238, 5)
+    // Yahoo symbols still resolve alongside
+    expect(b.prices['THYAO.IS'].currency).toBe('TRY')
+  })
+
+  it('without FONOLOJI_API_KEY the fund is {error} and the rest still 200', async () => {
+    stubFetch()
+    const res = await worker.fetch(
+      new Request('https://w/prices?symbols=THYAO.IS,tefas:MAC'),
+      env,
+      ctx,
+    )
+    expect(res.status).toBe(200)
+    const b = (await res.json()) as any
+    expect(b.prices['tefas:MAC']).toEqual({ error: 'fon anahtarı yok' })
+    expect(b.prices['THYAO.IS'].priceUsd).not.toBeNull()
+  })
+
+  it('a fonoloji failure degrades to {error} for that fund only', async () => {
+    stubFetch(false)
+    const withKey = { ...env, FONOLOJI_API_KEY: 'k-123' }
+    const res = await worker.fetch(new Request('https://w/prices?symbols=tefas:MAC'), withKey, ctx)
+    expect(res.status).toBe(200)
+    const b = (await res.json()) as any
+    expect(b.prices['tefas:MAC']).toEqual({ error: 'fon 401' })
+  })
+})

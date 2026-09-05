@@ -1,10 +1,16 @@
 import { fetchQuotes } from './yahoo'
 import { fetchUsdTry } from './tcmb'
+import { fetchFundQuotes, type FundQuote } from './fonoloji'
 import { usdPerGramFromOunce, GOLD_YAHOO_SYMBOL } from './symbols'
 
 export interface Env {
   ALLOWED_ORIGIN: string
+  /** fonoloji.com key for TEFAS fund prices; unset → funds come back {error}. */
+  FONOLOJI_API_KEY?: string
 }
+
+/** App marks a TEFAS fund symbol as `tefas:<code>` so we can route it here. */
+const TEFAS_PREFIX = 'tefas:'
 
 function cors(origin: string): Record<string, string> {
   return {
@@ -22,7 +28,7 @@ function json(body: unknown, status: number, origin: string, extra: Record<strin
   })
 }
 
-async function handlePrices(url: URL, origin: string): Promise<Response> {
+async function handlePrices(url: URL, origin: string, env: Env): Promise<Response> {
   const raw = url.searchParams.get('symbols')?.trim()
   if (!raw) return json({ error: 'symbols parametresi gerekli' }, 400, origin)
   const symbols = raw.split(',').map((s) => s.trim()).filter(Boolean)
@@ -30,9 +36,17 @@ async function handlePrices(url: URL, origin: string): Promise<Response> {
   const uniq = [...new Set(symbols)]
   if (uniq.length > 45) return json({ error: 'en fazla 45 sembol' }, 400, origin)
 
-  const quotesP = fetchQuotes(uniq)
+  const fundCodes = uniq
+    .filter((s) => s.startsWith(TEFAS_PREFIX))
+    .map((s) => s.slice(TEFAS_PREFIX.length))
+  const yahooSyms = uniq.filter((s) => !s.startsWith(TEFAS_PREFIX))
+
+  const quotesP = fetchQuotes(yahooSyms)
+  const fundsP: Promise<Record<string, FundQuote>> = fundCodes.length
+    ? fetchFundQuotes(fundCodes, env.FONOLOJI_API_KEY ?? '')
+    : Promise.resolve({})
   const fxP = fetchUsdTry().then((r) => r.usdtry).catch(() => null)
-  const [quotes, usdtry] = await Promise.all([quotesP, fxP])
+  const [quotes, funds, usdtry] = await Promise.all([quotesP, fundsP, fxP])
 
   const prices: Record<string, unknown> = {}
   for (const [sym, q] of Object.entries(quotes)) {
@@ -45,6 +59,19 @@ async function handlePrices(url: URL, origin: string): Promise<Response> {
     const entry: Record<string, unknown> = { price: q.price, currency: q.currency, priceUsd }
     if (sym === GOLD_YAHOO_SYMBOL) entry.usdPerGram = usdPerGramFromOunce(q.price)
     prices[sym] = entry
+  }
+  // TEFAS funds always report TRY — same USD conversion as the BIST path.
+  for (const [code, q] of Object.entries(funds)) {
+    const key = TEFAS_PREFIX + code
+    if ('error' in q) {
+      prices[key] = q
+      continue
+    }
+    prices[key] = {
+      price: q.price,
+      currency: q.currency,
+      priceUsd: usdtry != null ? q.price / usdtry : null,
+    }
   }
   return json(
     { asOf: new Date().toISOString(), usdtry, prices },
@@ -81,7 +108,7 @@ export default {
       }
 
       let res: Response
-      if (url.pathname === '/prices') res = await handlePrices(url, origin)
+      if (url.pathname === '/prices') res = await handlePrices(url, origin, env)
       else if (url.pathname === '/fx/latest') res = await handleFx(origin)
       else res = json({ error: 'bilinmeyen uç' }, 404, origin)
 

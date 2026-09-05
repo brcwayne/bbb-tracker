@@ -3,6 +3,7 @@ import { derivePositions } from './data/derive'
 import { applyLiveRate } from './settings.svelte'
 
 const GOLD_API_SYMBOL = 'GC=F'
+const TEFAS_PREFIX = 'tefas:'
 const MAX_AGE_MS = 30 * 60_000
 const STORE_KEY = 'bbb-prices'
 
@@ -34,6 +35,8 @@ export const prices = $state<{
 function apiSymbolFor(fiyatKaynagi: string, fiyatSembolu: string): string | null {
   if (fiyatKaynagi === 'yahoo') return fiyatSembolu
   if (fiyatKaynagi === 'altin-turev') return GOLD_API_SYMBOL
+  // TEFAS funds go to the worker prefixed; the response de-prefixes back to the bare code.
+  if (fiyatKaynagi === 'tefas') return TEFAS_PREFIX + fiyatSembolu
   return null
 }
 
@@ -86,7 +89,9 @@ export async function refreshPrices(ds: Dataset): Promise<void> {
     let usdPerGram: number | null = null
     for (const [sym, v] of Object.entries(body.prices)) {
       if ('error' in v) continue
-      bySymbol[sym] = { price: v.price, currency: v.currency, priceUsd: v.priceUsd ?? null }
+      // `tefas:MAC` → `MAC`, so unrealized.ts finds it by the bare fiyatSembolu.
+      const key = sym.startsWith(TEFAS_PREFIX) ? sym.slice(TEFAS_PREFIX.length) : sym
+      bySymbol[key] = { price: v.price, currency: v.currency, priceUsd: v.priceUsd ?? null }
       if (sym === GOLD_API_SYMBOL && typeof (v as { usdPerGram?: number }).usdPerGram === 'number') {
         usdPerGram = (v as { usdPerGram: number }).usdPerGram
       }
