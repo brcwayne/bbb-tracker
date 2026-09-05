@@ -17,11 +17,11 @@ declare const gapi: any
 
 const FOLDER_KEY = 'bbb-drive-folder'
 const TOKEN_KEY = 'bbb-drive-token'
-// `drive.readonly` (not `drive.file`): the 8 dataset files are placed in Drive
+// Not `drive.file` (own-files-only): the 8 dataset files are placed in Drive
 // by the migration toolchain / a manual upload — a different origin than this
-// app — so `drive.file` (own-files-only) can't list or read them. P1 only ever
-// reads, so read-only whole-Drive access is the right least privilege here.
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
+// app — so `drive.file` can't list or read them. P2 adds `save()`, which
+// writes those same files, so the scope is full read-write whole-Drive access.
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
 function readStoredFolder(): string | null {
   try {
@@ -50,7 +50,7 @@ function writeSessionToken(t: string | null): void {
 
 /**
  * Reads the 8 dataset JSON files from a folder in the user's Google Drive.
- * `connect()` runs the GIS OAuth token flow (scope `drive.readonly`),
+ * `connect()` runs the GIS OAuth token flow (scope `drive`, read-write),
  * `chooseFolder()` opens the Google Picker, `load()` fetches the files.
  * The access token is kept in `sessionStorage` and refreshed silently
  * (`prompt: 'none'`) on reload, so a return visit rarely needs a click.
@@ -139,7 +139,7 @@ export class DriveSource implements DataSource {
             .addView(view)
             .setOAuthToken(this.token)
           // Picker needs the developer key (Picker API) and the Cloud project
-          // number (App ID); harmless to pass alongside the drive.readonly token.
+          // number (App ID); harmless to pass alongside the drive-scope token.
           if (this.apiKey) builder = builder.setDeveloperKey(this.apiKey)
           if (this.appId) builder = builder.setAppId(this.appId)
           const picker = builder
@@ -241,6 +241,11 @@ export class DriveSource implements DataSource {
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,md5Checksum)`,
         { headers },
       )
+      if (res.status === 401 || res.status === 403) {
+        this.setToken(null)
+        throw new NeedsAuthError('oturum süresi doldu')
+      }
+      if (!res.ok) throw new Error(`Drive: ${name}.json aranamadı (${res.status})`)
       const { files } = (await res.json()) as { files: { id: string; md5Checksum?: string }[] }
       if (files[0]) cached = { id: files[0].id, md5Checksum: files[0].md5Checksum ?? '' }
     }
@@ -255,6 +260,11 @@ export class DriveSource implements DataSource {
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,md5Checksum',
         { method: 'POST', headers: { ...headers, 'Content-Type': `multipart/related; boundary=${boundary}` }, body },
       )
+      if (res.status === 401 || res.status === 403) {
+        this.setToken(null)
+        throw new NeedsAuthError('oturum süresi doldu')
+      }
+      if (!res.ok) throw new Error(`Drive: ${name}.json oluşturulamadı (${res.status})`)
       const created = (await res.json()) as { id: string; md5Checksum: string }
       this.fileIds[name] = { id: created.id, md5Checksum: created.md5Checksum }
       return
@@ -263,6 +273,11 @@ export class DriveSource implements DataSource {
     const currentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${cached.id}?fields=md5Checksum`, {
       headers,
     })
+    if (currentRes.status === 401 || currentRes.status === 403) {
+      this.setToken(null)
+      throw new NeedsAuthError('oturum süresi doldu')
+    }
+    if (!currentRes.ok) throw new Error(`Drive: ${name}.json kontrol edilemedi (${currentRes.status})`)
     const current = (await currentRes.json()) as { md5Checksum: string }
     if (current.md5Checksum !== cached.md5Checksum) {
       throw new ConflictError(name)
@@ -272,6 +287,11 @@ export class DriveSource implements DataSource {
       `https://www.googleapis.com/upload/drive/v3/files/${cached.id}?uploadType=media&fields=md5Checksum`,
       { method: 'PATCH', headers, body: JSON.stringify(data) },
     )
+    if (updateRes.status === 401 || updateRes.status === 403) {
+      this.setToken(null)
+      throw new NeedsAuthError('oturum süresi doldu')
+    }
+    if (!updateRes.ok) throw new Error(`Drive: ${name}.json yazılamadı (${updateRes.status})`)
     const updated = (await updateRes.json()) as { md5Checksum: string }
     this.fileIds[name] = { id: cached.id, md5Checksum: updated.md5Checksum }
   }

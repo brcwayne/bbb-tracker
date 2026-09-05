@@ -161,4 +161,76 @@ describe('DriveSource.save', () => {
     await expect(src.save('assetTransfers', [])).resolves.toBeUndefined()
     expect((src as any).fileIds.assetTransfers).toEqual({ id: 'newAT', md5Checksum: 'at-sum' })
   })
+
+  it('rejects (does not silently resolve) when the checksum-recheck GET fails, and leaves fileIds untouched', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, options?: { method?: string }) => {
+        const method = options?.method
+        if (url.includes('fields=files(id,name,md5Checksum)')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                files: Object.keys(FILE_MAP).map((n) => ({ id: n, name: `${n}.json`, md5Checksum: `${n}-sum` })),
+              }),
+          })
+        }
+        if (url.includes('alt=media')) {
+          const id = url.match(/files\/(\w+)/)![1]
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(FILE_MAP[id]) })
+        }
+        if (method === 'PATCH') {
+          throw new Error('PATCH should not be reached when the checksum recheck fails')
+        }
+        if (url.includes('fields=md5Checksum')) {
+          // pre-write checksum recheck fails with a real HTTP error status
+          return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'forbidden' }) })
+        }
+        throw new Error('unexpected fetch in save() test: ' + url)
+      }),
+    )
+    const src = new DriveSource('CID')
+    await src.connect()
+    ;(src as any).folderId = 'FOLDER'
+    await src.load()
+    await expect(src.save('meta', { foo: 1 })).rejects.toThrow()
+    expect((src as any).fileIds.meta).toEqual({ id: 'meta', md5Checksum: 'meta-sum' })
+  })
+
+  it('rejects when the media-upload PATCH fails, without caching an undefined checksum', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, options?: { method?: string }) => {
+        const method = options?.method
+        if (url.includes('fields=files(id,name,md5Checksum)')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                files: Object.keys(FILE_MAP).map((n) => ({ id: n, name: `${n}.json`, md5Checksum: `${n}-sum` })),
+              }),
+          })
+        }
+        if (url.includes('alt=media')) {
+          const id = url.match(/files\/(\w+)/)![1]
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(FILE_MAP[id]) })
+        }
+        if (method === 'PATCH') {
+          // media-upload overwrite fails with a real HTTP error status
+          return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'server error' }) })
+        }
+        if (url.includes('fields=md5Checksum')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ md5Checksum: 'meta-sum' }) })
+        }
+        throw new Error('unexpected fetch in save() test: ' + url)
+      }),
+    )
+    const src = new DriveSource('CID')
+    await src.connect()
+    ;(src as any).folderId = 'FOLDER'
+    await src.load()
+    await expect(src.save('meta', { foo: 1 })).rejects.toThrow()
+    expect((src as any).fileIds.meta).toEqual({ id: 'meta', md5Checksum: 'meta-sum' })
+  })
 })
