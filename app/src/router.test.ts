@@ -10,7 +10,7 @@ describe('router', () => {
     location.hash = '#/aylik'; expect(currentRoute()).toBe('aylik')
   })
   it('unknown hash -> panorama', () => { location.hash = '#/zzz'; expect(currentRoute()).toBe('panorama') })
-  it('exposes 7 routes', () => expect(ROUTES.length).toBe(7))
+  it('exposes 8 routes', () => expect(ROUTES.length).toBe(8))
   it('maps the new P1.6 hashes', () => {
     location.hash = '#/portfoyler'
     expect(currentRoute()).toBe('portfoyler')
@@ -22,9 +22,18 @@ describe('router', () => {
     expect(currentRoute()).toBe('temettu')
     location.hash = ''
   })
-  it('ROUTES has 7 entries in nav order', () => {
+  it('ROUTES has 8 entries in nav order', () => {
     expect(ROUTES.map((r) => r.id)).toEqual([
-      'panorama', 'portfoyler', 'kurumlar', 'pozisyonlar', 'aylik', 'banka', 'temettu',
+      'panorama', 'portfoyler', 'kurumlar', 'pozisyonlar', 'aylik', 'banka', 'temettu', 'ekle',
     ])
+  })
+  it('maps #/ekle', () => {
+    location.hash = '#/ekle'
+    expect(currentRoute()).toBe('ekle')
+    location.hash = ''
+  })
+  it('ROUTES has 8 entries', () => {
+    expect(ROUTES).toHaveLength(8)
+    expect(ROUTES.at(-1)?.id).toBe('ekle')
   })
 })
