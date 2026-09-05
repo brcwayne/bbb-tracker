@@ -3,6 +3,7 @@ import { render, fireEvent } from '@testing-library/svelte'
 import IslemFormu from './IslemFormu.svelte'
 import { fixture } from '../../fixtures/dataset'
 import { createAppStore, load, updateRecord } from '../../lib/data/store'
+import type { Transaction } from '../../lib/data/types'
 import { get } from 'svelte/store'
 
 async function v() {
@@ -24,7 +25,7 @@ describe('IslemFormu', () => {
     await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
     await fireEvent.change(getByLabelText('Portföy'), { target: { value: 'ENIS' } })
     await fireEvent.input(getByLabelText('Lot'), { target: { value: '999999' } })
-    await fireEvent.input(getByLabelText('Fiyat (USD)'), { target: { value: '10' } })
+    await fireEvent.input(getByLabelText('Fiyat (TL)'), { target: { value: '10' } })
     await fireEvent.click(getByText('İncele'))
     expect(getByText(/açık pozisyondan fazla/i)).toBeInTheDocument()
     expect(onSaved).not.toHaveBeenCalled()
@@ -49,7 +50,7 @@ describe('IslemFormu', () => {
     await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
     await fireEvent.change(getByLabelText('Portföy'), { target: { value: 'ENIS' } })
     await fireEvent.input(getByLabelText('Lot'), { target: { value: '5' } })
-    await fireEvent.input(getByLabelText('Fiyat (USD)'), { target: { value: '10' } })
+    await fireEvent.input(getByLabelText('Fiyat (TL)'), { target: { value: '10' } })
     await fireEvent.click(getByText('İncele'))
     await fireEvent.click(getByText('Onayla ve Kaydet'))
     expect(onSaved).toHaveBeenCalled()
@@ -128,10 +129,71 @@ describe('IslemFormu edit mode', () => {
     await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
     await fireEvent.change(getByLabelText('Portföy'), { target: { value: 'ENIS' } })
     await fireEvent.input(getByLabelText('Lot'), { target: { value: '1' } })
-    await fireEvent.input(getByLabelText('Fiyat (USD)'), { target: { value: '1' } })
+    await fireEvent.input(getByLabelText('Fiyat (TL)'), { target: { value: '1' } })
     const future = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
     await fireEvent.input(getByLabelText('Tarih'), { target: { value: future } })
     await fireEvent.click(getByText('İncele'))
     expect(getByText('Tarih gelecekte olamaz.')).toBeInTheDocument()
+  })
+
+  it('asks for the price in TL for a TL-denominated instrument and converts to USD via the live rate', async () => {
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    const state = get(store)
+    let saved: unknown
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (_n: string, data: unknown) => {
+        saved = data
+      },
+    }
+    const { getByLabelText, getByText } = render(IslemFormu, {
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved: vi.fn() },
+    })
+    await fireEvent.change(getByLabelText('Enstrüman'), { target: { value: 'THYAO' } })
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
+    await fireEvent.change(getByLabelText('Portföy'), { target: { value: 'ENIS' } })
+    await fireEvent.input(getByLabelText('Lot'), { target: { value: '1' } })
+    // fixture's latest fxrate (2024-01-01) is 30 TRY/USD — 300 TL should convert to 10 USD.
+    await fireEvent.input(getByLabelText('Fiyat (TL)'), { target: { value: '300' } })
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByText('Onayla ve Kaydet'))
+    const record = (saved as Transaction[]).find((t) => t.enstruman === 'THYAO' && t.yon === 'AL' && t.lot === 1)
+    expect(record?.fiyat_tl).toBe(300)
+    expect(record?.fiyat_usd).toBeCloseTo(10, 6)
+    expect(record?.girisParaBirimi).toBe('TL')
+  })
+
+  it('asks for the price in USD for a USD-denominated instrument, with no TL conversion', async () => {
+    const usdInstrument = { kod: 'SPCX.USA', ad: 'SPCX', sinif: 'USA' as const, girisParaBirimi: 'USD', fiyatKaynagi: 'yahoo', fiyatSembolu: 'SPCX', seviyeler: null }
+    const ds = { ...fixture, instruments: [...fixture.instruments, usdInstrument] }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(store)
+    let saved: unknown
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (_n: string, data: unknown) => {
+        saved = data
+      },
+    }
+    const { getByLabelText, getByText, queryByLabelText } = render(IslemFormu, {
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved: vi.fn() },
+    })
+    await fireEvent.change(getByLabelText('Enstrüman'), { target: { value: 'SPCX.USA' } })
+    expect(queryByLabelText('Fiyat (TL)')).not.toBeInTheDocument()
+    expect(getByLabelText('Fiyat (USD)')).toBeInTheDocument()
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
+    await fireEvent.change(getByLabelText('Portföy'), { target: { value: 'ENIS' } })
+    await fireEvent.input(getByLabelText('Lot'), { target: { value: '1' } })
+    await fireEvent.input(getByLabelText('Fiyat (USD)'), { target: { value: '25' } })
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByText('Onayla ve Kaydet'))
+    const record = (saved as Transaction[]).find((t) => t.enstruman === 'SPCX.USA')
+    expect(record?.fiyat_usd).toBe(25)
+    expect(record?.fiyat_tl).toBeNull()
+    expect(record?.girisParaBirimi).toBe('USD')
   })
 })

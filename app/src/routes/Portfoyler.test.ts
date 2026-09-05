@@ -14,11 +14,13 @@ async function v() {
 describe('Portfoyler', () => {
   it('shows a panel per non-empty portfolio with its holdings', async () => {
     const d = await v()
-    const { getByText, container } = render(Portfoyler, {
+    const { getAllByText, container } = render(Portfoyler, {
       props: { dataset: d.dataset, view: d.derived },
     })
-    expect(getByText('ENIS')).toBeInTheDocument()
-    expect(getByText('ALFA')).toBeInTheDocument()
+    // Each portfolio's name now appears twice — once as its pie-row label, once as its
+    // holdings panel's SectionHeader title.
+    expect(getAllByText('ENIS').length).toBeGreaterThanOrEqual(2)
+    expect(getAllByText('ALFA').length).toBeGreaterThanOrEqual(2)
     // THYAO + XAU live under ENIS
     expect(container.textContent).toContain('THYAO')
     expect(container.textContent).toContain('XAU')

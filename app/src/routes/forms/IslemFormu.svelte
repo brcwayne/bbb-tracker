@@ -5,7 +5,7 @@
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord, updateRecord } from '../../lib/data/store'
   import { derivePositions } from '../../lib/data/derive'
-  import { money } from '../../lib/settings.svelte'
+  import { money, settings } from '../../lib/settings.svelte'
 
   let {
     dataset,
@@ -28,23 +28,41 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
+  function instrumentOf(kod: string) {
+    return dataset.instruments.find((i) => i.kod === kod)
+  }
+
+  // Each instrument is quoted in its own market currency (BIST/gold in TL, US listings in
+  // USD) — the form asks for the price in that currency and converts to USD internally, so
+  // the user never has to do the TL→USD conversion in their head.
+  function initialPriceInput(): string {
+    if (!editing) return ''
+    if (instrumentOf(editing.enstruman)?.girisParaBirimi === 'USD') return String(editing.fiyat_usd)
+    if (editing.fiyat_tl != null) return String(editing.fiyat_tl)
+    return String(Math.round(editing.fiyat_usd * (editing.kur ?? settings.rate) * 100) / 100)
+  }
+
   let yon = $state<'AL' | 'SAT'>(editing?.yon ?? 'AL')
   let enstruman = $state(editing?.enstruman ?? '')
   let hesap = $state(editing?.hesap ?? '')
   let portfoy = $state(editing?.portfoy ?? '')
   let lot = $state(editing ? String(editing.lot) : '')
-  let fiyatUsd = $state(editing ? String(editing.fiyat_usd) : '')
+  let fiyatInput = $state(initialPriceInput())
   let not_ = $state(editing?.not ?? '')
   let tarih = $state(editing?.tarih ?? todayIso())
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
   let saving = $state(false)
 
-  const netUsd = $derived(Number(lot || 0) * Number(fiyatUsd || 0))
+  const priceCurrency = $derived(instrumentOf(enstruman)?.girisParaBirimi === 'USD' ? 'USD' : 'TL')
+  const fiyatUsd = $derived(
+    priceCurrency === 'USD' ? Number(fiyatInput || 0) : Number(fiyatInput || 0) / settings.rate,
+  )
+  const netUsd = $derived(Number(lot || 0) * fiyatUsd)
 
   function review() {
     error = null
-    if (!enstruman || !hesap || !portfoy || !lot || !fiyatUsd) {
+    if (!enstruman || !hesap || !portfoy || !lot || !fiyatInput) {
       error = 'Tüm alanları doldurun.'
       return
     }
@@ -72,7 +90,10 @@
         enstruman,
         yon,
         lot: lotNum,
-        fiyat_usd: Number(fiyatUsd),
+        girisParaBirimi: priceCurrency,
+        fiyat_tl: priceCurrency === 'TL' ? Number(fiyatInput) : null,
+        fiyat_usd: fiyatUsd,
+        kur: priceCurrency === 'TL' ? settings.rate : null,
         brut_usd: netUsd,
         net_usd: netUsd,
         not: not_,
@@ -101,7 +122,10 @@
           enstruman,
           yon,
           lot: Number(lot),
-          fiyat_usd: Number(fiyatUsd),
+          girisParaBirimi: priceCurrency,
+          fiyat_tl: priceCurrency === 'TL' ? Number(fiyatInput) : null,
+          fiyat_usd: fiyatUsd,
+          kur: priceCurrency === 'TL' ? settings.rate : null,
           brut_usd: netUsd,
           net_usd: netUsd,
           not: not_,
@@ -118,10 +142,10 @@
           enstruman,
           yon,
           lot: Number(lot),
-          girisParaBirimi: 'USD',
-          fiyat_tl: null,
-          fiyat_usd: Number(fiyatUsd),
-          kur: null,
+          girisParaBirimi: priceCurrency,
+          fiyat_tl: priceCurrency === 'TL' ? Number(fiyatInput) : null,
+          fiyat_usd: fiyatUsd,
+          kur: priceCurrency === 'TL' ? settings.rate : null,
           komisyon_usd: 0,
           brut_usd: netUsd,
           net_usd: netUsd,
@@ -133,7 +157,7 @@
       onSaved()
       if (!editing) {
         yon = 'AL'
-        enstruman = hesap = portfoy = lot = fiyatUsd = not_ = ''
+        enstruman = hesap = portfoy = lot = fiyatInput = not_ = ''
         tarih = todayIso()
         step = 'form'
       }
@@ -180,8 +204,8 @@
       <input type="number" bind:value={lot} aria-label="Lot" min="0" step="any" />
     </label>
     <label>
-      Fiyat (USD)
-      <input type="number" bind:value={fiyatUsd} aria-label="Fiyat (USD)" min="0" step="any" />
+      Fiyat ({priceCurrency})
+      <input type="number" bind:value={fiyatInput} aria-label={`Fiyat (${priceCurrency})`} min="0" step="any" />
     </label>
     <label class="wide">
       Not
@@ -196,7 +220,7 @@
   <button onclick={review}>İncele</button>
 {:else}
   <div class="summary">
-    <p><strong>{yon}</strong> — {enstruman} · {lot} lot · {fiyatUsd} USD/lot · toplam {money(netUsd)}</p>
+    <p><strong>{yon}</strong> — {enstruman} · {lot} lot · {fiyatInput} {priceCurrency}/lot · toplam {money(netUsd)}</p>
     <p>{hesap} / {portfoy}</p>
   </div>
   {#if error}<p class="error">{error}</p>{/if}

@@ -339,8 +339,8 @@
     }
   }
   .hero {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 1px;
     background: var(--hairline);
     border: 1px solid var(--hairline);
@@ -349,12 +349,13 @@
     margin-bottom: 1.25rem;
   }
   .hf {
-    background: #0c0f13;
+    background: var(--surface-2);
     color: var(--ink);
     padding: 0.6rem 0.75rem;
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
+    flex: 1 1 140px;
   }
   .hf .hl {
     font-size: 0.68rem;

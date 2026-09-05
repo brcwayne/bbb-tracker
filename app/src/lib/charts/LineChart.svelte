@@ -25,6 +25,17 @@
   const pts = $derived(series.map((d) => [sx(d.x), sy(d.y)] as [number, number]))
   // Thin horizontal reference lines at nice round values.
   const grid = $derived(series.length ? sy.ticks(4).map((v) => ({ v, y: sy(v) })) : [])
+  // A handful of evenly spaced date ticks along the bottom, so the covered period is legible
+  // without having to hover — first, last, and a few in between.
+  const xTickIdx = $derived.by(() => {
+    const n = series.length
+    if (n === 0) return []
+    if (n <= 5) return series.map((_, i) => i)
+    const count = 5
+    const idx = new Set<number>()
+    for (let k = 0; k < count; k++) idx.add(Math.round((k * (n - 1)) / (count - 1)))
+    return [...idx].sort((a, b) => a - b)
+  })
 
   let hoverI = $state<number | null>(null)
 
@@ -69,6 +80,14 @@
       stroke-dasharray="1 3"
     />
     <text x={pad} y={g.y - 3} style="font-size:8px; fill:var(--ink-soft);">{fmtY(g.v)}</text>
+  {/each}
+  {#each xTickIdx as i}
+    <text
+      x={pts[i][0]}
+      y={height - pad + 12}
+      text-anchor={i === 0 ? 'start' : i === xTickIdx[xTickIdx.length - 1] ? 'end' : 'middle'}
+      style="font-size:8px; fill:var(--ink-soft);">{labels[i] ?? ''}</text
+    >
   {/each}
   <path class="area" d={areaPath(pts, height - pad)} fill="var(--gain)" fill-opacity="0.08" />
   <path

@@ -25,10 +25,16 @@
     (view?.byPortfolio ?? []).map((r) => ({ label: r.key, value: r.tutarUsd })),
   )
 
-  function classMix(g: HoldingGroup) {
-    const m = new Map<string, number>()
-    for (const r of g.rows) m.set(r.sinif, (m.get(r.sinif) ?? 0) + r.toplamMaliyetUsd)
-    return [...m.entries()].map(([label, value]) => ({ label, value }))
+  // Top 4 holdings by cost, the rest bucketed into "Diğer" — keeps slice count at or under
+  // the shared Donut palette's 4 colors, so a portfolio with many small positions doesn't
+  // end up with repeated, indistinguishable slice colors.
+  function instrumentMix(g: HoldingGroup) {
+    const sorted = [...g.rows].sort((a, b) => b.toplamMaliyetUsd - a.toplamMaliyetUsd)
+    const top = sorted.slice(0, 4)
+    const rest = sorted.slice(4)
+    const slices = top.map((r) => ({ label: r.kod, value: r.toplamMaliyetUsd }))
+    if (rest.length) slices.push({ label: 'Diğer', value: rest.reduce((s, r) => s + r.toplamMaliyetUsd, 0) })
+    return slices
   }
 
   const cols = [
@@ -47,8 +53,17 @@
 {#if dataset && view}
   <section class="portfoyler">
     <SectionHeader title="Portföyler" />
-    <div class="overall">
-      <Donut slices={overall} fmt={(v) => money(v)} />
+    <div class="pie-row">
+      <div class="pie-item">
+        <span class="pie-label">Tümü</span>
+        <Donut slices={overall} fmt={(v) => money(v)} />
+      </div>
+      {#each groups as g}
+        <div class="pie-item">
+          <span class="pie-label">{g.key}</span>
+          <Donut slices={instrumentMix(g)} size={104} thickness={16} fmt={(v) => money(v)} />
+        </div>
+      {/each}
     </div>
     {#each groups as g}
       <div class="panel">
@@ -56,7 +71,6 @@
           title={g.key}
           note={`${money(g.totalCostUsd)} maliyet · ${g.totalValueUsd == null ? DASH : money(g.totalValueUsd)} değer · ${g.unrealUsd == null ? DASH : money(g.unrealUsd, { sign: true })}`}
         />
-        <div class="mix"><Donut slices={classMix(g)} size={104} thickness={16} fmt={(v) => money(v)} /></div>
         <DataTable columns={cols} rows={g.rows} initialSort={{ key: 'toplamMaliyetUsd', dir: 'desc' }} />
       </div>
     {/each}
@@ -71,8 +85,23 @@
     max-width: min(1240px, 96vw);
     margin: 0 auto;
   }
-  .overall {
-    margin: 0.5rem 0 1rem;
+  .pie-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1.75rem;
+    margin: 0.5rem 0 1.5rem;
+  }
+  .pie-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .pie-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-soft);
   }
   .panel {
     background: var(--surface);
@@ -80,8 +109,5 @@
     border-radius: 6px;
     padding: 0.25rem 1rem 1rem;
     margin-bottom: 1.25rem;
-  }
-  .mix {
-    margin: 0.25rem 0 0.75rem;
   }
 </style>
