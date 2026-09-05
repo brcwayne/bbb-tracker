@@ -67,6 +67,33 @@ describe('KurumFormu', () => {
       tur: 'aracı kurum',
       sahip: 'ORTAK',
       aktif: true,
+      kaynak: 'manual',
     })
+  })
+})
+
+describe('KurumFormu edit mode', () => {
+  it('pre-fills fields, keeps kod read-only, and updates the record on confirm', async () => {
+    const editingBroker = { kod: 'B_MANUAL', ad: 'Eski Ad', tur: 'yerli', sahip: 'Enis', aktif: true, kaynak: 'manual' }
+    const ds = { ...fixture, brokers: [...fixture.brokers, editingBroker] }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(store)
+    const onSaved = vi.fn()
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+    const { getByLabelText, getByText } = render(KurumFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved, editing: editingBroker },
+    })
+    const kodInput = getByLabelText('Kod') as HTMLInputElement
+    expect(kodInput.value).toBe('B_MANUAL')
+    expect(kodInput.readOnly).toBe(true)
+
+    await fireEvent.input(getByLabelText('Ad'), { target: { value: 'Yeni Ad' } })
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByText('Onayla ve Güncelle'))
+
+    expect(onSaved).toHaveBeenCalled()
+    const updated = get(store).dataset?.brokers.find((b) => b.kod === 'B_MANUAL')
+    expect(updated?.ad).toBe('Yeni Ad')
   })
 })

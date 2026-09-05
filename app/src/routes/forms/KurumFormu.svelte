@@ -3,24 +3,26 @@
   import type { Dataset, Broker } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord } from '../../lib/data/store'
+  import { appendRecord, updateRecord } from '../../lib/data/store'
 
   let {
     dataset,
     source,
     store,
     onSaved,
+    editing,
   }: {
     dataset: Dataset
     source: DataSource
     store: Writable<AppState>
     onSaved: () => void
+    editing?: Broker
   } = $props()
 
-  let kod = $state('')
-  let ad = $state('')
-  let tur = $state('')
-  let sahip = $state('')
+  let kod = $state(editing?.kod ?? '')
+  let ad = $state(editing?.ad ?? '')
+  let tur = $state(editing?.tur ?? '')
+  let sahip = $state(editing?.sahip ?? '')
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
   let saving = $state(false)
@@ -31,7 +33,7 @@
       error = 'Tüm alanları doldurun.'
       return
     }
-    if (dataset.brokers.some((b) => b.kod === kod.trim())) {
+    if (!editing && dataset.brokers.some((b) => b.kod === kod.trim())) {
       error = 'Bu kod zaten kullanılıyor.'
       return
     }
@@ -42,17 +44,18 @@
     saving = true
     error = null
     try {
-      const record: Broker = {
-        kod: kod.trim(),
-        ad: ad.trim(),
-        tur: tur.trim(),
-        sahip: sahip.trim(),
-        aktif: true,
+      if (editing) {
+        const patch: Broker = { ...editing, kod: editing.kod, ad: ad.trim(), tur: tur.trim(), sahip: sahip.trim() }
+        await updateRecord<Broker>(store, source, 'brokers', (b) => b.kod === editing!.kod, patch)
+      } else {
+        const record: Broker = { kod: kod.trim(), ad: ad.trim(), tur: tur.trim(), sahip: sahip.trim(), aktif: true, kaynak: 'manual' }
+        await appendRecord(store, source, 'brokers', record)
       }
-      await appendRecord(store, source, 'brokers', record)
       onSaved()
-      kod = ad = tur = sahip = ''
-      step = 'form'
+      if (!editing) {
+        kod = ad = tur = sahip = ''
+        step = 'form'
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -65,7 +68,7 @@
   <div class="grid">
     <label>
       Kod
-      <input type="text" bind:value={kod} aria-label="Kod" />
+      <input type="text" bind:value={kod} aria-label="Kod" readonly={!!editing} />
     </label>
     <label>
       Ad
@@ -89,7 +92,9 @@
   </div>
   {#if error}<p class="error">{error}</p>{/if}
   <button onclick={() => (step = 'form')} disabled={saving}>Geri</button>
-  <button onclick={confirmSave} disabled={saving}>{saving ? 'Kaydediliyor…' : 'Onayla ve Kaydet'}</button>
+  <button onclick={confirmSave} disabled={saving}>
+    {saving ? 'Kaydediliyor…' : editing ? 'Onayla ve Güncelle' : 'Onayla ve Kaydet'}
+  </button>
 {/if}
 
 <style>
