@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset } from '../../lib/data/types'
+  import type { Dataset, Transaction } from '../../lib/data/types'
   import type { DerivedBundle, AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord } from '../../lib/data/store'
+  import { appendRecord, updateRecord } from '../../lib/data/store'
+  import { derivePositions } from '../../lib/data/derive'
   import { money } from '../../lib/settings.svelte'
 
   let {
@@ -12,21 +13,28 @@
     source,
     store,
     onSaved,
+    editing,
   }: {
     dataset: Dataset
     view: DerivedBundle
     source: DataSource
     store: Writable<AppState>
     onSaved: () => void
+    editing?: Transaction
   } = $props()
 
-  let yon = $state<'AL' | 'SAT'>('AL')
-  let enstruman = $state('')
-  let hesap = $state('')
-  let portfoy = $state('')
-  let lot = $state('')
-  let fiyatUsd = $state('')
-  let not_ = $state('')
+  function todayIso() {
+    return new Date().toISOString().slice(0, 10)
+  }
+
+  let yon = $state<'AL' | 'SAT'>(editing?.yon ?? 'AL')
+  let enstruman = $state(editing?.enstruman ?? '')
+  let hesap = $state(editing?.hesap ?? '')
+  let portfoy = $state(editing?.portfoy ?? '')
+  let lot = $state(editing ? String(editing.lot) : '')
+  let fiyatUsd = $state(editing ? String(editing.fiyat_usd) : '')
+  let not_ = $state(editing?.not ?? '')
+  let tarih = $state(editing?.tarih ?? todayIso())
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
   let saving = $state(false)
@@ -39,9 +47,16 @@
       error = 'Tüm alanları doldurun.'
       return
     }
+    if (tarih > todayIso()) {
+      error = 'Tarih gelecekte olamaz.'
+      return
+    }
     const lotNum = Number(lot)
     if (yon === 'SAT') {
-      const open = view.positions.open.find((p) => p.kod === enstruman)?.lot ?? 0
+      const openPositions = editing
+        ? derivePositions(dataset.transactions.filter((t) => t.id !== editing!.id)).open
+        : view.positions.open
+      const open = openPositions.find((p) => p.kod === enstruman)?.lot ?? 0
       if (lotNum > open + 1e-9) {
         error = `Bu enstrümanda açık pozisyondan fazla satamazsınız (açık: ${open}).`
         return
@@ -54,31 +69,51 @@
     saving = true
     error = null
     try {
-      const rand = crypto.getRandomValues(new Uint8Array(8))
-      const id = 't_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
-      await appendRecord(store, source, 'transactions', {
-        id,
-        tarih: new Date().toISOString().slice(0, 10),
-        hesap,
-        portfoy,
-        enstruman,
-        yon,
-        lot: Number(lot),
-        girisParaBirimi: 'USD',
-        fiyat_tl: null,
-        fiyat_usd: Number(fiyatUsd),
-        kur: null,
-        komisyon_usd: 0,
-        brut_usd: netUsd,
-        net_usd: netUsd,
-        not: not_,
-        kaynak: 'manual',
-        olusturulma: new Date().toISOString(),
-      })
+      if (editing) {
+        const patch: Transaction = {
+          ...editing,
+          tarih,
+          hesap,
+          portfoy,
+          enstruman,
+          yon,
+          lot: Number(lot),
+          fiyat_usd: Number(fiyatUsd),
+          brut_usd: netUsd,
+          net_usd: netUsd,
+          not: not_,
+        }
+        await updateRecord<Transaction>(store, source, 'transactions', (t) => t.id === editing!.id, patch)
+      } else {
+        const rand = crypto.getRandomValues(new Uint8Array(8))
+        const id = 't_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
+        await appendRecord(store, source, 'transactions', {
+          id,
+          tarih,
+          hesap,
+          portfoy,
+          enstruman,
+          yon,
+          lot: Number(lot),
+          girisParaBirimi: 'USD',
+          fiyat_tl: null,
+          fiyat_usd: Number(fiyatUsd),
+          kur: null,
+          komisyon_usd: 0,
+          brut_usd: netUsd,
+          net_usd: netUsd,
+          not: not_,
+          kaynak: 'manual',
+          olusturulma: new Date().toISOString(),
+        })
+      }
       onSaved()
-      yon = 'AL'
-      enstruman = hesap = portfoy = lot = fiyatUsd = not_ = ''
-      step = 'form'
+      if (!editing) {
+        yon = 'AL'
+        enstruman = hesap = portfoy = lot = fiyatUsd = not_ = ''
+        tarih = todayIso()
+        step = 'form'
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
     } finally {
@@ -129,6 +164,10 @@
       Not
       <input type="text" bind:value={not_} aria-label="Not" />
     </label>
+    <label>
+      Tarih
+      <input type="date" bind:value={tarih} aria-label="Tarih" max={todayIso()} />
+    </label>
   </div>
   {#if error}<p class="error">{error}</p>{/if}
   <button onclick={review}>İncele</button>
@@ -139,7 +178,9 @@
   </div>
   {#if error}<p class="error">{error}</p>{/if}
   <button onclick={() => (step = 'form')} disabled={saving}>Geri</button>
-  <button onclick={confirmSave} disabled={saving}>{saving ? 'Kaydediliyor…' : 'Onayla ve Kaydet'}</button>
+  <button onclick={confirmSave} disabled={saving}>
+    {saving ? 'Kaydediliyor…' : editing ? 'Onayla ve Güncelle' : 'Onayla ve Kaydet'}
+  </button>
 {/if}
 
 <style>
