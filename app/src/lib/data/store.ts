@@ -99,18 +99,20 @@ export function pickSource(): DataSource {
   return new LocalFileSource()
 }
 
-export async function appendRecord<T>(
+export type Kind = 'transactions' | 'cashflows' | 'assetTransfers' | 'brokers'
+
+async function writeAndCommit(
   store: Writable<AppState>,
   source: DataSource,
-  file: 'transactions' | 'cashflows' | 'assetTransfers' | 'brokers',
-  record: T,
+  file: Kind,
+  build: (current: unknown[]) => unknown[],
 ): Promise<void> {
-  if (!source.save) throw new Error("Bu kaynakta kayıt eklenemez — sadece Google Drive'a yazılabilir.")
+  if (!source.save) throw new Error("Bu kaynakta kayıt değiştirilemez — sadece Google Drive'a yazılabilir.")
   const state = get(store)
   if (!state.dataset) throw new Error('Veri henüz yüklenmedi.')
 
   const attempt = async (ds: Dataset): Promise<Dataset> => {
-    const updatedArray = [...(ds[file] as unknown as T[]), record]
+    const updatedArray = build(ds[file] as unknown as unknown[])
     await source.save!(file, updatedArray)
     return { ...ds, [file]: updatedArray }
   }
@@ -129,5 +131,47 @@ export async function appendRecord<T>(
     dataset: newDataset,
     derived: deriveAll(newDataset),
     sourceText: state.sourceText,
+  })
+}
+
+export async function appendRecord<T>(
+  store: Writable<AppState>,
+  source: DataSource,
+  file: Kind,
+  record: T,
+): Promise<void> {
+  return writeAndCommit(store, source, file, (current) => [...(current as T[]), record])
+}
+
+export async function updateRecord<T extends { kaynak?: string }>(
+  store: Writable<AppState>,
+  source: DataSource,
+  file: Kind,
+  matches: (r: T) => boolean,
+  patch: T,
+): Promise<void> {
+  return writeAndCommit(store, source, file, (current) => {
+    const arr = current as T[]
+    const idx = arr.findIndex(matches)
+    if (idx === -1) throw new Error('Kayıt bulunamadı — başka bir yerden silinmiş olabilir.')
+    if (arr[idx].kaynak !== 'manual') throw new Error('Sadece manuel kayıtlar düzenlenebilir.')
+    const next = [...arr]
+    next[idx] = patch
+    return next
+  })
+}
+
+export async function deleteRecord<T extends { kaynak?: string }>(
+  store: Writable<AppState>,
+  source: DataSource,
+  file: Kind,
+  matches: (r: T) => boolean,
+): Promise<void> {
+  return writeAndCommit(store, source, file, (current) => {
+    const arr = current as T[]
+    const target = arr.find(matches)
+    if (!target) throw new Error('Kayıt bulunamadı — başka bir yerden silinmiş olabilir.')
+    if (target.kaynak !== 'manual') throw new Error('Sadece manuel kayıtlar silinebilir.')
+    return arr.filter((r) => !matches(r))
   })
 }

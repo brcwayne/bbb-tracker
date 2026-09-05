@@ -85,6 +85,8 @@ export interface Broker {
   tur: string
   sahip: string
   aktif: boolean
+  /** 'manual' for brokers added via the in-app form; absent (undefined) for migrated Excel rows — never editable/deletable in-app (Ruling P3.5-2). */
+  kaynak?: string
 }
 
 export interface Portfolio {
