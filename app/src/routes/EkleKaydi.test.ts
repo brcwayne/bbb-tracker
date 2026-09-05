@@ -26,8 +26,8 @@ describe('EkleKaydi', () => {
     expect(getByText('Nakit Hareketi')).toBeInTheDocument()
     expect(getByText('Varlık Transferi')).toBeInTheDocument()
     expect(getByText('Kurum Ekle')).toBeInTheDocument()
-    await fireEvent.click(getByText('İşlem (Al/Sat)'))
-    expect(getByText(/İşlem \(Al\/Sat\) formu/i)).toBeInTheDocument()
+    await fireEvent.click(getByText('Nakit Hareketi'))
+    expect(getByText(/Nakit Hareketi formu/i)).toBeInTheDocument()
   })
 
   it('renders an empty state without data', () => {

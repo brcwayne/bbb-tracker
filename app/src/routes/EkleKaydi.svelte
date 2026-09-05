@@ -6,6 +6,7 @@
   import type { AppState } from '../lib/data/store'
   import EmptyState from '../lib/ui/EmptyState.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
+  import IslemFormu from './forms/IslemFormu.svelte'
 
   let {
     dataset,
@@ -33,7 +34,11 @@
         <button class:active={kind === k} onclick={() => (kind = k as Kind)}>{label}</button>
       {/each}
     </div>
-    {#if kind}
+    {#if kind === 'islem'}
+      <div class="form-area">
+        <IslemFormu {dataset} {view} {source} {store} onSaved={() => (kind = null)} />
+      </div>
+    {:else if kind}
       <div class="form-area">
         <p class="placeholder">{labels[kind]} formu buraya gelecek.</p>
       </div>
