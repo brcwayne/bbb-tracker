@@ -37,7 +37,21 @@
     return slices
   }
 
+  // Each row carries its weight within its own portfolio: `_costW` by cost, `_valW` by
+  // current value (null when prices aren't in yet).
+  function rowsFor(g: HoldingGroup) {
+    return g.rows.map((r) => ({
+      ...r,
+      _costW: g.totalCostUsd ? r.toplamMaliyetUsd / g.totalCostUsd : null,
+      _valW:
+        g.totalValueUsd != null && g.totalValueUsd !== 0 && r.degerUsd != null
+          ? r.degerUsd / g.totalValueUsd
+          : null,
+    }))
+  }
+
   const cols = [
+    { key: '_costW', label: '% Mlyt', align: 'right' as const, sortable: true, fmt: (v: number | null) => (v == null ? DASH : pct(v)) },
     { key: 'kod', label: 'Hisse', sortable: true },
     { key: 'sinif', label: 'Sınıf', sortable: true },
     { key: 'lot', label: 'Lot', align: 'right' as const, sortable: true, fmt: (v: number) => lot(v) },
@@ -47,6 +61,7 @@
     { key: 'degerUsd', label: 'Değer', align: 'right' as const, sortable: true, fmt: (v: number | null) => (v == null ? DASH : money(v)) },
     { key: 'kzUsd', label: 'Gerç.mmiş K/Z', align: 'right' as const, sortable: true, tone: 'sign' as const, fmt: (v: number | null) => (v == null ? DASH : money(v, { sign: true })) },
     { key: 'kzPct', label: '%', align: 'right' as const, sortable: true, tone: 'sign' as const, fmt: (v: number | null) => (v == null ? DASH : pct(v)) },
+    { key: '_valW', label: '% Portföy', align: 'right' as const, sortable: true, fmt: (v: number | null) => (v == null ? DASH : pct(v)) },
   ]
 </script>
 
@@ -71,7 +86,7 @@
           title={g.key}
           note={`${money(g.totalCostUsd)} maliyet · ${g.totalValueUsd == null ? DASH : money(g.totalValueUsd)} değer · ${g.unrealUsd == null ? DASH : money(g.unrealUsd, { sign: true })}`}
         />
-        <DataTable columns={cols} rows={g.rows} initialSort={{ key: 'toplamMaliyetUsd', dir: 'desc' }} />
+        <DataTable columns={cols} rows={rowsFor(g)} initialSort={{ key: 'toplamMaliyetUsd', dir: 'desc' }} />
       </div>
     {/each}
   </section>

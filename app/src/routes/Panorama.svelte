@@ -71,8 +71,10 @@
       headerNote:
         `son bilinen — ${dateShort(ds.meta.olusturulma.slice(0, 10))}` +
         (settings.period === 'all' ? '' : ` · ${periodLabel}`),
-      equitySeries: snaps.map((s, i) => ({ x: i, y: s.toplamOzkaynak_usd })),
-      equityLabels: snaps.map((s) => dateShort(s.tarih.slice(0, 10))),
+      // Panorama's equity curve is a "recent shape" view — last ~12 months. The full
+      // all-time curve lives on the Aylık Rapor page.
+      equitySeries: snaps.slice(-13).map((s, i) => ({ x: i, y: s.toplamOzkaynak_usd })),
+      equityLabels: snaps.slice(-13).map((s) => dateShort(s.tarih.slice(0, 10))),
       classSlices: d.byClass.map((r) => ({ label: r.key, value: r.tutarUsd })),
       classTotal: d.byClass.reduce((s, r) => s + r.tutarUsd, 0),
       classLegend: d.byClass.map((r) => ({
@@ -114,35 +116,27 @@
         value: c.gerceklesmisKzUsd,
       })),
       periods: d.periods,
-      hero:
+      // One reconciled summary instead of the old hero band + two overlapping mini panels
+      // (which showed the same concepts under 5 different TR/EN labels and two different
+      // "total equity" numbers). "Güncel Özkaynak" is the actual latest monthly snapshot;
+      // everything else is a supporting figure around it.
+      ozet:
         view == null
           ? null
           : (() => {
               const b = view.dashboard
-              const gerceklesmemisKz = unrealTotal
-              const gerceklesmemisOzkaynak = unrealTotal == null ? null : b.donemSonu + unrealTotal
               return {
-                fields: [
-                  { label: 'Toplam Sermaye', v: money(b.toplamSermaye) },
-                  { label: 'İçeride Kalan Gerçekleşmiş Kâr', v: money(b.icerideKalan), tone: toneOf(b.icerideKalan) },
-                  { label: 'Kâr/Sermaye Çekimleri', v: b.cekimler === 0 ? DASH : money(b.cekimler) },
-                  { label: 'Dönem Sonu Sermayesi', v: money(b.donemSonu) },
-                  {
-                    label: 'Gerçekleşmemiş Kazanç/Kayıp',
-                    v: gerceklesmemisKz == null ? DASH : money(gerceklesmemisKz),
-                    tone: gerceklesmemisKz == null ? undefined : toneOf(gerceklesmemisKz),
-                  },
-                  { label: 'Gerçekleşmemiş Özkaynak Değeri', v: gerceklesmemisOzkaynak == null ? DASH : money(gerceklesmemisOzkaynak) },
-                  { label: 'Nakit Bakiyesi', v: money(b.nakitBakiyesi) },
-                ],
-                summary: {
-                  realized: b.realized,
-                  unreal: unrealTotal,
-                  capital: b.toplamSermaye,
-                  totalProfit: b.icerideKalan,
-                  endCapital: b.donemSonu,
-                },
-                overall: { totalGain: b.totalGain, totalLoss: b.totalLoss, gainLoss: b.gainLoss },
+                guncelOzkaynak: equityUsd,
+                yatirilanSermaye: b.toplamSermaye,
+                ozkaynakGetiri: equityUsd - b.toplamSermaye,
+                gerceklesmisKz: b.realized,
+                gerceklesmemisKz: unrealTotal,
+                temettu: b.temettu,
+                cekimler: b.cekimler,
+                nakit: nakitUsd,
+                kapananKazanc: b.totalGain,
+                kapananKayip: b.totalLoss,
+                kapananNet: b.gainLoss,
               }
             })(),
       month: view?.monthPerf ?? null,
@@ -181,36 +175,53 @@
 {#if dataset && derived}
   {@const vm = buildView(dataset, derived)}
   <section class="panorama">
-    {#if vm.hero}
-      <div class="hero">
-        {#each vm.hero.fields as f}
-          <div class="hf" class:pos={f.tone === 'gain'} class:neg={f.tone === 'loss'}>
-            <span class="hl">{f.label}</span>
-            <span class="hv num">{f.v}</span>
-          </div>
-        {/each}
-      </div>
-      <div class="grid-2">
-        <div class="panel">
-          <SectionHeader title="Hesap Özeti" />
-          <dl class="mini">
-            <div><dt>Realized</dt><dd class="num">{money(vm.hero.summary.realized)} · {pct(vm.hero.summary.realized / (vm.hero.summary.capital || 1))}</dd></div>
-            <div><dt>Unrealized</dt><dd class="num">{vm.hero.summary.unreal == null ? DASH : `${money(vm.hero.summary.unreal)} · ${pct(vm.hero.summary.unreal / (vm.hero.summary.capital || 1))}`}</dd></div>
-            <div><dt>Total</dt><dd class="num">{money(vm.hero.summary.realized + (vm.hero.summary.unreal ?? 0))}</dd></div>
-            <div><dt>Capital</dt><dd class="num">{money(vm.hero.summary.capital)}</dd></div>
-            <div><dt>Total Profit</dt><dd class="num">{money(vm.hero.summary.totalProfit)}</dd></div>
-            <div><dt>End Capital</dt><dd class="num">{money(vm.hero.summary.endCapital)}</dd></div>
-          </dl>
+    {#if vm.ozet}
+      <SectionHeader title="Özet" />
+      <dl class="mini">
+        <div>
+          <dt>Güncel Özkaynak <span class="hint">son ay</span></dt>
+          <dd class="num strong">{money(vm.ozet.guncelOzkaynak)}</dd>
         </div>
-        <div class="panel">
-          <SectionHeader title="Genel Performans" />
-          <dl class="mini">
-            <div><dt>Toplam Kazanç</dt><dd class="num pos">{money(vm.hero.overall.totalGain)}</dd></div>
-            <div><dt>Toplam Kayıp</dt><dd class="num neg">{money(vm.hero.overall.totalLoss)}</dd></div>
-            <div><dt>Net</dt><dd class="num">{money(vm.hero.overall.gainLoss)} · {pct(vm.hero.overall.gainLoss / (vm.hero.summary.capital || 1))}</dd></div>
-          </dl>
+        <div><dt>Yatırılan Sermaye</dt><dd class="num">{money(vm.ozet.yatirilanSermaye)}</dd></div>
+        <div>
+          <dt>Özkaynak Getirisi <span class="hint">güncel − yatırılan</span></dt>
+          <dd class="num" class:pos={vm.ozet.ozkaynakGetiri > 0} class:neg={vm.ozet.ozkaynakGetiri < 0}>
+            {money(vm.ozet.ozkaynakGetiri, { sign: true })}
+          </dd>
         </div>
-      </div>
+        <div>
+          <dt>Gerçekleşmiş K/Z</dt>
+          <dd class="num" class:pos={vm.ozet.gerceklesmisKz > 0} class:neg={vm.ozet.gerceklesmisKz < 0}>
+            {money(vm.ozet.gerceklesmisKz, { sign: true })}
+          </dd>
+        </div>
+        <div>
+          <dt>Gerçekleşmemiş K/Z</dt>
+          <dd
+            class="num"
+            class:pos={(vm.ozet.gerceklesmemisKz ?? 0) > 0}
+            class:neg={(vm.ozet.gerceklesmemisKz ?? 0) < 0}
+          >
+            {vm.ozet.gerceklesmemisKz == null ? DASH : money(vm.ozet.gerceklesmemisKz, { sign: true })}
+          </dd>
+        </div>
+        <div><dt>Alınan Temettü</dt><dd class="num">{money(vm.ozet.temettu)}</dd></div>
+        <div><dt>Çekimler</dt><dd class="num">{vm.ozet.cekimler === 0 ? DASH : money(vm.ozet.cekimler)}</dd></div>
+        <div><dt>Nakit</dt><dd class="num">{money(vm.ozet.nakit)}</dd></div>
+      </dl>
+
+      <SectionHeader title="Kapanan İşlemler" note="tüm zamanlar" />
+      <dl class="mini">
+        <div><dt>Toplam Kazanç</dt><dd class="num pos">{money(vm.ozet.kapananKazanc)}</dd></div>
+        <div><dt>Toplam Kayıp</dt><dd class="num neg">{money(vm.ozet.kapananKayip)}</dd></div>
+        <div>
+          <dt>Net</dt>
+          <dd class="num" class:pos={vm.ozet.kapananNet > 0} class:neg={vm.ozet.kapananNet < 0}>
+            {money(vm.ozet.kapananNet, { sign: true })}
+          </dd>
+        </div>
+      </dl>
+
       {#if vm.month}
         <SectionHeader title="Bu Ay" />
         <dl class="mini month">
@@ -228,7 +239,7 @@
 
     <SectionHeader title="Panorama" note={vm.headerNote} />
 
-    <SectionHeader title="Özkaynak eğrisi" />
+    <SectionHeader title="Özkaynak eğrisi" note="son 12 ay" />
     <LineChart series={vm.equitySeries} labels={vm.equityLabels} fmtY={(v) => money(v)} />
 
     <div class="grid-2">
@@ -338,47 +349,19 @@
       grid-template-columns: 1fr 1fr;
     }
   }
-  .hero {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1px;
-    background: var(--hairline);
-    border: 1px solid var(--hairline);
-    border-radius: 6px;
-    overflow: hidden;
-    margin-bottom: 1.25rem;
-  }
-  .hf {
-    background: var(--surface-2);
-    color: var(--ink);
-    padding: 0.6rem 0.75rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    flex: 1 1 140px;
-  }
-  .hf .hl {
-    font-size: 0.68rem;
-    color: var(--ink-soft);
-    letter-spacing: 0.02em;
-    line-height: 1.2;
-  }
-  .hf .hv {
-    font-size: 1.05rem;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-  .hf.pos .hv {
-    color: var(--gain);
-  }
-  .hf.neg .hv {
-    color: var(--loss);
-  }
   .mini {
-    margin: 0.25rem 0 0.5rem;
+    margin: 0.25rem 0 0.75rem;
     display: grid;
     grid-template-columns: 1fr;
     gap: 0.25rem 1.5rem;
+  }
+  .mini dt .hint {
+    font-size: 0.78em;
+    color: var(--ink-soft);
+    font-weight: 400;
+  }
+  .mini dd.strong {
+    font-size: 1.15em;
   }
   .mini div {
     display: flex;

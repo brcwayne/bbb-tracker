@@ -38,19 +38,19 @@ describe('Panorama', () => {
     prices.usdPerGram = null
     prices.status = 'idle'
   })
-  it('renders the Excel top-block with the 7 fields', async () => {
+  it('renders the consolidated Özet section', async () => {
     const v = await derived()
     const { getByText, container } = render(Panorama, {
       props: { dataset: v.dataset, derived: v.derived, view: v.derived },
     })
-    expect(getByText('Toplam Sermaye')).toBeInTheDocument()
-    expect(getByText('Dönem Sonu Sermayesi')).toBeInTheDocument()
-    expect(getByText('Nakit Bakiyesi')).toBeInTheDocument()
-    expect(getByText(/İçeride Kalan/i)).toBeInTheDocument()
+    expect(getByText('Özet')).toBeInTheDocument()
+    expect(getByText(/Güncel Özkaynak/)).toBeInTheDocument()
+    expect(getByText('Yatırılan Sermaye')).toBeInTheDocument()
+    expect(getByText('Kapanan İşlemler')).toBeInTheDocument()
     // fixture: toplamSermaye 5000
     expect(container.textContent).toContain('$5,000.00')
-    // unrealized unknown → dash on field 5/6
-    expect(getByText('Gerçekleşmemiş Kazanç/Kayıp')).toBeInTheDocument()
+    // Gerçekleşmemiş K/Z appears both here and as a KPI label; scope by textContent.
+    expect(container.textContent).toContain('Gerçekleşmemiş K/Z')
   })
 
   it('shows THIS MONTH block from the newest snapshot', async () => {
