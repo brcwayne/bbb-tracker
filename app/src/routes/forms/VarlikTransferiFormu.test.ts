@@ -84,5 +84,7 @@ describe('VarlikTransferiFormu', () => {
     // hedefPortfoy was left unselected — must be stored as null, not ''.
     const record = get(store).dataset?.assetTransfers.find((t) => t.kaynakHesap === 'GARAN' && t.hedefHesap === 'MIDAS')
     expect(record?.hedefPortfoy).toBeNull()
+    // Load-bearing for cashBalanceByHesap's migration-vs-manual filtering.
+    expect(record?.kaynak).toBe('manual')
   })
 })

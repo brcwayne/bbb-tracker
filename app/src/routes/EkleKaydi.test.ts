@@ -40,4 +40,27 @@ describe('EkleKaydi', () => {
     const { getByText } = render(EkleKaydi, { props: {} })
     expect(getByText('Ekle')).toBeInTheDocument()
   })
+
+  it('shows a green success message after a form saves, and clears it on the next pick', async () => {
+    const { state, store } = await v()
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async () => {},
+    }
+    const { getByText, getByLabelText, queryByText } = render(EkleKaydi, {
+      props: { dataset: state.dataset, view: state.derived, source, store },
+    })
+    await fireEvent.click(getByText('Kurum Ekle'))
+    await fireEvent.input(getByLabelText('Kod'), { target: { value: 'YENIKURUM' } })
+    await fireEvent.input(getByLabelText('Ad'), { target: { value: 'Yeni Kurum A.Ş.' } })
+    await fireEvent.input(getByLabelText('Tür'), { target: { value: 'banka' } })
+    await fireEvent.input(getByLabelText('Sahip'), { target: { value: 'ENIS' } })
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByText('Onayla ve Kaydet'))
+    expect(getByText('Kayıt başarıyla eklendi.')).toBeInTheDocument()
+    // Picking a new record type clears the confirmation instead of leaving it stale.
+    await fireEvent.click(getByText('İşlem (Al/Sat)'))
+    expect(queryByText('Kayıt başarıyla eklendi.')).not.toBeInTheDocument()
+  })
 })

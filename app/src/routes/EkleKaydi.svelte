@@ -20,6 +20,7 @@
 
   type Kind = 'islem' | 'nakit' | 'transfer' | 'kurum'
   let kind = $state<Kind | null>(null)
+  let successMessage = $state<string | null>(null)
 
   const labels: Record<Kind, string> = {
     islem: 'İşlem (Al/Sat)',
@@ -27,31 +28,42 @@
     transfer: 'Varlık Transferi',
     kurum: 'Kurum Ekle',
   }
+
+  function pick(k: Kind) {
+    kind = k
+    successMessage = null
+  }
+
+  function saved() {
+    kind = null
+    successMessage = 'Kayıt başarıyla eklendi.'
+  }
 </script>
 
 {#if dataset && view && source && store}
   <section class="ekle">
     <SectionHeader title="Yeni Kayıt Ekle" />
+    {#if successMessage}<p class="success">{successMessage}</p>{/if}
     <div class="picker">
       {#each Object.entries(labels) as [k, label]}
-        <button class:active={kind === k} onclick={() => (kind = k as Kind)}>{label}</button>
+        <button class:active={kind === k} onclick={() => pick(k as Kind)}>{label}</button>
       {/each}
     </div>
     {#if kind === 'islem'}
       <div class="form-area">
-        <IslemFormu {dataset} {view} {source} {store} onSaved={() => (kind = null)} />
+        <IslemFormu {dataset} {view} {source} {store} onSaved={saved} />
       </div>
     {:else if kind === 'nakit'}
       <div class="form-area">
-        <NakitHareketiFormu {dataset} {source} {store} onSaved={() => (kind = null)} />
+        <NakitHareketiFormu {dataset} {source} {store} onSaved={saved} />
       </div>
     {:else if kind === 'transfer'}
       <div class="form-area">
-        <VarlikTransferiFormu {dataset} {view} {source} {store} onSaved={() => (kind = null)} />
+        <VarlikTransferiFormu {dataset} {view} {source} {store} onSaved={saved} />
       </div>
     {:else if kind === 'kurum'}
       <div class="form-area">
-        <KurumFormu {dataset} {source} {store} onSaved={() => (kind = null)} />
+        <KurumFormu {dataset} {source} {store} onSaved={saved} />
       </div>
     {/if}
   </section>
@@ -64,6 +76,11 @@
     padding: 1.25rem 1.25rem 2rem;
     max-width: min(760px, 96vw);
     margin: 0 auto;
+  }
+  .success {
+    color: var(--gain);
+    font-size: 0.85rem;
+    margin: 0.5rem 0 0;
   }
   .picker {
     display: flex;

@@ -214,11 +214,14 @@ export class DriveSource implements DataSource {
     )
     const dataset = Object.fromEntries(parts) as unknown as Dataset
     const atFile = files.find((f) => f.name === 'assetTransfers.json')
-    dataset.assetTransfers = atFile
-      ? await fetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, { headers }).then((r) =>
-          r.json(),
-        )
-      : []
+    if (atFile) {
+      // assetTransfers.json is optional (Ruling P2-4): a transient read failure on this one
+      // file shouldn't break the whole dataset load, so fall back to [] rather than throwing.
+      const atRes = await fetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, { headers })
+      dataset.assetTransfers = atRes.ok ? await atRes.json() : []
+    } else {
+      dataset.assetTransfers = []
+    }
     return dataset
   }
 

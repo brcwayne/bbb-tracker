@@ -19,7 +19,7 @@ describe('Kurumlar', () => {
     expect(getByRole('heading', { name: 'Garanti Yatırım' })).toBeInTheDocument()
     // fixture: MIDAS holds ASTOR, GARAN holds THYAO, KASA holds XAU
     expect(container.textContent).toContain('ASTOR')
-    expect(container.textContent).toContain('Kurum ekleme')
+    expect(container.textContent).toContain('"Ekle" sekmesini kullanın')
   })
 
   it('shows a cash balance for each broker', async () => {

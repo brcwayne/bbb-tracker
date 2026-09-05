@@ -4,7 +4,7 @@ import { fixture } from '../../fixtures/dataset'
 import { derivePositions } from './derive'
 import type { OpenPosition } from './derive'
 import type { PriceLookup } from './unrealized'
-import type { Transaction, AssetTransfer } from './types'
+import type { Transaction, AssetTransfer, Broker } from './types'
 
 const open = derivePositions(fixture.transactions).open
 const noPrices: PriceLookup = { bySymbol: {}, usdPerGram: null }
@@ -76,5 +76,77 @@ describe('holdingsByPortfolio — asset transfers', () => {
     const enis = groups.find((g) => g.key === 'ENIS')
     expect(alfa?.rows.map((r) => r.kod)).toEqual(['THYAO'])
     expect(enis?.rows ?? []).toHaveLength(0)
+  })
+})
+
+describe('breakdowns — same-day transfer beats same-day transaction (FIX 1)', () => {
+  it('a same-date AssetTransfer wins attribution over a same-date Transaction, regardless of id ordering', () => {
+    // Regression for a lexicographic id tie-break bug: Transaction ids are prefixed `t_` and
+    // AssetTransfer ids `at_`, so 'at_...' < 't_...' always — meaning on an exact-date tie the
+    // Transaction used to win no matter which event was semantically later. A user who buys a
+    // stock and transfers it to another broker the same day must have the transfer stick.
+    const open: OpenPosition[] = [{ kod: 'THYAO', lot: 10, ortMaliyetUsd: 5, toplamMaliyetUsd: 50 }]
+    const txns: Transaction[] = [
+      {
+        id: 't_1', tarih: '2026-09-05', hesap: 'MIDAS', portfoy: 'ENIS', enstruman: 'THYAO', yon: 'AL',
+        lot: 10, girisParaBirimi: 'TL', fiyat_tl: null, fiyat_usd: 5, kur: null, komisyon_usd: 0,
+        brut_usd: 50, net_usd: 50, not: '', kaynak: 'manual', olusturulma: null,
+      },
+    ]
+    const transfers: AssetTransfer[] = [
+      {
+        id: 'at_1', tarih: '2026-09-05', enstruman: 'THYAO', lot: 10,
+        kaynakHesap: 'MIDAS', hedefHesap: 'GARAN', kaynakPortfoy: 'ENIS', hedefPortfoy: 'ENIS',
+        aciklama: '', kaynak: 'manual',
+      },
+    ]
+    const brokers: Broker[] = [
+      { kod: 'MIDAS', ad: 'Midas', tur: 'aracı kurum', sahip: 'Enis', aktif: true },
+      { kod: 'GARAN', ad: 'Garanti Yatırım', tur: 'aracı kurum', sahip: 'Enis', aktif: true },
+    ]
+    const groups = holdingsByBroker(open, txns, [], brokers, transfers, { bySymbol: {}, usdPerGram: null })
+    const midas = groups.find((g) => g.key === 'Midas')
+    const garan = groups.find((g) => g.key === 'Garanti Yatırım')
+    expect(garan?.rows.map((r) => r.kod)).toEqual(['THYAO'])
+    expect(midas?.rows ?? []).toHaveLength(0)
+  })
+})
+
+describe('breakdowns — transfer with null hedefPortfoy (FIX 2)', () => {
+  it('does not create a blank-titled portfolio group, but still moves the hesap attribution', () => {
+    // A transfer's hedefPortfoy: null means "portfolio unchanged" — it must be excluded from
+    // the portfoy attribution stream entirely, not coerced to '' (which used to create a
+    // blank-titled group in holdingsByPortfolio). The hesap stream is unaffected by this and
+    // must still pick up hedefHesap, which is always present on a transfer.
+    const open: OpenPosition[] = [{ kod: 'THYAO', lot: 10, ortMaliyetUsd: 5, toplamMaliyetUsd: 50 }]
+    const txns: Transaction[] = [
+      {
+        id: 't_1', tarih: '2026-01-01', hesap: 'MIDAS', portfoy: 'ENIS', enstruman: 'THYAO', yon: 'AL',
+        lot: 10, girisParaBirimi: 'TL', fiyat_tl: null, fiyat_usd: 5, kur: null, komisyon_usd: 0,
+        brut_usd: 50, net_usd: 50, not: '', kaynak: 'manual', olusturulma: null,
+      },
+    ]
+    const transfers: AssetTransfer[] = [
+      {
+        id: 'at_1', tarih: '2026-02-01', enstruman: 'THYAO', lot: 10,
+        kaynakHesap: 'MIDAS', hedefHesap: 'GARAN', kaynakPortfoy: 'ENIS', hedefPortfoy: null,
+        aciklama: '', kaynak: 'manual',
+      },
+    ]
+    const brokers: Broker[] = [
+      { kod: 'MIDAS', ad: 'Midas', tur: 'aracı kurum', sahip: 'Enis', aktif: true },
+      { kod: 'GARAN', ad: 'Garanti Yatırım', tur: 'aracı kurum', sahip: 'Enis', aktif: true },
+    ]
+
+    const portfolioGroups = holdingsByPortfolio(open, txns, [], transfers, { bySymbol: {}, usdPerGram: null })
+    expect(portfolioGroups.map((g) => g.key)).not.toContain('')
+    const enis = portfolioGroups.find((g) => g.key === 'ENIS')
+    expect(enis?.rows.map((r) => r.kod)).toEqual(['THYAO'])
+
+    const brokerGroups = holdingsByBroker(open, txns, [], brokers, transfers, { bySymbol: {}, usdPerGram: null })
+    const garan = brokerGroups.find((g) => g.key === 'Garanti Yatırım')
+    const midas = brokerGroups.find((g) => g.key === 'Midas')
+    expect(garan?.rows.map((r) => r.kod)).toEqual(['THYAO'])
+    expect(midas?.rows ?? []).toHaveLength(0)
   })
 })

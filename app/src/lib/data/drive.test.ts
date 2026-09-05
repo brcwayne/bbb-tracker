@@ -70,6 +70,27 @@ describe('DriveSource', () => {
     const ds = await s.load()
     expect(ds.assetTransfers).toEqual(SAMPLE_ASSET_TRANSFERS)
   })
+
+  it('falls back to [] (instead of throwing) when the assetTransfers.json read comes back non-ok', async () => {
+    // assetTransfers.json is optional (Ruling P2-4): a transient read failure on this one file
+    // shouldn't break the whole dataset load, unlike every other file (which does throw on !ok).
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('files?')) {
+        const names = [...Object.keys(FILE_MAP), 'assetTransfers']
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ files: names.map((n) => ({ id: n, name: `${n}.json` })) }) })
+      }
+      const id = url.match(/files\/(\w+)/)![1]
+      if (id === 'assetTransfers') {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'server error' }) })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(FILE_MAP[id]) })
+    }))
+    const s = new DriveSource('CID')
+    await s.connect()
+    ;(s as any).folderId = 'FOLDER'
+    const ds = await s.load()
+    expect(ds.assetTransfers).toEqual([])
+  })
 })
 
 describe('DriveSource.save', () => {

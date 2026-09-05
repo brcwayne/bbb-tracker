@@ -124,6 +124,10 @@
       <input type="text" bind:value={aciklama} aria-label="Açıklama" />
     </label>
   </div>
+  <p class="muted">
+    Not: Transfer, bu enstrümandaki mevcut tüm pozisyonu taşır — girdiğiniz lot sayısı yalnızca
+    bilgi amaçlıdır.
+  </p>
   {#if error}<p class="error">{error}</p>{/if}
   <button onclick={review}>İncele</button>
 {:else}
@@ -165,6 +169,11 @@
   .error {
     color: var(--loss);
     font-size: 0.85rem;
+  }
+  .muted {
+    color: var(--ink-soft);
+    font-size: 0.8rem;
+    margin: 0.6rem 0 0;
   }
   button {
     appearance: none;

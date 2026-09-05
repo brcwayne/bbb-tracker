@@ -74,7 +74,7 @@
         {/if}
       </div>
     {/each}
-    <p class="muted foot">Kurum ekleme P2'de gelecek.</p>
+    <p class="muted foot">Yeni kurum eklemek için "Ekle" sekmesini kullanın.</p>
   </section>
 {:else}
   <EmptyState title="Kurumlar" detail="Veri bekleniyor." />

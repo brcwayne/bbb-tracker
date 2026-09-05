@@ -161,6 +161,10 @@ hangi kurum/portföy altında göründüğünü değiştirir, maliyet/kâr-zarar
 **Kurum Ekle**. Her kayıt önce bir özet ekranında gösterilir, "Onayla ve Kaydet" ile
 Google Drive'a yazılır. Düzenleme/silme henüz desteklenmiyor — sıradaki fazda ele alınacak.
 
+Varlık Transferi, formdaki lot sayısına bakmaksızın enstrümandaki **mevcut tüm pozisyonu**
+hedef kurum/portföye taşır — lot alanı yalnızca bilgi/denetim amaçlıdır, kısmi transfer
+desteklenmez.
+
 Kurum bazlı nakit bakiyesi (Kurumlar sayfasındaki "Nakit" satırı), Excel'den gelen son
 bilinen bakiyeleri başlangıç noktası kabul edip bu andan sonraki her manuel hareketle
 güncellenir — geçmiş, hesap bazında ayrıştırılamayan veri olduğu için hesaba katılmaz.

@@ -27,19 +27,34 @@ interface AttrEvent {
   kod: string
   tarih: string
   id: string
+  /** Which record kind this event came from — used to break same-date ties (a transfer
+   *  always "happens after" a transaction dated the same day, since the id prefix (`t_`
+   *  vs `at_`) is not a reliable chronological tie-break). */
+  kind: 'txn' | 'transfer'
   hesap: string
-  portfoy: string
+  /** `null` for a transfer whose `hedefPortfoy` was left unset — meaning "portfolio
+   *  unchanged by this transfer". Such an event must not participate in the `'portfoy'`
+   *  attribution stream at all (see `latestFieldByKod`). */
+  portfoy: string | null
 }
 
 function attributionEvents(txns: Transaction[], transfers: AssetTransfer[]): AttrEvent[] {
   return [
-    ...txns.map((t) => ({ kod: t.enstruman, tarih: t.tarih, id: t.id, hesap: t.hesap, portfoy: t.portfoy })),
+    ...txns.map((t) => ({
+      kod: t.enstruman,
+      tarih: t.tarih,
+      id: t.id,
+      kind: 'txn' as const,
+      hesap: t.hesap,
+      portfoy: t.portfoy,
+    })),
     ...transfers.map((tr) => ({
       kod: tr.enstruman,
       tarih: tr.tarih,
       id: tr.id,
+      kind: 'transfer' as const,
       hesap: tr.hedefHesap,
-      portfoy: tr.hedefPortfoy ?? '',
+      portfoy: tr.hedefPortfoy,
     })),
   ]
 }
@@ -50,13 +65,30 @@ function latestFieldByKod<K extends 'portfoy' | 'hesap'>(
 ): Map<string, string> {
   const latest = new Map<string, AttrEvent>()
   for (const e of events) {
+    // A transfer that left this field untouched (only meaningful for 'portfoy': a transfer
+    // always carries a `hedefHesap`) must never override an earlier attribution.
+    if (field === 'portfoy' && e.portfoy == null) continue
     const prev = latest.get(e.kod)
-    if (!prev || e.tarih > prev.tarih || (e.tarih === prev.tarih && e.id > prev.id)) {
-      latest.set(e.kod, e)
+    let replace: boolean
+    if (!prev) {
+      replace = true
+    } else if (e.tarih !== prev.tarih) {
+      replace = e.tarih > prev.tarih
+    } else if (e.kind !== prev.kind) {
+      // Same-date tie between a transaction and a transfer: the transfer wins, since all
+      // record-entry forms stamp "today" as `tarih`, and a same-day buy-then-transfer is a
+      // plausible real workflow whose transfer must not be silently shadowed by id ordering.
+      replace = e.kind === 'transfer'
+    } else {
+      replace = e.id > prev.id
     }
+    if (replace) latest.set(e.kod, e)
   }
   const out = new Map<string, string>()
-  for (const [kod, e] of latest) out.set(kod, e[field])
+  for (const [kod, e] of latest) {
+    const v = field === 'portfoy' ? e.portfoy : e.hesap
+    if (v != null) out.set(kod, v)
+  }
   return out
 }
 
