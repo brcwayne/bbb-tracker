@@ -24,13 +24,29 @@
   let deleting = $state(false)
   let message = $state<string | null>(null)
 
-  const instName = (kod: string) => dataset?.instruments.find((i) => i.kod === kod)?.ad ?? kod
+  let fVarlik = $state('')
+  let fKurum = $state('')
+  let fPortfoy = $state('')
 
-  // Oldest → newest, by trade date then id for a stable order.
+  const instName = (kod: string) => dataset?.instruments.find((i) => i.kod === kod)?.ad ?? kod
+  const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort()
+
+  const varlikOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.enstruman)))
+  const kurumOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.hesap)))
+  const portfoyOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.portfoy)))
+
+  // Newest → oldest, by trade date then id for a stable order; then apply the filters.
   const rows = $derived(
-    [...(dataset?.transactions ?? [])].sort((a, b) =>
-      a.tarih < b.tarih ? -1 : a.tarih > b.tarih ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-    ),
+    [...(dataset?.transactions ?? [])]
+      .sort((a, b) =>
+        a.tarih > b.tarih ? -1 : a.tarih < b.tarih ? 1 : a.id > b.id ? -1 : a.id < b.id ? 1 : 0,
+      )
+      .filter(
+        (t) =>
+          (!fVarlik || t.enstruman === fVarlik) &&
+          (!fKurum || t.hesap === fKurum) &&
+          (!fPortfoy || t.portfoy === fPortfoy),
+      ),
   )
 
   const fiyatStr = (t: Transaction) =>
@@ -81,8 +97,32 @@
 
 {#if dataset && view}
   <section class="log">
-    <SectionHeader title="Log" note={`${rows.length} işlem · eski → yeni`} />
+    <SectionHeader title="Log" note={`${rows.length} işlem · yeni → eski`} />
     {#if message}<p class="ok">{message}</p>{/if}
+
+    <div class="filters">
+      <div class="flt">
+        <label for="flt-varlik">Varlık</label>
+        <select id="flt-varlik" bind:value={fVarlik}>
+          <option value="">(hepsi)</option>
+          {#each varlikOptions as o}<option value={o}>{o}</option>{/each}
+        </select>
+      </div>
+      <div class="flt">
+        <label for="flt-kurum">Kurum</label>
+        <select id="flt-kurum" bind:value={fKurum}>
+          <option value="">(hepsi)</option>
+          {#each kurumOptions as o}<option value={o}>{o}</option>{/each}
+        </select>
+      </div>
+      <div class="flt">
+        <label for="flt-portfoy">Portföy</label>
+        <select id="flt-portfoy" bind:value={fPortfoy}>
+          <option value="">(hepsi)</option>
+          {#each portfoyOptions as o}<option value={o}>{o}</option>{/each}
+        </select>
+      </div>
+    </div>
 
     {#if editing}
       {#key editing.id}
@@ -160,6 +200,30 @@
     color: var(--gain);
     font-size: 0.85rem;
     margin: 0.25rem 0 0.75rem;
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin: 0.5rem 0 1rem;
+  }
+  .flt {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.85em;
+  }
+  .flt label {
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+  }
+  .flt select {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
   }
   .form-area {
     background: var(--surface);

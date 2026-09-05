@@ -12,16 +12,28 @@ async function v(ds = fixture) {
 }
 
 describe('Log', () => {
-  it('lists every transaction oldest → newest', async () => {
+  it('lists every transaction newest → oldest', async () => {
     const { state, store } = await v()
     const { getAllByRole } = render(Log, {
       props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(fixture) }, store },
     })
     const rows = getAllByRole('row')
     expect(rows).toHaveLength(1 + fixture.transactions.length) // header + 7
-    // fixture oldest is t_d (2019-07-01, XAU AL); newest is t_g (2025-01-02, XAU AL)
-    expect(rows[1].textContent).toContain('2019')
-    expect(rows[rows.length - 1].textContent).toContain('2025')
+    // fixture newest is t_g (2025-01-02); oldest is t_d (2019-07-01)
+    expect(rows[1].textContent).toContain('2025')
+    expect(rows[rows.length - 1].textContent).toContain('2019')
+  })
+
+  it('filters by kurum', async () => {
+    const { state, store } = await v()
+    const { getByLabelText, getAllByRole } = render(Log, {
+      props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(fixture) }, store },
+    })
+    // fixture: 3 GARAN? no — t_f is GARAN, the rest MIDAS/KASA. Pick MIDAS (t_a,t_b,t_c → 3 rows).
+    await fireEvent.change(getByLabelText('Kurum'), { target: { value: 'MIDAS' } })
+    const rows = getAllByRole('row')
+    expect(rows).toHaveLength(1 + 3)
+    expect(rows.slice(1).every((r) => r.textContent?.includes('MIDAS'))).toBe(true)
   })
 
   it('migration rows are locked; manual rows get edit/delete icons', async () => {
