@@ -7,6 +7,7 @@
   import EmptyState from '../lib/ui/EmptyState.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import IslemFormu from './forms/IslemFormu.svelte'
+  import NakitHareketiFormu from './forms/NakitHareketiFormu.svelte'
 
   let {
     dataset,
@@ -37,6 +38,10 @@
     {#if kind === 'islem'}
       <div class="form-area">
         <IslemFormu {dataset} {view} {source} {store} onSaved={() => (kind = null)} />
+      </div>
+    {:else if kind === 'nakit'}
+      <div class="form-area">
+        <NakitHareketiFormu {dataset} {source} {store} onSaved={() => (kind = null)} />
       </div>
     {:else if kind}
       <div class="form-area">
