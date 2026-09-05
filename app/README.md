@@ -152,3 +152,15 @@ yatırma/çekme + para piyasası hareketleri), **Temettü** (enstrüman bazında
 yatırım ipuçları).
 
 Excel sayılarıyla mutabakat kontrolü (CI'da değil): `cd app && npx vitest run scripts/reconcile-dashboard.test.ts`.
+
+## P2 — manuel kayıt girişi
+
+"Ekle" sekmesinden dört tür kayıt eklenebilir: **İşlem** (Al/Sat), **Nakit Hareketi**
+(yatırma/çekme/temettü/kurumlar arası transfer), **Varlık Transferi** (bir pozisyonun
+hangi kurum/portföy altında göründüğünü değiştirir, maliyet/kâr-zarar hesabını etkilemez),
+**Kurum Ekle**. Her kayıt önce bir özet ekranında gösterilir, "Onayla ve Kaydet" ile
+Google Drive'a yazılır. Düzenleme/silme henüz desteklenmiyor — sıradaki fazda ele alınacak.
+
+Kurum bazlı nakit bakiyesi (Kurumlar sayfasındaki "Nakit" satırı), Excel'den gelen son
+bilinen bakiyeleri başlangıç noktası kabul edip bu andan sonraki her manuel hareketle
+güncellenir — geçmiş, hesap bazında ayrıştırılamayan veri olduğu için hesaba katılmaz.

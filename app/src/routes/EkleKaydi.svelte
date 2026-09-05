@@ -9,6 +9,7 @@
   import IslemFormu from './forms/IslemFormu.svelte'
   import NakitHareketiFormu from './forms/NakitHareketiFormu.svelte'
   import VarlikTransferiFormu from './forms/VarlikTransferiFormu.svelte'
+  import KurumFormu from './forms/KurumFormu.svelte'
 
   let {
     dataset,
@@ -48,9 +49,9 @@
       <div class="form-area">
         <VarlikTransferiFormu {dataset} {view} {source} {store} onSaved={() => (kind = null)} />
       </div>
-    {:else if kind}
+    {:else if kind === 'kurum'}
       <div class="form-area">
-        <p class="placeholder">{labels[kind]} formu buraya gelecek.</p>
+        <KurumFormu {dataset} {source} {store} onSaved={() => (kind = null)} />
       </div>
     {/if}
   </section>
@@ -90,9 +91,5 @@
     border: 1px solid var(--hairline);
     border-radius: 6px;
     padding: 1rem;
-  }
-  .placeholder {
-    color: var(--ink-soft);
-    margin: 0;
   }
 </style>

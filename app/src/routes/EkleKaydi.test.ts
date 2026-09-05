@@ -14,7 +14,7 @@ async function v() {
 describe('EkleKaydi', () => {
   it('shows 4 record-type choices, switches to the picked form area', async () => {
     const { state, store } = await v()
-    const { getByText } = render(EkleKaydi, {
+    const { getByText, getByLabelText } = render(EkleKaydi, {
       props: {
         dataset: state.dataset,
         view: state.derived,
@@ -26,13 +26,14 @@ describe('EkleKaydi', () => {
     expect(getByText('Nakit Hareketi')).toBeInTheDocument()
     expect(getByText('Varlık Transferi')).toBeInTheDocument()
     expect(getByText('Kurum Ekle')).toBeInTheDocument()
-    // Task 13 replaced the 'transfer' placeholder with a real VarlikTransferiFormu, so this
-    // generic "picker switches to a placeholder form area" check is retargeted to
-    // 'Kurum Ekle' (kind === 'kurum'), which remains a placeholder — same fix pattern
-    // Task 11/12 used when they retargeted this test to 'Nakit Hareketi' then
-    // 'Varlık Transferi'. 'kurum' is now the only kind left as a placeholder.
+    // Task 14 replaced the last remaining placeholder ('kurum') with a real KurumFormu, so
+    // there is no placeholder kind left to retarget this check to (unlike Task 11/12/13, which
+    // each retargeted it to the next still-placeholder kind). KurumFormu's own behaviour
+    // (validation, save) is covered by KurumFormu.test.ts, so this generic picker test is
+    // rewritten to assert that clicking 'Kurum Ekle' renders the real form's content (its
+    // 'Kod' field), proving the picker wiring — not a placeholder string.
     await fireEvent.click(getByText('Kurum Ekle'))
-    expect(getByText(/Kurum Ekle formu/i)).toBeInTheDocument()
+    expect(getByLabelText('Kod')).toBeInTheDocument()
   })
 
   it('renders an empty state without data', () => {
