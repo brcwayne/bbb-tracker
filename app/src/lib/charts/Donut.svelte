@@ -82,8 +82,6 @@
       {#if hoverI != null}
         <span class="cap-val">{fmt(slices[hoverI].value)}</span>
         <span class="cap-pct">{share(slices[hoverI].value)}</span>
-      {:else}
-        <span class="cap-hint">bir dilime gel</span>
       {/if}
     </div>
   {/if}
@@ -100,9 +98,10 @@
     gap: 0.35rem;
   }
   .cap {
-    min-height: 1.15rem;
+    height: 1.2rem;
     display: flex;
     align-items: baseline;
+    justify-content: center;
     gap: 0.5rem;
     font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
@@ -113,10 +112,5 @@
   }
   .cap-pct {
     color: var(--ink-soft);
-  }
-  .cap-hint {
-    color: var(--ink-soft);
-    opacity: 0.7;
-    font-size: 0.75rem;
   }
 </style>

@@ -107,10 +107,11 @@
     margin: 0 auto;
   }
   .pie-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 1.75rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    align-items: start;
+    justify-items: center;
+    gap: 1.25rem 1rem;
     margin: 0.5rem 0 1.5rem;
   }
   .pie-item {
