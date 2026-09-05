@@ -74,7 +74,10 @@ export function isLiveRate(): boolean {
 }
 
 /** Format a USD amount in the active display currency. */
-export function money(nUsd: number | null | undefined, opts: { sign?: boolean } = {}): string {
+export function money(
+  nUsd: number | null | undefined,
+  opts: { sign?: boolean; whole?: boolean } = {},
+): string {
   if (nUsd == null || Number.isNaN(nUsd)) return DASH
   return settings.currency === 'USD'
     ? usd(nUsd, opts)

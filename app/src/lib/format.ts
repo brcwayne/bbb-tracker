@@ -6,20 +6,23 @@ function nullish(n: unknown): n is null | undefined {
   return n == null || (typeof n === 'number' && Number.isNaN(n))
 }
 
-export function usd(n: number, opts: { sign?: boolean } = {}): string {
+export function usd(n: number, opts: { sign?: boolean; whole?: boolean } = {}): string {
   if (nullish(n)) return DASH
   const neg = n < 0
-  const body = '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const d = opts.whole ? 0 : 2
+  const body =
+    '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
   if (neg) return '-' + body
   return opts.sign ? '+' + body : body
 }
 
-export function tryFmt(n: number, opts: { sign?: boolean } = {}): string {
+export function tryFmt(n: number, opts: { sign?: boolean; whole?: boolean } = {}): string {
   if (nullish(n)) return DASH
   const neg = n < 0
+  const d = opts.whole ? 0 : 2
   const body =
     '₺' +
-    Math.abs(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    Math.abs(n).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d })
   if (neg) return '-' + body
   return opts.sign ? '+' + body : body
 }
