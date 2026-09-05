@@ -34,4 +34,5 @@ export const fixture: Dataset = {
   ],
   meta: { semaVersiyonu: 1, olusturulma: '2026-09-03T16:24:37', kaynak: 'test.xlsm', nakitHesapBazli: { TOPLU: 5004, MIDAS: -50, KASA: 300, GARAN: -1001.5 }, p0Sinirlari: [] },
   fxrates: { '2020-01-06': 5.94, '2024-01-01': 30 },
+  assetTransfers: [],
 }

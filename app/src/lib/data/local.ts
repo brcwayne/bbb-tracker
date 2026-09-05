@@ -13,6 +13,9 @@ export class LocalFileSource implements DataSource {
         return [name, await res.json()] as const
       }),
     )
-    return Object.fromEntries(parts) as unknown as Dataset
+    const dataset = Object.fromEntries(parts) as unknown as Dataset
+    const atRes = await fetch(`${this.base}/assetTransfers.json`)
+    dataset.assetTransfers = atRes.ok ? await atRes.json() : []
+    return dataset
   }
 }

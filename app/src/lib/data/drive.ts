@@ -199,6 +199,13 @@ export class DriveSource implements DataSource {
         return [n, await res.json()] as const
       }),
     )
-    return Object.fromEntries(parts) as unknown as Dataset
+    const dataset = Object.fromEntries(parts) as unknown as Dataset
+    const atFile = files.find((f) => f.name === 'assetTransfers.json')
+    dataset.assetTransfers = atFile
+      ? await fetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, { headers }).then((r) =>
+          r.json(),
+        )
+      : []
+    return dataset
   }
 }
