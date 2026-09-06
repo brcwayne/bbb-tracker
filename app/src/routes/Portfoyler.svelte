@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Dataset } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
-  import { holdingsByPortfolio, type HoldingGroup } from '../lib/data/breakdowns'
+  import { holdingsByPortfolio, type HoldingGroup, type HoldingRow } from '../lib/data/breakdowns'
   import { prices } from '../lib/prices.svelte'
   import { money } from '../lib/settings.svelte'
   import { pct, lot, DASH } from '../lib/format'
@@ -21,19 +21,24 @@
     })
   })
 
-  const overall = $derived(
-    (view?.byPortfolio ?? []).map((r) => ({ label: r.key, value: r.tutarUsd })),
+  // Overall pie, one slice per portfolio: by cost, and by current value (value
+  // falls back to cost per group until its prices are in).
+  const overallCost = $derived(groups.map((g) => ({ label: g.key, value: g.totalCostUsd })))
+  const overallValue = $derived(
+    groups.map((g) => ({ label: g.key, value: g.totalValueUsd ?? g.totalCostUsd })),
   )
 
-  // Top 4 holdings by cost, the rest bucketed into "Diğer" — keeps slice count at or under
-  // the shared Donut palette's 4 colors, so a portfolio with many small positions doesn't
-  // end up with repeated, indistinguishable slice colors.
-  function instrumentMix(g: HoldingGroup) {
-    const sorted = [...g.rows].sort((a, b) => b.toplamMaliyetUsd - a.toplamMaliyetUsd)
+  // Top 4 holdings, the rest bucketed into "Diğer" — keeps slice count at or under
+  // the shared Donut palette's 4 colors. `metric` picks cost vs. current value
+  // (value falls back to a row's cost while that row is unpriced).
+  function instrumentMix(g: HoldingGroup, metric: 'cost' | 'value') {
+    const val = (r: HoldingRow) =>
+      metric === 'value' ? r.degerUsd ?? r.toplamMaliyetUsd : r.toplamMaliyetUsd
+    const sorted = [...g.rows].sort((a, b) => val(b) - val(a))
     const top = sorted.slice(0, 4)
     const rest = sorted.slice(4)
-    const slices = top.map((r) => ({ label: r.kod, value: r.toplamMaliyetUsd }))
-    if (rest.length) slices.push({ label: 'Diğer', value: rest.reduce((s, r) => s + r.toplamMaliyetUsd, 0) })
+    const slices = top.map((r) => ({ label: r.kod, value: val(r) }))
+    if (rest.length) slices.push({ label: 'Diğer', value: rest.reduce((s, r) => s + val(r), 0) })
     return slices
   }
 
@@ -50,6 +55,27 @@
     }))
   }
 
+  // Collapsible pie rows — remembered per viewer.
+  function loadFlag(key: string, dflt: boolean): boolean {
+    try {
+      const v = localStorage.getItem(key)
+      return v == null ? dflt : v === '1'
+    } catch {
+      return dflt
+    }
+  }
+  function saveFlag(key: string, v: boolean) {
+    try {
+      localStorage.setItem(key, v ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
+  let showCost = $state(loadFlag('bbb-pf-pies-cost', true))
+  let showValue = $state(loadFlag('bbb-pf-pies-value', true))
+  $effect(() => saveFlag('bbb-pf-pies-cost', showCost))
+  $effect(() => saveFlag('bbb-pf-pies-value', showValue))
+
   const cols = [
     { key: '_costW', label: '% Mlyt', align: 'right' as const, sortable: true, fmt: (v: number | null) => (v == null ? DASH : pct(v)) },
     { key: 'kod', label: 'Hisse', sortable: true },
@@ -65,27 +91,55 @@
   ]
 </script>
 
+{#snippet pieRow(overall: { label: string; value: number }[], metric: 'cost' | 'value')}
+  <div class="pie-row">
+    <div class="pie-item">
+      <span class="pie-label">Tümü</span>
+      <Donut slices={overall} captionBelow fmt={(v) => money(v, { whole: true })} />
+    </div>
+    {#each groups as g}
+      <div class="pie-item">
+        <span class="pie-label">{g.key}</span>
+        <Donut
+          slices={instrumentMix(g, metric)}
+          size={104}
+          thickness={16}
+          captionBelow
+          fmt={(v) => money(v, { whole: true })}
+        />
+      </div>
+    {/each}
+  </div>
+{/snippet}
+
 {#if dataset && view}
   <section class="portfoyler">
     <SectionHeader title="Portföyler" />
-    <div class="pie-row">
-      <div class="pie-item">
-        <span class="pie-label">Tümü</span>
-        <Donut slices={overall} captionBelow fmt={(v) => money(v, { whole: true })} />
-      </div>
-      {#each groups as g}
-        <div class="pie-item">
-          <span class="pie-label">{g.key}</span>
-          <Donut
-            slices={instrumentMix(g)}
-            size={104}
-            thickness={16}
-            captionBelow
-            fmt={(v) => money(v, { whole: true })}
-          />
-        </div>
-      {/each}
+
+    <div class="pie-group">
+      <button
+        class="pie-toggle"
+        aria-expanded={showCost}
+        onclick={() => (showCost = !showCost)}
+      >
+        <span class="chev" class:open={showCost} aria-hidden="true">▸</span>
+        Maliyet dağılımı
+      </button>
+      {#if showCost}{@render pieRow(overallCost, 'cost')}{/if}
     </div>
+
+    <div class="pie-group">
+      <button
+        class="pie-toggle"
+        aria-expanded={showValue}
+        onclick={() => (showValue = !showValue)}
+      >
+        <span class="chev" class:open={showValue} aria-hidden="true">▸</span>
+        Güncel değer dağılımı
+      </button>
+      {#if showValue}{@render pieRow(overallValue, 'value')}{/if}
+    </div>
+
     {#each groups as g}
       <div class="panel">
         <SectionHeader
@@ -105,6 +159,35 @@
     padding: 1.25rem 1.25rem 2rem;
     max-width: min(1240px, 96vw);
     margin: 0 auto;
+  }
+  .pie-group {
+    margin: 0.25rem 0 0.5rem;
+  }
+  .pie-toggle {
+    appearance: none;
+    border: 0;
+    background: none;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .pie-toggle:hover {
+    color: var(--ink);
+  }
+  .chev {
+    display: inline-block;
+    transition: transform 0.12s ease;
+    font-size: 0.7em;
+  }
+  .chev.open {
+    transform: rotate(90deg);
   }
   .pie-row {
     display: grid;
