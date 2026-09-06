@@ -24,6 +24,18 @@ describe('Log', () => {
     expect(rows[rows.length - 1].textContent).toContain('2019')
   })
 
+  it('shows each row net total in ₺ and $ with the day rate', async () => {
+    const { state, store } = await v()
+    const { getAllByRole } = render(Log, {
+      props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(fixture) }, store },
+    })
+    // newest row = t_g: net_usd 450, kur 35 → $450.00 / ₺15.750,00 / kur 35,00
+    const first = getAllByRole('row')[1].textContent ?? ''
+    expect(first).toContain('$450.00')
+    expect(first).toContain('₺15.750,00')
+    expect(first).toContain('kur 35,00')
+  })
+
   it('filters by kurum', async () => {
     const { state, store } = await v()
     const { getByLabelText, getAllByRole } = render(Log, {

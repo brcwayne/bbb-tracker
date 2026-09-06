@@ -5,7 +5,7 @@
   import type { Writable } from 'svelte/store'
   import { deleteRecord } from '../lib/data/store'
   import { derivePositions } from '../lib/data/derive'
-  import { lot, dateShort, DASH } from '../lib/format'
+  import { lot, dateShort, DASH, usd, tryFmt } from '../lib/format'
   import { money } from '../lib/settings.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
@@ -53,6 +53,13 @@
     t.girisParaBirimi !== 'USD' && t.fiyat_tl != null
       ? `₺${t.fiyat_tl.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : money(t.fiyat_usd)
+
+  // Net total (commission in): `net_usd` is already that day's-rate USD; the ₺
+  // figure is reconstructed from it × the day's kur.
+  const tutarUsdStr = (t: Transaction) => usd(t.net_usd)
+  const tutarTlStr = (t: Transaction) => (t.kur != null ? tryFmt(t.net_usd * t.kur) : DASH)
+  const kurStr = (t: Transaction) =>
+    t.kur != null ? t.kur.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null
 
   function requestEdit(t: Transaction) {
     deleteTarget = null
@@ -156,6 +163,8 @@
             <th>Portföy</th>
             <th class="r">Adet</th>
             <th class="r">Fiyat</th>
+            <th class="r">Tutar ₺</th>
+            <th class="r">Tutar $</th>
             <th aria-label="işlemler"></th>
           </tr>
         </thead>
@@ -172,6 +181,11 @@
               <td>{t.portfoy || DASH}</td>
               <td class="r num">{lot(t.lot)}</td>
               <td class="r num">{fiyatStr(t)}</td>
+              <td class="r num">
+                {tutarTlStr(t)}
+                {#if kurStr(t)}<span class="kur">kur {kurStr(t)}</span>{/if}
+              </td>
+              <td class="r num">{tutarUsdStr(t)}</td>
               <td class="act">
                 {#if t.kaynak === 'manual'}
                   <button class="icon" title="Düzenle" aria-label="Düzenle" onclick={() => requestEdit(t)}>✎</button>
@@ -312,6 +326,12 @@
     color: var(--ink-soft);
     font-size: 0.82em;
     margin-left: 0.35rem;
+  }
+  td .kur {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 0.78em;
+    font-weight: 400;
   }
   tbody tr.editing {
     background: var(--surface);
