@@ -35,24 +35,27 @@ export async function fetchTvQuotes(
 ): Promise<Record<string, TvQuote>> {
   const uniq = [...new Set(codes)]
   if (uniq.length === 0) return {}
+  // A `.IS` suffix (Yahoo habit) is harmless: TradingView wants the bare BIST
+  // ticker, so strip it for the request but key the reply by the original code.
+  const wanted = uniq.map((orig) => ({ orig, bare: orig.replace(/\.IS$/i, '') }))
   try {
     const res = await fetchImpl(TV_SCAN_URL, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
-        symbols: { tickers: uniq.map((c) => EXCHANGE + c) },
+        symbols: { tickers: wanted.map((w) => EXCHANGE + w.bare) },
         columns: ['close'],
       }),
     })
     if (!res.ok) {
       const err = { error: `tradingview ${res.status}` }
-      return Object.fromEntries(uniq.map((c) => [c, err]))
+      return Object.fromEntries(wanted.map((w) => [w.orig, err]))
     }
     const parsed = parseScan(await res.json())
     return Object.fromEntries(
-      uniq.map((c) => [c, parsed[c] ?? { error: 'tradingview yanıtı' }]),
+      wanted.map((w) => [w.orig, parsed[w.bare] ?? { error: 'tradingview yanıtı' }]),
     )
   } catch {
-    return Object.fromEntries(uniq.map((c) => [c, { error: 'tradingview kaynağı' }]))
+    return Object.fromEntries(wanted.map((w) => [w.orig, { error: 'tradingview kaynağı' }]))
   }
 }

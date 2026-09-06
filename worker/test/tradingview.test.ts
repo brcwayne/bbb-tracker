@@ -43,6 +43,18 @@ describe('fetchTvQuotes', () => {
     expect(out.DMLKTG).toEqual({ price: 56.78, currency: 'TRY' })
   })
 
+  it('strips a .IS suffix for the request but keys the reply by the original code', async () => {
+    let sentBody: any
+    const f = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      sentBody = JSON.parse(String(init?.body))
+      return scanBody([{ s: 'BIST:DMLKT', d: [6.86] }])
+    }) as unknown as typeof fetch
+
+    const out = await fetchTvQuotes(['DMLKT.IS'], f)
+    expect(sentBody.symbols.tickers).toEqual(['BIST:DMLKT'])
+    expect(out['DMLKT.IS']).toEqual({ price: 6.86, currency: 'TRY' })
+  })
+
   it('reports {error} for a code the scanner omits', async () => {
     const f = vi.fn(async () => scanBody([{ s: 'BIST:DMLKT', d: [12.34] }])) as unknown as typeof fetch
     const out = await fetchTvQuotes(['DMLKT', 'MISSING'], f)
