@@ -23,6 +23,10 @@ const TOKEN_KEY = 'bbb-drive-token'
 // writes those same files, so the scope is full read-write whole-Drive access.
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
+// Google access tokens live ~1h; renew a minute early to dodge clock skew.
+const TOKEN_SKEW_MS = 60_000
+const DEFAULT_TOKEN_TTL_S = 3600
+
 function readStoredFolder(): string | null {
   try {
     return localStorage.getItem(FOLDER_KEY)
@@ -30,19 +34,33 @@ function readStoredFolder(): string | null {
     return null
   }
 }
-function readSessionToken(): string | null {
+
+/**
+ * The token lives in `localStorage` (not `sessionStorage`) so it survives the
+ * PWA being closed — otherwise every cold launch falls back to the silent
+ * `prompt: 'none'` grant, which iOS/Safari block, and the connect button shows
+ * every time. Stored with an expiry; a stale entry is dropped on read.
+ */
+function readStoredToken(): string | null {
   try {
-    return globalThis.sessionStorage?.getItem(TOKEN_KEY) ?? null
+    const raw = localStorage.getItem(TOKEN_KEY)
+    if (!raw) return null
+    const { t, exp } = JSON.parse(raw) as { t?: string; exp?: number }
+    if (typeof t === 'string' && typeof exp === 'number' && exp > Date.now()) return t
+    localStorage.removeItem(TOKEN_KEY)
+    return null
   } catch {
     return null
   }
 }
-function writeSessionToken(t: string | null): void {
+function writeStoredToken(t: string | null, expiresInS = DEFAULT_TOKEN_TTL_S): void {
   try {
-    const ss = globalThis.sessionStorage
-    if (!ss) return
-    if (t) ss.setItem(TOKEN_KEY, t)
-    else ss.removeItem(TOKEN_KEY)
+    if (t) {
+      const exp = Date.now() + expiresInS * 1000 - TOKEN_SKEW_MS
+      localStorage.setItem(TOKEN_KEY, JSON.stringify({ t, exp }))
+    } else {
+      localStorage.removeItem(TOKEN_KEY)
+    }
   } catch {
     /* ignore */
   }
@@ -52,12 +70,13 @@ function writeSessionToken(t: string | null): void {
  * Reads the 8 dataset JSON files from a folder in the user's Google Drive.
  * `connect()` runs the GIS OAuth token flow (scope `drive`, read-write),
  * `chooseFolder()` opens the Google Picker, `load()` fetches the files.
- * The access token is kept in `sessionStorage` and refreshed silently
- * (`prompt: 'none'`) on reload, so a return visit rarely needs a click.
+ * The access token is kept in `localStorage` with its expiry and refreshed
+ * silently (`prompt: 'none'`) once it lapses, so a return visit within the
+ * hour needs no click at all.
  */
 export class DriveSource implements DataSource {
   readonly id = 'drive' as const
-  private token: string | null = readSessionToken()
+  private token: string | null = readStoredToken()
   private tokenClient: any = null
   folderId: string | null = null
   /** Cache of `{id, md5Checksum}` per file basename, populated by `load()` and refreshed by `save()`. */
@@ -74,9 +93,9 @@ export class DriveSource implements DataSource {
     return !!(this.folderId ?? readStoredFolder())
   }
 
-  private setToken(t: string | null) {
+  private setToken(t: string | null, expiresInS?: number) {
     this.token = t
-    writeSessionToken(t)
+    writeStoredToken(t, expiresInS)
   }
 
   private requestToken(prompt: '' | 'none' | 'consent'): Promise<void> {
@@ -96,12 +115,16 @@ export class DriveSource implements DataSource {
             reject(new NeedsAuthError('yetki zaman aşımı'))
           }
         }, 8000)
-        this.tokenClient.callback = (resp: { access_token?: string; error?: string }) => {
+        this.tokenClient.callback = (resp: {
+          access_token?: string
+          expires_in?: number
+          error?: string
+        }) => {
           if (done) return
           done = true
           clearTimeout(timer)
           if (resp && resp.access_token) {
-            this.setToken(resp.access_token)
+            this.setToken(resp.access_token, resp.expires_in)
             resolve()
           } else {
             reject(new NeedsAuthError(resp?.error || 'yetki alınamadı'))

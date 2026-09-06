@@ -43,6 +43,40 @@ describe('DriveSource', () => {
     expect(ds.meta.olusturulma).toBe('2026-09-03T16:24:37')
   })
 
+  it('reuses a fresh token from localStorage without calling requestAccessToken', async () => {
+    let calls = 0
+    vi.stubGlobal('google', {
+      accounts: {
+        oauth2: {
+          initTokenClient: () => ({ callback: () => {}, requestAccessToken: () => { calls++ } }),
+        },
+      },
+    })
+    localStorage.setItem('bbb-drive-token', JSON.stringify({ t: 'stored-tok', exp: Date.now() + 600_000 }))
+    localStorage.setItem('bbb-drive-folder', 'FOLDER')
+    const ds = await new DriveSource('CID').load()
+    expect(calls).toBe(0)
+    expect(ds.transactions).toHaveLength(7)
+  })
+
+  it('drops an expired stored token and falls back to the silent grant', async () => {
+    localStorage.setItem('bbb-drive-token', JSON.stringify({ t: 'old-tok', exp: Date.now() - 1000 }))
+    localStorage.setItem('bbb-drive-folder', 'FOLDER')
+    const s = new DriveSource('CID')
+    expect((s as any).token).toBeNull()
+    // beforeEach's google stub resolves the silent grant, so load() still succeeds
+    const ds = await s.load()
+    expect(ds.transactions).toHaveLength(7)
+  })
+
+  it('persists the token with an expiry after connect', async () => {
+    const s = new DriveSource('CID')
+    await s.connect()
+    const raw = JSON.parse(localStorage.getItem('bbb-drive-token')!)
+    expect(raw.t).toBe('tok')
+    expect(raw.exp).toBeGreaterThan(Date.now())
+  })
+
   it('defaults assetTransfers to [] when assetTransfers.json is not in the Drive listing', async () => {
     const s = new DriveSource('CID')
     await s.connect()
