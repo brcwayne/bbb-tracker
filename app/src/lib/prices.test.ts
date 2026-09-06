@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fixture } from '../fixtures/dataset'
-import { prices, refreshPrices, hydratePrices, symbolsForHeldInstruments, priceApiEnabled } from './prices.svelte'
+import {
+  prices,
+  refreshPrices,
+  hydratePrices,
+  pricesStale,
+  symbolsForHeldInstruments,
+  priceApiEnabled,
+} from './prices.svelte'
 import { settings, isLiveRate } from './settings.svelte'
 
 beforeEach(() => {
-  sessionStorage.clear()
+  localStorage.clear()
   prices.bySymbol = {}
   prices.usdPerGram = null
   prices.usdtry = null
@@ -42,6 +49,27 @@ describe('symbolsForHeldInstruments', () => {
     }
     expect(symbolsForHeldInstruments(ds)).toEqual(['tefas:MAC'])
   })
+
+  it('marks a held TradingView instrument as tv:<code>', () => {
+    const ds = {
+      ...fixture,
+      transactions: [
+        { ...fixture.transactions[0], id: 't_dmlkt', enstruman: 'DMLKT', yon: 'AL' as const, lot: 100 },
+      ],
+      instruments: [
+        {
+          kod: 'DMLKT',
+          ad: 'DMLKT',
+          sinif: 'BIST' as const,
+          girisParaBirimi: 'TL',
+          fiyatKaynagi: 'tradingview',
+          fiyatSembolu: 'DMLKT',
+          seviyeler: null,
+        },
+      ],
+    }
+    expect(symbolsForHeldInstruments(ds)).toEqual(['tv:DMLKT'])
+  })
 })
 
 describe('refreshPrices', () => {
@@ -68,7 +96,7 @@ describe('refreshPrices', () => {
     expect(prices.bySymbol['BAD.IS']).toBeUndefined()
     expect(prices.usdPerGram).toBe(100)
     expect(settings.rate).toBe(40)
-    expect(JSON.parse(sessionStorage.getItem('bbb-prices')!).asOf).toBe('2999-01-01T00:00:00Z')
+    expect(JSON.parse(localStorage.getItem('bbb-prices')!).asOf).toBe('2999-01-01T00:00:00Z')
   })
 
   it('de-prefixes a tefas:<code> entry into bySymbol by its bare code', async () => {
@@ -86,6 +114,23 @@ describe('refreshPrices', () => {
     expect(prices.status).toBe('ready')
     expect(prices.bySymbol['MAC'].priceUsd).toBe(0.3125)
     expect(prices.bySymbol['tefas:MAC']).toBeUndefined()
+  })
+
+  it('de-prefixes a tv:<code> entry into bySymbol by its bare code', async () => {
+    vi.stubEnv('VITE_PRICE_API', 'https://api.test')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      asOf: '2999-01-01T00:00:00Z',
+      usdtry: 40,
+      prices: {
+        'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 10 },
+        'GC=F': { price: 3110.34768, currency: 'USD', priceUsd: 3110.34768, usdPerGram: 100 },
+        'tv:DMLKT': { price: 12.5, currency: 'TRY', priceUsd: 0.3125 },
+      },
+    }))))
+    await refreshPrices(fixture)
+    expect(prices.status).toBe('ready')
+    expect(prices.bySymbol['DMLKT'].priceUsd).toBe(0.3125)
+    expect(prices.bySymbol['tv:DMLKT']).toBeUndefined()
   })
 
   it('sets status "error" when the request fails', async () => {
@@ -125,7 +170,7 @@ describe('refreshPrices', () => {
 
 describe('hydratePrices', () => {
   it('restores a fresh snapshot', () => {
-    sessionStorage.setItem('bbb-prices', JSON.stringify({
+    localStorage.setItem('bbb-prices', JSON.stringify({
       bySymbol: { 'THYAO.IS': { price: 1, currency: 'TRY', priceUsd: 0.02 } },
       usdPerGram: 90, usdtry: 41, asOf: new Date().toISOString(),
     }))
@@ -134,27 +179,52 @@ describe('hydratePrices', () => {
     expect(prices.bySymbol['THYAO.IS'].priceUsd).toBe(0.02)
   })
 
-  it('ignores a snapshot older than 30 minutes', () => {
-    sessionStorage.setItem('bbb-prices', JSON.stringify({
-      bySymbol: {}, usdPerGram: null, usdtry: null,
-      asOf: new Date(Date.now() - 31 * 60_000).toISOString(),
+  it('restores an old snapshot too, so last-known prices survive a relaunch', () => {
+    const old = new Date(Date.now() - 20 * 60 * 60_000).toISOString()
+    localStorage.setItem('bbb-prices', JSON.stringify({
+      bySymbol: { 'THYAO.IS': { price: 1, currency: 'TRY', priceUsd: 0.02 } },
+      usdPerGram: null, usdtry: 41, asOf: old,
     }))
+    hydratePrices()
+    expect(prices.status).toBe('ready')
+    expect(prices.asOf).toBe(old)
+    expect(prices.bySymbol['THYAO.IS'].priceUsd).toBe(0.02)
+  })
+
+  it('ignores an unparseable snapshot', () => {
+    localStorage.setItem('bbb-prices', 'not json')
     hydratePrices()
     expect(prices.status).toBe('idle')
   })
 
-  it('ignores an unparseable snapshot', () => {
-    sessionStorage.setItem('bbb-prices', 'not json')
+  it('ignores a snapshot with no usable asOf', () => {
+    localStorage.setItem('bbb-prices', JSON.stringify({ bySymbol: {}, asOf: null }))
     hydratePrices()
     expect(prices.status).toBe('idle')
   })
 
   it('re-applies the snapshot usdtry as a live rate (Fix 8)', () => {
-    sessionStorage.setItem('bbb-prices', JSON.stringify({
+    localStorage.setItem('bbb-prices', JSON.stringify({
       bySymbol: {}, usdPerGram: null, usdtry: 42.5, asOf: new Date().toISOString(),
     }))
     hydratePrices()
     expect(settings.rate).toBe(42.5)
     expect(isLiveRate()).toBe(true)
+  })
+})
+
+describe('pricesStale', () => {
+  it('is stale with no data loaded', () => {
+    expect(pricesStale()).toBe(true)
+  })
+
+  it('is fresh right after a refresh', () => {
+    prices.asOf = new Date().toISOString()
+    expect(pricesStale()).toBe(false)
+  })
+
+  it('is stale once the snapshot is hours old', () => {
+    prices.asOf = new Date(Date.now() - 7 * 60 * 60_000).toISOString()
+    expect(pricesStale()).toBe(true)
   })
 })

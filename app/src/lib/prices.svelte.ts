@@ -4,7 +4,9 @@ import { applyLiveRate } from './settings.svelte'
 
 const GOLD_API_SYMBOL = 'GC=F'
 const TEFAS_PREFIX = 'tefas:'
-const MAX_AGE_MS = 30 * 60_000
+const TV_PREFIX = 'tv:'
+/** Beyond this, a hydrated snapshot triggers one automatic refresh on load. */
+const AUTO_REFRESH_MS = 6 * 60 * 60_000
 const STORE_KEY = 'bbb-prices'
 
 /** Read the Worker base URL fresh every call so tests can `vi.stubEnv` it. */
@@ -35,8 +37,10 @@ export const prices = $state<{
 function apiSymbolFor(fiyatKaynagi: string, fiyatSembolu: string): string | null {
   if (fiyatKaynagi === 'yahoo') return fiyatSembolu
   if (fiyatKaynagi === 'altin-turev') return GOLD_API_SYMBOL
-  // TEFAS funds go to the worker prefixed; the response de-prefixes back to the bare code.
+  // TEFAS funds and TradingView-only BIST codes (e.g. DMLKT) go to the worker
+  // prefixed; the response de-prefixes back to the bare fiyatSembolu.
   if (fiyatKaynagi === 'tefas') return TEFAS_PREFIX + fiyatSembolu
+  if (fiyatKaynagi === 'tradingview') return TV_PREFIX + fiyatSembolu
   return null
 }
 
@@ -55,7 +59,7 @@ export function symbolsForHeldInstruments(ds: Dataset): string[] {
 
 function persist(): void {
   try {
-    sessionStorage.setItem(
+    localStorage.setItem(
       STORE_KEY,
       JSON.stringify({
         bySymbol: prices.bySymbol,
@@ -89,8 +93,12 @@ export async function refreshPrices(ds: Dataset): Promise<void> {
     let usdPerGram: number | null = null
     for (const [sym, v] of Object.entries(body.prices)) {
       if ('error' in v) continue
-      // `tefas:MAC` → `MAC`, so unrealized.ts finds it by the bare fiyatSembolu.
-      const key = sym.startsWith(TEFAS_PREFIX) ? sym.slice(TEFAS_PREFIX.length) : sym
+      // `tefas:MAC` / `tv:DMLKT` → bare code, so unrealized.ts finds it by fiyatSembolu.
+      const key = sym.startsWith(TEFAS_PREFIX)
+        ? sym.slice(TEFAS_PREFIX.length)
+        : sym.startsWith(TV_PREFIX)
+          ? sym.slice(TV_PREFIX.length)
+          : sym
       bySymbol[key] = { price: v.price, currency: v.currency, priceUsd: v.priceUsd ?? null }
       if (sym === GOLD_API_SYMBOL && typeof (v as { usdPerGram?: number }).usdPerGram === 'number') {
         usdPerGram = (v as { usdPerGram: number }).usdPerGram
@@ -112,9 +120,20 @@ export async function refreshPrices(ds: Dataset): Promise<void> {
   }
 }
 
+/**
+ * True when there is no price data, or the newest snapshot is old enough that a
+ * fresh pull is worthwhile on load. Used to auto-refresh once per app launch
+ * instead of forcing a manual click every time.
+ */
+export function pricesStale(): boolean {
+  if (!prices.asOf) return true
+  const t = Date.parse(prices.asOf)
+  return Number.isNaN(t) || Date.now() - t > AUTO_REFRESH_MS
+}
+
 export function hydratePrices(): void {
   try {
-    const raw = sessionStorage.getItem(STORE_KEY)
+    const raw = localStorage.getItem(STORE_KEY)
     if (!raw) return
     const snap = JSON.parse(raw) as {
       bySymbol: Record<string, Entry>
@@ -122,7 +141,9 @@ export function hydratePrices(): void {
       usdtry: number | null
       asOf: string | null
     }
-    if (!snap.asOf || Date.now() - Date.parse(snap.asOf) > MAX_AGE_MS) return
+    // Restore the last snapshot whatever its age — the stamp in the header shows
+    // how old it is, and a stale load kicks off one automatic refresh.
+    if (!snap.asOf || Number.isNaN(Date.parse(snap.asOf))) return
     prices.bySymbol = snap.bySymbol ?? {}
     prices.usdPerGram = snap.usdPerGram ?? null
     prices.usdtry = snap.usdtry ?? null
