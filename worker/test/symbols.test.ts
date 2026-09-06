@@ -9,8 +9,9 @@ describe('yahooSymbolFor', () => {
   it('maps every gold instrument to the single gold future', () => {
     expect(yahooSymbolFor('altin-turev', 'XAUUSD')).toBe(GOLD_YAHOO_SYMBOL)
   })
-  it('returns null for tefas / unknown (not priced in P3)', () => {
+  it('returns null for tefas / tradingview / unknown (handled elsewhere)', () => {
     expect(yahooSymbolFor('tefas', 'MAC')).toBeNull()
+    expect(yahooSymbolFor('tradingview', 'DMLKT')).toBeNull()
     expect(yahooSymbolFor('whatever', 'X')).toBeNull()
   })
 })

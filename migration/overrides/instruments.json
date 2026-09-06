@@ -12,7 +12,7 @@
   "BIMAS":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "BIMAS.IS", "girisParaBirimi": "TL"},
   "BRLSM":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "BRLSM.IS", "girisParaBirimi": "TL"},
   "BRSAN":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "BRSAN.IS", "girisParaBirimi": "TL"},
-  "DMLKT":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "DMLKT.IS", "girisParaBirimi": "TL"},
+  "DMLKT":    {"sinif": "BIST", "fiyatKaynagi": "tradingview", "fiyatSembolu": "DMLKT", "girisParaBirimi": "TL", "_kaynakNot": "Yahoo DMLKT.IS fiyat vermiyor; Excel'deki gibi TradingView scanner (BIST:DMLKT) uzerinden"},
   "EFOR":     {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "EFOR.IS", "girisParaBirimi": "TL"},
   "EGEEN":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "EGEEN.IS", "girisParaBirimi": "TL"},
   "ENKAI":    {"sinif": "BIST", "fiyatKaynagi": "yahoo", "fiyatSembolu": "ENKAI.IS", "girisParaBirimi": "TL"},
