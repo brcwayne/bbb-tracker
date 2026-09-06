@@ -134,6 +134,7 @@
     border-bottom: 1px solid var(--hairline);
     text-align: left;
     white-space: nowrap;
+    transition: background-color 120ms ease;
   }
   thead th {
     color: var(--ink-soft);
@@ -152,6 +153,7 @@
   td.num {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
+    color: var(--ink-num);
   }
   td.pos {
     color: var(--gain);
@@ -169,8 +171,9 @@
   tbody tr.clickable {
     cursor: pointer;
   }
-  tbody tr.clickable:hover {
-    background: var(--surface);
+  /* Trace the row your cursor is on — a faint warm wash, not a bright band. */
+  tbody tr:not(.detail-row):hover > td {
+    background: var(--row-hover);
   }
   tbody tr.expanded {
     background: var(--surface);

@@ -16,6 +16,10 @@
   --gain: #5fbf85;
   --loss: #e0736a;
   --gold: #c9a86a;
+  /* Table legibility: numeric columns sit a step below --ink so a screenful of
+     figures doesn't glare; --row-hover is a barely-there warm-ink wash. */
+  --ink-num: #d3cec5;
+  --row-hover: rgba(232, 228, 220, 0.05);
   --font-num: ui-monospace, 'SF Mono', Menlo, monospace;
 }
 :root:not([data-theme='dark']) {
@@ -29,6 +33,8 @@
     --gain: #3f6f4f;
     --loss: #9a4f37;
     --gold: #a9863f;
+    --ink-num: #38332d;
+    --row-hover: rgba(28, 26, 23, 0.045);
   }
 }
 :root[data-theme='light'] {
@@ -41,6 +47,8 @@
   --gain: #3f6f4f;
   --loss: #9a4f37;
   --gold: #a9863f;
+  --ink-num: #38332d;
+  --row-hover: rgba(28, 26, 23, 0.045);
 }
 :root[data-theme='dark'] {
   --bg: #0f1216;
@@ -52,6 +60,8 @@
   --gain: #5fbf85;
   --loss: #e0736a;
   --gold: #c9a86a;
+  --ink-num: #d3cec5;
+  --row-hover: rgba(232, 228, 220, 0.05);
 }
 * {
   box-sizing: border-box;

@@ -323,6 +323,7 @@
     border-bottom: 1px solid var(--hairline);
     text-align: left;
     white-space: nowrap;
+    transition: background-color 120ms ease;
   }
   thead th {
     color: var(--ink-soft);
@@ -338,6 +339,11 @@
   td.num {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
+    color: var(--ink-num);
+  }
+  /* Trace the row your cursor is on — a faint warm wash, not a bright band. */
+  tbody tr:hover > td {
+    background: var(--row-hover);
   }
   td.pos {
     color: var(--gain);
