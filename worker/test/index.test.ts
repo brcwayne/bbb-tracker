@@ -180,3 +180,40 @@ describe('/prices — TEFAS funds (tefas: prefix)', () => {
     expect(b.prices['tefas:MAC']).toEqual({ error: 'fon 401' })
   })
 })
+
+describe('/prices — TradingView BIST (tv: prefix)', () => {
+  function stubFetch(scanOk = true) {
+    vi.stubGlobal('fetch', vi.fn(async (u: string | URL, init?: RequestInit) => {
+      const s = String(u)
+      if (s.includes('tcmb.gov.tr')) return new Response(tcmbXml)
+      if (s.includes('THYAO')) return new Response(JSON.stringify(thyao))
+      if (s.includes('scanner.tradingview.com')) {
+        expect(init?.method).toBe('POST')
+        return scanOk
+          ? new Response(JSON.stringify({ data: [{ s: 'BIST:DMLKT', d: [12.5] }] }))
+          : new Response('no', { status: 500 })
+      }
+      return new Response('x', { status: 404 })
+    }))
+  }
+
+  it('prices DMLKT via the scanner, keyed by tv:DMLKT, converted at the TCMB rate', async () => {
+    stubFetch()
+    const res = await worker.fetch(new Request('https://w/prices?symbols=THYAO.IS,tv:DMLKT'), env, ctx)
+    expect(res.status).toBe(200)
+    const b = (await res.json()) as any
+    expect(b.prices['tv:DMLKT'].currency).toBe('TRY')
+    expect(b.prices['tv:DMLKT'].price).toBe(12.5)
+    expect(b.prices['tv:DMLKT'].priceUsd).toBeCloseTo(12.5 / 48.2238, 5)
+    expect(b.prices['THYAO.IS'].currency).toBe('TRY')
+  })
+
+  it('a scanner failure degrades to {error} for that symbol only', async () => {
+    stubFetch(false)
+    const res = await worker.fetch(new Request('https://w/prices?symbols=THYAO.IS,tv:DMLKT'), env, ctx)
+    expect(res.status).toBe(200)
+    const b = (await res.json()) as any
+    expect(b.prices['tv:DMLKT']).toEqual({ error: 'tradingview 500' })
+    expect(b.prices['THYAO.IS'].priceUsd).not.toBeNull()
+  })
+})

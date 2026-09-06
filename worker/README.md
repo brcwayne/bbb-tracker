@@ -1,6 +1,7 @@
 # bbb-prices — fiyat / FX proxy
 
 Durumsuz Cloudflare Worker. BIST/ABD hisseleri ve altın için Yahoo Finance,
+Yahoo'nun vermediği BIST kodları (ör. DMLKT) için TradingView scanner,
 USD/TRY için TCMB, TEFAS yatırım fonları için fonoloji.com. CORS yalnızca
 PWA origin'ine açık; tek anahtar `FONOLOJI_API_KEY` (Worker secret).
 
@@ -12,6 +13,9 @@ PWA origin'ine açık; tek anahtar `FONOLOJI_API_KEY` (Worker secret).
   - `altin-turev` enstrümanları uygulamada `GC=F`'ye eşlenir; Worker `usdPerGram` döndürür
   - `tefas:<kod>` önekli semboller fonoloji.com'a gider; yanıt anahtarı öneki korur
     (`prices["tefas:MAC"]`), `currency:"TRY"`, `priceUsd = price / usdtry`
+  - `tv:<kod>` önekli semboller TradingView scanner'a gider (`BIST:<kod>`); yanıt
+    anahtarı öneki korur (`prices["tv:DMLKT"]`), `currency:"TRY"`,
+    `priceUsd = price / usdtry`; anahtar gerekmez
   - `FONOLOJI_API_KEY` tanımsızsa `tefas:*` sembolleri `{error:"fon anahtarı yok"}`
     döner; diğer semboller ve uç normal 200 yanıtını verir
 

@@ -30,6 +30,7 @@
 
   const instName = (kod: string) => dataset?.instruments.find((i) => i.kod === kod)?.ad ?? kod
   const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort()
+  const isImported = (t: Transaction | null) => !!t && t.kaynak !== 'manual'
 
   const varlikOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.enstruman)))
   const kurumOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.hesap)))
@@ -91,7 +92,9 @@
         deleting = false
         return
       }
-      await deleteRecord<Transaction>(store, source, 'transactions', (t) => t.id === id)
+      await deleteRecord<Transaction>(store, source, 'transactions', (t) => t.id === id, {
+        allowImported: true,
+      })
       deleteTarget = null
       message = 'İşlem silindi.'
     } catch (e) {
@@ -132,6 +135,12 @@
     </div>
 
     {#if editing}
+      {#if isImported(editing)}
+        <p class="warn">
+          Bu kayıt Excel'den geldi. Kaydedersen Excel'deki geçmiş veriden kalıcı olarak ayrışır —
+          yalnızca gerçek bir hatayı düzeltmek için kullan.
+        </p>
+      {/if}
       {#key editing.id}
         <div class="form-area">
           <IslemFormu {dataset} {view} source={source!} store={store!} editing={editing} onSaved={editSaved} />
@@ -146,6 +155,9 @@
           <strong>{dateShort(deleteTarget.tarih)} · {deleteTarget.yon} {instName(deleteTarget.enstruman)} · {lot(deleteTarget.lot)} lot</strong>
           kalıcı olarak silinsin mi? Bu işlem geri alınamaz.
         </p>
+        {#if isImported(deleteTarget)}
+          <p class="warn">Bu kayıt Excel'den geldi — silersen Excel'deki geçmişten kalıcı olarak ayrışır.</p>
+        {/if}
         {#if deleteError}<p class="error">{deleteError}</p>{/if}
         <button onclick={() => (deleteTarget = null)} disabled={deleting}>Vazgeç</button>
         <button class="danger" onclick={confirmDelete} disabled={deleting}>{deleting ? 'Siliniyor…' : 'Evet, sil'}</button>
@@ -187,12 +199,19 @@
               </td>
               <td class="r num">{tutarUsdStr(t)}</td>
               <td class="act">
-                {#if t.kaynak === 'manual'}
-                  <button class="icon" title="Düzenle" aria-label="Düzenle" onclick={() => requestEdit(t)}>✎</button>
-                  <button class="icon danger" title="Sil" aria-label="Sil" onclick={() => requestDelete(t)}>🗑</button>
-                {:else}
-                  <span class="lock" title="Excel'den gelen kayıt — uygulamadan düzenlenemez">🔒</span>
+                {#if t.kaynak !== 'manual'}
+                  <span class="lock" title="Excel'den gelen kayıt — düzenlerken dikkat">🔒</span>
                 {/if}
+                <button
+                  class="icon"
+                  title={t.kaynak === 'manual' ? 'Düzenle' : 'Excel kaydını düzelt'}
+                  aria-label="Düzenle"
+                  onclick={() => requestEdit(t)}>✎</button>
+                <button
+                  class="icon danger"
+                  title={t.kaynak === 'manual' ? 'Sil' : 'Excel kaydını sil'}
+                  aria-label="Sil"
+                  onclick={() => requestDelete(t)}>🗑</button>
               </td>
             </tr>
           {/each}
@@ -214,6 +233,12 @@
     color: var(--gain);
     font-size: 0.85rem;
     margin: 0.25rem 0 0.75rem;
+  }
+  .warn {
+    color: var(--loss);
+    font-size: 0.82rem;
+    margin: 0.25rem 0 0.5rem;
+    line-height: 1.4;
   }
   .filters {
     display: flex;

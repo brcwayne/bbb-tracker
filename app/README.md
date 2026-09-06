@@ -128,6 +128,15 @@ küçük bir Cloudflare Worker gerekir (`worker/` klasörü). BIST/ABD/altın i�
 TEFAS yatırım fonları için `worker/` bir fonoloji.com anahtarı ister (ücretsiz, opsiyonel —
 bkz. `worker/README.md`). Anahtar yoksa fonlar `—` kalır, gerisi çalışır.
 
+Yahoo'nun fiyat vermediği BIST kodları (ör. **DMLKT**) enstrüman tanımında
+`fiyatKaynagi: "tradingview"` ile işaretlenir; Worker bunları
+`scanner.tradingview.com` üzerinden çeker (anahtar gerekmez).
+
+Fiyatlar tarayıcıda `localStorage`'da saklanır: uygulamayı tekrar açtığında son
+çekilen fiyatlar ve **"son yenilendi"** zaman damgası hemen görünür. Snapshot 6
+saatten eskiyse açılışta **bir kez** otomatik yenilenir; daha tazeyse elle
+"Fiyatları yenile" gerekene kadar tekrar veri çekilmez.
+
 1. Ücretsiz **Cloudflare** hesabı aç.
 2. `npm i -g wrangler` → `wrangler login`.
 3. `cd worker && npm install && wrangler deploy` → çıkan

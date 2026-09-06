@@ -156,6 +156,27 @@ describe('updateRecord', () => {
     ).rejects.toThrow('Sadece manuel kayıtlar düzenlenebilir.')
   })
 
+  it('updates a migration record when allowImported is set', async () => {
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let saved: unknown
+    const drive = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (_n: string, data: unknown) => { saved = data },
+    }
+    const patch = { ...fixture.transactions[0], lot: 77 }
+    await updateRecord(
+      store,
+      drive,
+      'transactions',
+      (t: typeof patch) => t.id === 't_a',
+      patch,
+      { allowImported: true },
+    )
+    expect((saved as typeof fixture.transactions).find((t) => t.id === 't_a')?.lot).toBe(77)
+  })
+
   it('reloads and retries once on a conflict', async () => {
     const editingTxn = { ...fixture.transactions[0], id: 't_manual', kaynak: 'manual' }
     const ds = { ...fixture, transactions: [...fixture.transactions, editingTxn] }
@@ -227,6 +248,25 @@ describe('deleteRecord', () => {
     await expect(
       deleteRecord(store, drive, 'transactions', (t: (typeof fixture.transactions)[number]) => t.id === 't_a'),
     ).rejects.toThrow('Sadece manuel kayıtlar silinebilir.')
+  })
+
+  it('deletes a migration record when allowImported is set', async () => {
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let saved: unknown
+    const drive = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (_n: string, data: unknown) => { saved = data },
+    }
+    await deleteRecord(
+      store,
+      drive,
+      'transactions',
+      (t: (typeof fixture.transactions)[number]) => t.id === 't_a',
+      { allowImported: true },
+    )
+    expect((saved as typeof fixture.transactions).some((t) => t.id === 't_a')).toBe(false)
   })
 
   it('throws if the record is already gone', async () => {

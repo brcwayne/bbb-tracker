@@ -1,6 +1,7 @@
 import { fetchQuotes } from './yahoo'
 import { fetchUsdTry } from './tcmb'
 import { fetchFundQuotes, type FundQuote } from './fonoloji'
+import { fetchTvQuotes, type TvQuote } from './tradingview'
 import { usdPerGramFromOunce, GOLD_YAHOO_SYMBOL } from './symbols'
 
 export interface Env {
@@ -11,6 +12,8 @@ export interface Env {
 
 /** App marks a TEFAS fund symbol as `tefas:<code>` so we can route it here. */
 const TEFAS_PREFIX = 'tefas:'
+/** …and a TradingView-only BIST symbol (e.g. DMLKT) as `tv:<code>`. */
+const TV_PREFIX = 'tv:'
 
 function cors(origin: string): Record<string, string> {
   return {
@@ -39,14 +42,22 @@ async function handlePrices(url: URL, origin: string, env: Env): Promise<Respons
   const fundCodes = uniq
     .filter((s) => s.startsWith(TEFAS_PREFIX))
     .map((s) => s.slice(TEFAS_PREFIX.length))
-  const yahooSyms = uniq.filter((s) => !s.startsWith(TEFAS_PREFIX))
+  const tvCodes = uniq
+    .filter((s) => s.startsWith(TV_PREFIX))
+    .map((s) => s.slice(TV_PREFIX.length))
+  const yahooSyms = uniq.filter(
+    (s) => !s.startsWith(TEFAS_PREFIX) && !s.startsWith(TV_PREFIX),
+  )
 
   const quotesP = fetchQuotes(yahooSyms)
   const fundsP: Promise<Record<string, FundQuote>> = fundCodes.length
     ? fetchFundQuotes(fundCodes, env.FONOLOJI_API_KEY ?? '')
     : Promise.resolve({})
+  const tvP: Promise<Record<string, TvQuote>> = tvCodes.length
+    ? fetchTvQuotes(tvCodes)
+    : Promise.resolve({})
   const fxP = fetchUsdTry().then((r) => r.usdtry).catch(() => null)
-  const [quotes, funds, usdtry] = await Promise.all([quotesP, fundsP, fxP])
+  const [quotes, funds, tv, usdtry] = await Promise.all([quotesP, fundsP, tvP, fxP])
 
   const prices: Record<string, unknown> = {}
   for (const [sym, q] of Object.entries(quotes)) {
@@ -63,6 +74,19 @@ async function handlePrices(url: URL, origin: string, env: Env): Promise<Respons
   // TEFAS funds always report TRY — same USD conversion as the BIST path.
   for (const [code, q] of Object.entries(funds)) {
     const key = TEFAS_PREFIX + code
+    if ('error' in q) {
+      prices[key] = q
+      continue
+    }
+    prices[key] = {
+      price: q.price,
+      currency: q.currency,
+      priceUsd: usdtry != null ? q.price / usdtry : null,
+    }
+  }
+  // TradingView BIST quotes are TRY too — same conversion again.
+  for (const [code, q] of Object.entries(tv)) {
+    const key = TV_PREFIX + code
     if ('error' in q) {
       prices[key] = q
       continue

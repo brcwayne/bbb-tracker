@@ -16,7 +16,13 @@
     type PeriodKey,
   } from './lib/settings.svelte'
   import { dateShort, tryFmt } from './lib/format'
-  import { prices, refreshPrices, hydratePrices, priceApiEnabled } from './lib/prices.svelte'
+  import {
+    prices,
+    refreshPrices,
+    hydratePrices,
+    pricesStale,
+    priceApiEnabled,
+  } from './lib/prices.svelte'
   import Panorama from './routes/Panorama.svelte'
   import Portfoyler from './routes/Portfoyler.svelte'
   import Kurumlar from './routes/Kurumlar.svelte'
@@ -71,12 +77,32 @@
 
   const priceStamp = $derived(
     prices.asOf
-      ? new Date(prices.asOf).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+      ? new Date(prices.asOf).toLocaleString('tr-TR', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
       : null,
+  )
+  const priceStampFull = $derived(
+    prices.asOf ? new Date(prices.asOf).toLocaleString('tr-TR') : '',
   )
   function onRefreshPrices() {
     if ($store.status === 'ready' && $store.dataset) refreshPrices($store.dataset)
   }
+
+  // Auto-refresh once per launch when the hydrated snapshot is missing or stale,
+  // so re-opening the app in one evening doesn't need a manual click every time.
+  let autoRefreshed = false
+  $effect(() => {
+    if (autoRefreshed || !priceApiEnabled()) return
+    if ($store.status !== 'ready' || !$store.dataset) return
+    autoRefreshed = true
+    if (!pricesStale()) return
+    const ds = $store.dataset
+    queueMicrotask(() => void refreshPrices(ds))
+  })
 
   function onSrcChange(e: Event) {
     const value = (e.currentTarget as HTMLSelectElement).value
@@ -117,7 +143,16 @@
       >
         {prices.status === 'loading' ? 'Yenileniyor…' : 'Fiyatları yenile'}
       </button>
-      {#if priceStamp}<span class="stamp num">{priceStamp}</span>{/if}
+      {#if priceStamp}
+        <span
+          class="stamp num"
+          class:stale={pricesStale()}
+          data-testid="price-stamp"
+          title={`Fiyatlar son yenilendi: ${priceStampFull}`}
+        >
+          {priceStamp}{#if pricesStale()} · eski{/if}
+        </span>
+      {/if}
       {#if prices.status === 'error'}<span class="priceerr">fiyat alınamadı</span>{/if}
     {/if}
     <ThemeToggle />
@@ -205,6 +240,10 @@
   .stamp {
     color: var(--ink-soft);
     font-size: 0.75rem;
+  }
+  .stamp.stale {
+    color: var(--loss);
+    opacity: 0.85;
   }
   .pricebtn {
     appearance: none;
