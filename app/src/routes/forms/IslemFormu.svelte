@@ -130,7 +130,16 @@
           net_usd: netUsd,
           not: not_,
         }
-        await updateRecord<Transaction>(store, source, 'transactions', (t) => t.id === editing!.id, patch)
+        // Log page can route an Excel-imported row here; allow the write past the
+        // manual-only gate (the Log page shows a warning before this point).
+        await updateRecord<Transaction>(
+          store,
+          source,
+          'transactions',
+          (t) => t.id === editing!.id,
+          patch,
+          { allowImported: editing!.kaynak !== 'manual' },
+        )
       } else {
         const rand = crypto.getRandomValues(new Uint8Array(8))
         const id = 't_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')

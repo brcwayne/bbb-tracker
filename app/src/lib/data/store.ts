@@ -143,18 +143,26 @@ export async function appendRecord<T>(
   return writeAndCommit(store, source, file, (current) => [...(current as T[]), record])
 }
 
+/**
+ * `allowImported` lets the Log page edit/delete an Excel-migrated row after an
+ * explicit warning. Everywhere else the `kaynak === 'manual'` gate still holds.
+ */
+export type MutateOpts = { allowImported?: boolean }
+
 export async function updateRecord<T extends { kaynak?: string }>(
   store: Writable<AppState>,
   source: DataSource,
   file: Kind,
   matches: (r: T) => boolean,
   patch: T,
+  opts: MutateOpts = {},
 ): Promise<void> {
   return writeAndCommit(store, source, file, (current) => {
     const arr = current as T[]
     const idx = arr.findIndex(matches)
     if (idx === -1) throw new Error('Kayıt bulunamadı — başka bir yerden silinmiş olabilir.')
-    if (arr[idx].kaynak !== 'manual') throw new Error('Sadece manuel kayıtlar düzenlenebilir.')
+    if (!opts.allowImported && arr[idx].kaynak !== 'manual')
+      throw new Error('Sadece manuel kayıtlar düzenlenebilir.')
     const next = [...arr]
     next[idx] = patch
     return next
@@ -166,12 +174,14 @@ export async function deleteRecord<T extends { kaynak?: string }>(
   source: DataSource,
   file: Kind,
   matches: (r: T) => boolean,
+  opts: MutateOpts = {},
 ): Promise<void> {
   return writeAndCommit(store, source, file, (current) => {
     const arr = current as T[]
     const target = arr.find(matches)
     if (!target) throw new Error('Kayıt bulunamadı — başka bir yerden silinmiş olabilir.')
-    if (target.kaynak !== 'manual') throw new Error('Sadece manuel kayıtlar silinebilir.')
+    if (!opts.allowImported && target.kaynak !== 'manual')
+      throw new Error('Sadece manuel kayıtlar silinebilir.')
     return arr.filter((r) => !matches(r))
   })
 }

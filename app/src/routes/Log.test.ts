@@ -48,29 +48,40 @@ describe('Log', () => {
     expect(rows.slice(1).every((r) => r.textContent?.includes('MIDAS'))).toBe(true)
   })
 
-  it('migration rows are locked; manual rows get edit/delete icons', async () => {
+  it('migration rows keep a 🔒 marker but still expose edit/delete', async () => {
     const manual = { ...fixture.transactions[0], id: 't_manual', tarih: '2026-01-01', kaynak: 'manual' }
     const ds = { ...fixture, transactions: [...fixture.transactions, manual] }
     const { state, store } = await v(ds)
-    const { getAllByRole, getByLabelText } = render(Log, {
+    const { getAllByRole, getAllByLabelText } = render(Log, {
       props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(ds) }, store },
     })
-    // 🔒 appears for every migration row (7 of them)
+    // 🔒 appears for every migration row (7 of them), not the manual one
     const rows = getAllByRole('row')
     const lockCount = rows.filter((r) => r.textContent?.includes('🔒')).length
     expect(lockCount).toBe(fixture.transactions.length)
-    // the manual row exposes an edit button
-    expect(getByLabelText('Düzenle')).toBeInTheDocument()
+    // every row — migration included — now has an edit control
+    expect(getAllByLabelText('Düzenle')).toHaveLength(fixture.transactions.length + 1)
+  })
+
+  it('editing a migration row shows the divergence warning', async () => {
+    const { state, store } = await v()
+    const { getAllByLabelText, getByText, queryByText } = render(Log, {
+      props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(fixture) }, store },
+    })
+    expect(queryByText(/Excel'deki geçmiş veriden kalıcı olarak ayrışır/)).toBeNull()
+    await fireEvent.click(getAllByLabelText('Düzenle')[0])
+    expect(getByText(/Excel'deki geçmiş veriden kalıcı olarak ayrışır/)).toBeInTheDocument()
   })
 
   it('clicking the edit icon opens the İşlem form pre-filled', async () => {
     const manual = { ...fixture.transactions[0], id: 't_manual', tarih: '2026-01-01', kaynak: 'manual', lot: 42 }
-    const ds = { ...fixture, transactions: [...fixture.transactions, manual] }
+    const ds = { ...fixture, transactions: [manual, ...fixture.transactions] }
     const { state, store } = await v(ds)
-    const { getByLabelText } = render(Log, {
+    const { getAllByLabelText, getByLabelText } = render(Log, {
       props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(ds) }, store },
     })
-    await fireEvent.click(getByLabelText('Düzenle'))
+    // manual row is dated 2026-01-01 → newest → first edit button
+    await fireEvent.click(getAllByLabelText('Düzenle')[0])
     expect((getByLabelText('Lot') as HTMLInputElement).value).toBe('42')
   })
 })
