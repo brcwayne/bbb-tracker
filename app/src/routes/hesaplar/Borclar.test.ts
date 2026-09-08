@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/svelte'
+import { render, fireEvent } from '@testing-library/svelte'
 import Borclar from './Borclar.svelte'
 import { fixture } from '../../fixtures/dataset'
 import type { Dataset, Debt } from '../../lib/data/types'
@@ -55,5 +55,121 @@ describe('Borçlar sayfası', () => {
   it('kapanmış borcu listelemez', () => {
     const { container } = render(Borclar, { dataset: withClosedDebtDataset })
     expect(container.textContent).not.toContain('MEHMET')
+  })
+
+  it('borcu kapatır ama silmez', async () => {
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let savedDebts: Debt[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (name: string, data: unknown) => {
+        if (name === 'debts') savedDebts = data as Debt[]
+      },
+    }
+    const { getAllByRole } = render(Borclar, {
+      props: { dataset: fixture, source, store },
+    })
+
+    const kapatBtns = getAllByRole('button', { name: /Kapat/i })
+    await fireEvent.click(kapatBtns[0])
+
+    expect(savedDebts).toBeDefined()
+    const target = savedDebts!.find((d) => d.id === 'db_1')
+    expect(target).toBeDefined()
+    expect(target!.durum).toBe('KAPALI')
+  })
+
+  it('kapanan borç listeden çıkar', async () => {
+    const { container } = render(Borclar, { dataset: withClosedDebtDataset })
+    // withClosedDebtDataset has db_closed with description 'Kapanan borç'
+    const openDebts = container.querySelectorAll('[data-debt-row]')
+    const hasClosedInList = Array.from(openDebts).some((el) => el.textContent?.includes('Kapanan borç'))
+    expect(hasClosedInList).toBe(false)
+  })
+
+  it('tutarı düzeltir', async () => {
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let savedDebts: Debt[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (name: string, data: unknown) => {
+        if (name === 'debts') savedDebts = data as Debt[]
+      },
+    }
+    const { getAllByRole, getByLabelText, getByRole } = render(Borclar, {
+      props: { dataset: fixture, source, store },
+    })
+
+    const editBtns = getAllByRole('button', { name: /Düzenle/i })
+    await fireEvent.click(editBtns[0])
+
+    const amountInput = getByLabelText(/Tutar/i)
+    await fireEvent.input(amountInput, { target: { value: '6000' } })
+
+    const saveBtn = getByRole('button', { name: /Kaydet/i })
+    await fireEvent.click(saveBtn)
+
+    expect(savedDebts).toBeDefined()
+    const target = savedDebts!.find((d) => d.id === 'db_1')
+    expect(target!.tutar).toBe(6000)
+  })
+
+  it('silmeden önce onay ister', async () => {
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let saved = false
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async () => {
+        saved = true
+      },
+    }
+    const { getAllByRole, getByRole } = render(Borclar, {
+      props: { dataset: fixture, source, store },
+    })
+
+    const deleteBtns = getAllByRole('button', { name: /Sil/i })
+    await fireEvent.click(deleteBtns[0])
+
+    expect(saved).toBe(false)
+
+    const dismissBtn = getByRole('button', { name: /Vazgeç/i })
+    await fireEvent.click(dismissBtn)
+
+    expect(saved).toBe(false)
+  })
+
+  it('borcu siler', async () => {
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let savedDebts: Debt[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (name: string, data: unknown) => {
+        if (name === 'debts') savedDebts = data as Debt[]
+      },
+    }
+    const { getAllByRole, getByRole } = render(Borclar, {
+      props: { dataset: fixture, source, store },
+    })
+
+    const deleteBtns = getAllByRole('button', { name: /Sil/i })
+    await fireEvent.click(deleteBtns[0])
+
+    const confirmBtn = getByRole('button', { name: 'Evet, Sil' })
+    await fireEvent.click(confirmBtn)
+
+    expect(savedDebts).toBeDefined()
+    expect(savedDebts!.some((d) => d.id === 'db_1')).toBe(false)
   })
 })
