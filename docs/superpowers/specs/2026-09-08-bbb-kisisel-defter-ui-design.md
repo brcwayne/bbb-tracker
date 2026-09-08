@@ -81,7 +81,7 @@ All four read from the same derived store, so a figure means the same thing on e
 
 In order down the page:
 
-1. **Aylık seyir** (U4) — a bar or line chart of monthly expense totals over the last 12 months, one series per currency that has data. This is the first thing on the page because it is the first thing Enis asked for.
+1. **Aylık seyir** (U4) — monthly expense totals over the last 12 months as bars. Bars rather than a line, because monthly totals are discrete amounts, not a continuous series. The existing `BarChart` takes a single series (`bars: {label, value}[]`), so **one chart per currency, stacked vertically**, and the USD chart renders only when USD rows exist — which keeps the common TRY-only case to a single chart and avoids changing a primitive the investment pages depend on. This is the first thing on the page because it is the first thing Enis asked for.
 2. **Bu ay** — total spent this month per currency, the count of records, and the change against last month as an absolute figure and a percentage.
 3. **Kategori dağılımı** — a donut of this month's expenses by category, with the total in the centre, matching the investment volume's donut treatment.
 4. **Yaklaşan taksit yükü** — the next three months' instalment totals, so "what am I committed to" is answerable without leaving the page.
