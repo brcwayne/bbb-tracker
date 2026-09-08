@@ -3,6 +3,7 @@ import { render, fireEvent } from '@testing-library/svelte'
 import Harcamalar from './Harcamalar.svelte'
 import { fixture } from '../../fixtures/dataset'
 import type { Dataset } from '../../lib/data/types'
+import { createAppStore, load } from '../../lib/data/store'
 
 const emptyDataset: Dataset = {
   ...fixture,
@@ -51,4 +52,46 @@ describe('Harcamalar sayfası', () => {
     const futureMarkers = container.querySelectorAll('.future-marker')
     expect(futureMarkers.length).toBeGreaterThan(0)
   })
+
+  it('kaydı siler', async () => {
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    let savedData: unknown
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (_n: string, data: unknown) => {
+        savedData = data
+      },
+    }
+    const { getAllByTitle, getByText } = render(Harcamalar, {
+      props: { dataset: fixture, source, store, today: '2026-09-08' },
+    })
+
+    const deleteButtons = getAllByTitle('Sil')
+    await fireEvent.click(deleteButtons[0])
+
+    const confirmBtn = getByText('Evet, Sil')
+    await fireEvent.click(confirmBtn)
+
+    expect(savedData).toBeDefined()
+    expect((savedData as any[]).some((r: any) => r.id === 'px_p6')).toBe(false)
+  })
+
+  it('Drive bağlı değilken düzenleme kapalı', () => {
+    const store = createAppStore()
+    const source = { id: 'local' as const, load: () => Promise.resolve(fixture) }
+    const { container, getAllByTitle, getByText } = render(Harcamalar, {
+      props: { dataset: fixture, source, store, today: '2026-09-08' },
+    })
+
+    const addBtn = getByText('+ Harcama Ekle') as HTMLButtonElement
+    expect(addBtn.disabled).toBe(true)
+
+    const editButtons = getAllByTitle('Düzenle') as HTMLButtonElement[]
+    expect(editButtons[0].disabled).toBe(true)
+    expect(container.textContent).toMatch(/drive bağlantısı gerekiyor/i)
+  })
 })
+
