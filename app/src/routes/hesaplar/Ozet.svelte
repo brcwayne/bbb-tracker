@@ -6,7 +6,7 @@
     categoryBreakdown,
     instalmentSchedule,
   } from '../../lib/data/personal'
-  import { tryFmt, usd, monthLabel } from '../../lib/format'
+  import { tryFmt, usd, monthLabel, monthShort } from '../../lib/format'
   import BarChart from '../../lib/charts/BarChart.svelte'
   import Donut from '../../lib/charts/Donut.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
@@ -27,16 +27,24 @@
 
   const [currYear, currMonth] = $derived(today.split('-').map(Number))
 
+
+  /** Twelve "Eki 2025"-style labels collide on a 12-month axis, so show the
+   *  month alone and carry the year only where it changes. */
+  const axisLabel = (ay: string, i: number) => {
+    const m = Number(ay.split('-')[1])
+    return i === 0 || m === 1
+      ? `${monthShort(ay + '-01')} ${ay.slice(2, 4)}`
+      : monthShort(ay + '-01')
+  }
+
   const emptyMonths = $derived.by(() => {
     const res: { label: string; value: number }[] = []
     for (let i = 11; i >= 0; i--) {
       const mIndex = currYear * 12 + (currMonth - 1) - i
       const y = Math.floor(mIndex / 12)
       const m = (mIndex % 12) + 1
-      res.push({
-        label: monthLabel(`${y}-${String(m).padStart(2, '0')}-01`),
-        value: 0,
-      })
+      const ay = `${y}-${String(m).padStart(2, '0')}`
+      res.push({ label: axisLabel(ay, 11 - i), value: 0 })
     }
     return res
   })
@@ -52,12 +60,12 @@
   const tryMonthlyBars = $derived(
     monthly
       .filter((m) => m.para === 'TRY')
-      .map((m) => ({ label: monthLabel(m.ay + '-01'), value: m.toplam })),
+      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam })),
   )
   const usdMonthlyBars = $derived(
     monthly
       .filter((m) => m.para === 'USD')
-      .map((m) => ({ label: monthLabel(m.ay + '-01'), value: m.toplam })),
+      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam })),
   )
 
   const catName = (kod: string) => categories.find((c) => c.kod === kod)?.ad ?? kod

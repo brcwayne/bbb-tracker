@@ -43,6 +43,13 @@ export function dateShort(iso: string): string {
   return `${d} ${AY[m - 1]} ${y}`
 }
 
+/** "Eki" — month name only. For axes where twelve months sit side by side and
+ *  "Eki 2025" would collide with its neighbour. */
+export function monthShort(iso: string): string {
+  const m = Number(iso.split('-')[1])
+  return AY[m - 1]
+}
+
 export function monthLabel(iso: string): string {
   const [y, m] = iso.split('-').map(Number)
   return `${AY[m - 1]} ${y}`
