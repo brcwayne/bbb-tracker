@@ -114,3 +114,7 @@ export const fixture: Dataset = {
     },
   ],
 }
+
+fixture.personal_tx = fixture.personalTx
+fixture.payment_plans = fixture.paymentPlans
+fixture.personal_accounts = fixture.personalAccounts
