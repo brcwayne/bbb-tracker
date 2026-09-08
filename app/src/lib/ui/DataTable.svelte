@@ -9,6 +9,8 @@
     fmt?: (v: any, row: any) => string
     /** 'sign' → colour the cell green when row[key] > 0, red when < 0 */
     tone?: 'sign'
+    /** Render fmt result as HTML */
+    html?: boolean
   }
   type Sort = { key: string; dir: 'asc' | 'desc' }
   let {
@@ -58,7 +60,9 @@
     if (!col.sortable) return
     userSort =
       sort?.key === col.key
-        ? { key: col.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+        ? sort.dir === 'asc'
+          ? { key: col.key, dir: 'desc' }
+          : null
         : { key: col.key, dir: 'asc' }
   }
 </script>
@@ -98,6 +102,7 @@
       >
         {#each columns as col, ci}
           <td
+            data-col={col.key}
             style:text-align={col.align ?? 'left'}
             class:num={col.align === 'right'}
             class:pos={col.tone === 'sign' && typeof row[col.key] === 'number' && row[col.key] > 0}
@@ -105,7 +110,7 @@
           >
             {#if ci === 0 && detail}<span class="caret" aria-hidden="true"
                 >{isOpen(row) ? '▾' : '▸'}</span
-              >{/if}{col.fmt ? col.fmt(row[col.key], row) : row[col.key]}
+              >{/if}{#if col.html}{@html col.fmt ? col.fmt(row[col.key], row) : row[col.key]}{:else}{col.fmt ? col.fmt(row[col.key], row) : row[col.key]}{/if}
           </td>
         {/each}
       </tr>
