@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { LocalFileSource } from './local'
+import { PERSONAL_NAMES } from './source'
 import { fixture } from '../../fixtures/dataset'
 
 function mockFetchOk() {
@@ -10,7 +11,7 @@ function mockFetchOk() {
       meta: fixture.meta, fxrates: fixture.fxrates,
     }
     const name = url.split('/').pop()!.replace('.json', '')
-    if (name === 'assetTransfers') return Promise.resolve({ ok: false, status: 404 })
+    if (name === 'assetTransfers' || PERSONAL_NAMES.includes(name as any)) return Promise.resolve({ ok: false, status: 404 })
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(map[name as keyof typeof map]) })
   })
 }
@@ -27,6 +28,7 @@ function mockFetchOkWithAssetTransfers() {
       meta: fixture.meta, fxrates: fixture.fxrates,
     }
     const name = url.split('/').pop()!.replace('.json', '')
+    if (PERSONAL_NAMES.includes(name as any)) return Promise.resolve({ ok: false, status: 404 })
     if (name === 'assetTransfers') {
       return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(SAMPLE_ASSET_TRANSFERS) })
     }
@@ -43,7 +45,7 @@ describe('LocalFileSource', () => {
     expect(ds.transactions).toHaveLength(7)
     expect(ds.meta.olusturulma).toBe('2026-09-03T16:24:37')
     expect(Object.keys(ds.fxrates)).toContain('2020-01-06')
-    expect(fetch).toHaveBeenCalledTimes(9)
+    expect(fetch).toHaveBeenCalledTimes(15)
   })
 
   it('throws a clear error on a missing file', async () => {
@@ -61,5 +63,32 @@ describe('LocalFileSource', () => {
     vi.stubGlobal('fetch', mockFetchOkWithAssetTransfers())
     const ds = await new LocalFileSource('./data').load()
     expect(ds.assetTransfers).toEqual(SAMPLE_ASSET_TRANSFERS)
+  })
+
+  it('bir kişisel dosya eksikse boş dizi döner, hata atmaz', async () => {
+    vi.stubGlobal('fetch', mockFetchOk())
+    const ds = await new LocalFileSource('./data').load()
+    expect(ds.personalTx).toEqual([])
+    expect(ds.debts).toEqual([])
+  })
+
+  it('bozuk bir kişisel dosya sadece kendi alanını boşaltır', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const name = url.split('/').pop()!.replace('.json', '')
+      if (name === 'personal_tx') {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.reject(new SyntaxError('bozuk')) })
+      }
+      if (name === 'assetTransfers') return Promise.resolve({ ok: false, status: 404 })
+      if (name === 'categories') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([{ kod: 'market' }]) })
+      const map = {
+        transactions: fixture.transactions, cashflows: fixture.cashflows, snapshots: fixture.snapshots,
+        instruments: fixture.instruments, brokers: fixture.brokers, portfolios: fixture.portfolios,
+        meta: fixture.meta, fxrates: fixture.fxrates,
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(map[name as keyof typeof map] ?? []) })
+    }))
+    const ds = await new LocalFileSource('./data').load()
+    expect(ds.personalTx).toEqual([])
+    expect(ds.categories!.length).toBeGreaterThan(0)
   })
 })

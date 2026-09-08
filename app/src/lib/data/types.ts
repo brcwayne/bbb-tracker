@@ -105,6 +105,81 @@ export interface Meta {
 
 export type FxRates = Record<string, number>
 
+export interface PersonalTx {
+  id: string
+  tarih: string
+  tur: 'GIDER' | 'GELIR'
+  tutar: number
+  paraBirimi: 'TRY' | 'USD'
+  kategori: string
+  aciklama: string
+  hesap: string
+  sahip: string
+  taksitPlaniId: string | null
+  taksitNo: number | null
+  taksitToplam: number | null
+  not: string
+  kaynak: string
+  olusturulma: string
+}
+
+export interface PaymentPlan {
+  id: string
+  alisTarihi: string
+  aciklama: string
+  toplamTutar: number
+  paraBirimi: 'TRY' | 'USD'
+  taksitSayisi: number
+  taksitTutari: number
+  sonTaksitTutari: number
+  kategori: string
+  hesap: string
+  sahip: string
+  durum: 'AKTIF' | 'BITTI' | 'IPTAL'
+  kaynak: string
+  olusturulma: string
+}
+
+export interface PersonalAccount {
+  kod: string
+  ad: string
+  tur: 'NAKIT' | 'BANKA' | 'KREDI_KARTI'
+  paraBirimi: string
+  sahip: string
+  aktif: boolean
+  hesapKesim?: number
+  sonOdeme?: number
+}
+
+export interface Category {
+  kod: string
+  ad: string
+  tur: 'GIDER' | 'GELIR'
+  aktif: boolean
+}
+
+export interface Person {
+  kod: string
+  ad: string
+  haneUyesi: boolean
+  aktif: boolean
+}
+
+export interface Debt {
+  id: string
+  tarih: string
+  yon: 'VERDIM' | 'ALDIM'
+  kisi: string
+  tutar: number
+  paraBirimi: 'TRY' | 'USD'
+  aciklama: string
+  hesap: string
+  durum: 'ACIK' | 'KAPALI'
+  kapatanKayitlar: string[]
+  kaynak: string
+  olusturulma: string
+}
+
 export interface Dataset {
   transactions: Transaction[]
   cashflows: Cashflow[]
@@ -115,4 +190,10 @@ export interface Dataset {
   meta: Meta
   fxrates: FxRates
   assetTransfers: AssetTransfer[]
+  personalTx?: PersonalTx[]
+  paymentPlans?: PaymentPlan[]
+  personalAccounts?: PersonalAccount[]
+  categories?: Category[]
+  people?: Person[]
+  debts?: Debt[]
 }

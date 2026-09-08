@@ -1,5 +1,5 @@
 import type { Dataset } from './types'
-import { type DataSource, NAMES } from './source'
+import { type DataSource, NAMES, PERSONAL_NAMES, PERSONAL_KEY_MAP } from './source'
 
 export class LocalFileSource implements DataSource {
   readonly id = 'local' as const
@@ -16,6 +16,21 @@ export class LocalFileSource implements DataSource {
     const dataset = Object.fromEntries(parts) as unknown as Dataset
     const atRes = await fetch(`${this.base}/assetTransfers.json`)
     dataset.assetTransfers = atRes.ok ? await atRes.json() : []
+
+    await Promise.all(
+      PERSONAL_NAMES.map(async (name) => {
+        const key = PERSONAL_KEY_MAP[name]
+        try {
+          const res = await fetch(`${this.base}/${name}.json`)
+          const data = res.ok ? await res.json() : null
+          dataset[key] = Array.isArray(data) ? data : []
+        } catch (e) {
+          console.warn(`local: ${name}.json okunamadı:`, e)
+          dataset[key] = []
+        }
+      }),
+    )
+
     return dataset
   }
 }

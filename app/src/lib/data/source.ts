@@ -13,6 +13,21 @@ export const NAMES = [
   'brokers', 'portfolios', 'meta', 'fxrates',
 ] as const
 
+/** Optional — a missing personal file yields [] and never fails the load. */
+export const PERSONAL_NAMES = [
+  'personal_tx', 'payment_plans', 'personal_accounts',
+  'categories', 'people', 'debts',
+] as const
+
+export const PERSONAL_KEY_MAP = {
+  personal_tx: 'personalTx',
+  payment_plans: 'paymentPlans',
+  personal_accounts: 'personalAccounts',
+  categories: 'categories',
+  people: 'people',
+  debts: 'debts',
+} as const satisfies Record<typeof PERSONAL_NAMES[number], keyof Dataset>
+
 export function describeSource(s: DataSource, meta: Meta): string {
   const label = s.id === 'local' ? 'local' : 'Drive'
   const d = meta.olusturulma?.slice(0, 10)

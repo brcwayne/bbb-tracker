@@ -1,5 +1,5 @@
 import type { Dataset } from './types'
-import { type DataSource, NAMES } from './source'
+import { type DataSource, NAMES, PERSONAL_NAMES, PERSONAL_KEY_MAP } from './source'
 
 /** Thrown when the user still needs to authorise or pick a Drive folder. */
 export class NeedsAuthError extends Error {}
@@ -245,6 +245,31 @@ export class DriveSource implements DataSource {
     } else {
       dataset.assetTransfers = []
     }
+
+    await Promise.all(
+      PERSONAL_NAMES.map(async (name) => {
+        const key = PERSONAL_KEY_MAP[name]
+        const file = files.find((f) => f.name === `${name}.json`)
+        if (!file) {
+          dataset[key] = []
+          return
+        }
+        try {
+          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers })
+          if (res.status === 401 || res.status === 403) {
+            this.setToken(null)
+            throw new NeedsAuthError('oturum süresi doldu')
+          }
+          const data = res.ok ? await res.json() : null
+          dataset[key] = Array.isArray(data) ? data : []
+        } catch (e) {
+          if (e instanceof NeedsAuthError) throw e
+          console.warn(`Drive: ${name}.json okunamadı:`, e)
+          dataset[key] = []
+        }
+      }),
+    )
+
     return dataset
   }
 

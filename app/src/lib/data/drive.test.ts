@@ -125,7 +125,83 @@ describe('DriveSource', () => {
     const ds = await s.load()
     expect(ds.assetTransfers).toEqual([])
   })
+
+  it('bir kişisel dosya eksikse boş dizi döner, hata atmaz', async () => {
+    const ds = await (await makeDriveSourceWithFiles(INVESTMENT_FILES_ONLY)).load()
+    expect(ds.personalTx).toEqual([])
+    expect(ds.debts).toEqual([])
+  })
+
+  it('bozuk bir kişisel dosya sadece kendi alanını boşaltır', async () => {
+    const ds = await (await makeDriveSourceWithFiles({ ...ALL_FILES, 'personal_tx.json': '{bozuk' })).load()
+    expect(ds.personalTx).toEqual([])
+    expect(ds.categories!.length).toBeGreaterThan(0)
+  })
+
+  it('eksik bir YATIRIM dosyası hâlâ hata atar', async () => {
+    const s = await makeDriveSourceWithFiles(without(ALL_FILES, 'transactions.json'))
+    await expect(s.load()).rejects.toThrow(/bulunamadı/)
+  })
 })
+
+const INVESTMENT_FILES_ONLY: Record<string, unknown> = {
+  'transactions.json': fixture.transactions,
+  'cashflows.json': fixture.cashflows,
+  'snapshots.json': fixture.snapshots,
+  'instruments.json': fixture.instruments,
+  'brokers.json': fixture.brokers,
+  'portfolios.json': fixture.portfolios,
+  'meta.json': fixture.meta,
+  'fxrates.json': fixture.fxrates,
+}
+
+const ALL_FILES: Record<string, unknown> = {
+  ...INVESTMENT_FILES_ONLY,
+  'personal_tx.json': [{ id: 'px_1', tutar: 100 }],
+  'payment_plans.json': [],
+  'personal_accounts.json': [],
+  'categories.json': [{ kod: 'market', ad: 'Market', tur: 'GIDER', aktif: true }],
+  'people.json': [],
+  'debts.json': [],
+}
+
+function without(obj: Record<string, unknown>, key: string) {
+  const copy = { ...obj }
+  delete copy[key]
+  return copy
+}
+
+async function makeDriveSourceWithFiles(fileContentMap: Record<string, any>): Promise<DriveSource> {
+  const s = new DriveSource('CID')
+  await s.connect()
+  ;(s as any).folderId = 'FOLDER'
+  vi.stubGlobal('fetch', vi.fn((url: string) => {
+    if (url.includes('files?')) {
+      const fileList = Object.keys(fileContentMap).map((fileName) => ({
+        id: fileName.replace('.json', ''),
+        name: fileName.endsWith('.json') ? fileName : `${fileName}.json`,
+      }))
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ files: fileList }),
+      })
+    }
+    const match = url.match(/files\/([^?]+)/)
+    const id = match ? match[1] : ''
+    const content = fileContentMap[id] ?? fileContentMap[`${id}.json`]
+    if (content === undefined) {
+      return Promise.resolve({ ok: false, status: 404, json: () => Promise.reject(new Error('not found')) })
+    }
+    if (typeof content === 'string' && content.startsWith('{bozuk')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.reject(new SyntaxError('Unexpected token in JSON')),
+      })
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(content) })
+  }))
+  return s
+}
 
 describe('DriveSource.save', () => {
   // A fetch mock shared by the checksum-match and checksum-mismatch tests: `load()` populates
