@@ -1,4 +1,4 @@
-import type { PersonalTx } from './types'
+import type { Debt, PaymentPlan, PersonalTx } from './types'
 
 export interface MonthlyTotal {
   ay: string
@@ -109,5 +109,132 @@ export function categoryBreakdown(
   }
 
   result.sort((a, b) => b.toplam - a.toplam)
+  return result
+}
+
+export interface InstalmentScheduleItem {
+  ay: string
+  para: string
+  toplam: number
+}
+
+export function instalmentSchedule(
+  rows: PersonalTx[],
+  today: string,
+  months = 12,
+): InstalmentScheduleItem[] {
+  if (!rows.length) return []
+
+  const year = parseInt(today.slice(0, 4), 10)
+  const month = parseInt(today.slice(5, 7), 10)
+  const endMonthIndex = year * 12 + (month - 1) + months
+  const endYear = Math.floor(endMonthIndex / 12)
+  const endMonth = (endMonthIndex % 12) + 1
+  const endAy = `${endYear}-${String(endMonth).padStart(2, '0')}`
+
+  const map = new Map<string, InstalmentScheduleItem>()
+
+  for (const row of rows) {
+    if (!row.taksitPlaniId) continue
+    if (row.tarih <= today) continue
+    const ay = row.tarih.slice(0, 7)
+    if (ay > endAy) continue
+
+    const key = `${ay}|${row.paraBirimi}`
+    const existing = map.get(key)
+    if (existing) {
+      existing.toplam = Math.round((existing.toplam + row.tutar) * 100) / 100
+    } else {
+      map.set(key, { ay, para: row.paraBirimi, toplam: Math.round(row.tutar * 100) / 100 })
+    }
+  }
+
+  const result = Array.from(map.values())
+  result.sort((a, b) => {
+    if (a.ay !== b.ay) return a.ay.localeCompare(b.ay)
+    return a.para.localeCompare(b.para)
+  })
+  return result
+}
+
+export interface ActivePlanItem {
+  plan: PaymentPlan
+  odenen: number
+  kalan: number
+  ilerleme: string
+}
+
+export function activePlans(
+  plans: PaymentPlan[],
+  rows: PersonalTx[],
+  today: string,
+): ActivePlanItem[] {
+  if (!plans.length) return []
+
+  const result: ActivePlanItem[] = []
+
+  for (const plan of plans) {
+    if (plan.durum !== 'AKTIF') continue
+
+    const planRows = rows.filter((r) => r.taksitPlaniId === plan.id)
+    const paidRows = planRows.filter((r) => r.tarih <= today)
+    const odenen = Math.round(paidRows.reduce((sum, r) => sum + r.tutar, 0) * 100) / 100
+    const kalan = Math.max(0, Math.round((plan.toplamTutar - odenen) * 100) / 100)
+    const ilerleme = `${paidRows.length}/${plan.taksitSayisi}`
+
+    result.push({
+      plan,
+      odenen,
+      kalan,
+      ilerleme,
+    })
+  }
+
+  return result
+}
+
+export interface DebtBalanceItem {
+  kisi: string
+  para: string
+  alacak: number
+  borc: number
+  net: number
+}
+
+export function debtBalances(debts: Debt[]): DebtBalanceItem[] {
+  if (!debts.length) return []
+
+  const map = new Map<string, DebtBalanceItem>()
+
+  for (const d of debts) {
+    if (d.durum !== 'ACIK') continue
+
+    const key = `${d.kisi}|${d.paraBirimi}`
+    let item = map.get(key)
+    if (!item) {
+      item = {
+        kisi: d.kisi,
+        para: d.paraBirimi,
+        alacak: 0,
+        borc: 0,
+        net: 0,
+      }
+      map.set(key, item)
+    }
+
+    if (d.yon === 'VERDIM') {
+      item.alacak = Math.round((item.alacak + d.tutar) * 100) / 100
+    } else if (d.yon === 'ALDIM') {
+      item.borc = Math.round((item.borc + d.tutar) * 100) / 100
+    }
+  }
+
+  const result: DebtBalanceItem[] = []
+  for (const item of map.values()) {
+    item.net = Math.round((item.alacak - item.borc) * 100) / 100
+    result.push(item)
+  }
+
+  result.sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
   return result
 }

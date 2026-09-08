@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { categoryBreakdown, monthlyTotals, monthSummary } from './personal'
-import type { PersonalTx } from './types'
+import {
+  activePlans,
+  categoryBreakdown,
+  debtBalances,
+  instalmentSchedule,
+  monthlyTotals,
+  monthSummary,
+} from './personal'
+import type { Debt, PaymentPlan, PersonalTx } from './types'
 
 const tx = (o: Partial<PersonalTx>): PersonalTx => ({
   id: 'px_1', tarih: '2026-09-02', tur: 'GIDER', tutar: 100, paraBirimi: 'TRY',
@@ -65,5 +72,68 @@ describe('personal ledger derivations: totals and breakdown', () => {
       tx({ id: 'new', tarih: '2026-09-02', tutar: 100 }),
     ], TODAY, 12)
     expect(out.map((m) => m.ay)).toEqual(['2026-09'])
+  })
+})
+
+describe('personal ledger derivations: instalments and debts', () => {
+  const planRows = [1, 2, 3, 4, 5, 6].map((n) => tx({
+    id: `px_${n}`, tarih: `2026-${String(6 + n).padStart(2, '0')}-07`,
+    tutar: 2000, kategori: 'ev', taksitPlaniId: 'pp_1', taksitNo: n, taksitToplam: 6,
+  }))
+
+  const PLAN: PaymentPlan = {
+    id: 'pp_1', alisTarihi: '2026-07-07', aciklama: 'Beyaz eşya', toplamTutar: 12000,
+    paraBirimi: 'TRY', taksitSayisi: 6, taksitTutari: 2000, sonTaksitTutari: 2000,
+    kategori: 'ev', hesap: 'NAKIT', sahip: 'ENIS', durum: 'AKTIF',
+    kaynak: 'telegram', olusturulma: '2026-07-07T00:00:00Z',
+  }
+
+  it('takvim sadece gelecek taksitleri sayar', () => {
+    const out = instalmentSchedule(planRows, TODAY)
+    expect(out.map((m) => m.ay)).toEqual(['2026-10', '2026-11', '2026-12'])
+    expect(out[0].toplam).toBe(2000)
+  })
+
+  it('sıradan bir harcama takvime girmez', () => {
+    expect(instalmentSchedule([tx({ tarih: '2026-12-01', tutar: 500 })], TODAY)).toEqual([])
+  })
+
+  it('plan ilerlemesi ödenmiş taksitleri sayar', () => {
+    const [p] = activePlans([PLAN], planRows, TODAY)
+    expect(p.ilerleme).toBe('3/6')
+    expect(p.odenen).toBe(6000)
+    expect(p.kalan).toBe(6000)
+  })
+
+  it('bitmiş ve iptal planlar listelenmez', () => {
+    expect(activePlans([{ ...PLAN, durum: 'BITTI' }], planRows, TODAY)).toEqual([])
+    expect(activePlans([{ ...PLAN, durum: 'IPTAL' }], planRows, TODAY)).toEqual([])
+  })
+
+  const debt = (o: Partial<Debt>): Debt => ({
+    id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'AHMET', tutar: 5000,
+    paraBirimi: 'TRY', aciklama: '', hesap: 'NAKIT', durum: 'ACIK',
+    kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z', ...o,
+  })
+
+  it('kişi bazında alacak ve borç netleşir', () => {
+    const out = debtBalances([
+      debt({ id: 'a', kisi: 'AHMET', yon: 'VERDIM', tutar: 5000 }),
+      debt({ id: 'b', kisi: 'AHMET', yon: 'ALDIM', tutar: 2000 }),
+      debt({ id: 'c', kisi: 'AYSE', yon: 'ALDIM', tutar: 800 }),
+    ])
+    const ahmet = out.find((d) => d.kisi === 'AHMET')!
+    expect(ahmet).toMatchObject({ alacak: 5000, borc: 2000, net: 3000 })
+    expect(out[0].kisi).toBe('AHMET')
+  })
+
+  it('kapanmış borç sayılmaz', () => {
+    expect(debtBalances([debt({ durum: 'KAPALI' })])).toEqual([])
+  })
+
+  it('boş girdide boş döner', () => {
+    expect(instalmentSchedule([], TODAY)).toEqual([])
+    expect(activePlans([], [], TODAY)).toEqual([])
+    expect(debtBalances([])).toEqual([])
   })
 })
