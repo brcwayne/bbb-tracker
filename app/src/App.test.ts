@@ -46,3 +46,23 @@ describe('App — fiyat yenile', () => {
     expect(getByText(/\(TCMB, son bilinen kur\)/)).toBeInTheDocument()
   })
 })
+
+describe('App — iki cilt ve kabuk', () => {
+  it('yatırım cildinde switch Hesaplar gösterir, 9 sekme ve para birimi görünür', () => {
+    window.location.hash = '#/'
+    const { getByRole, queryByRole, getAllByRole } = render(App)
+    const switchLink = getByRole('link', { name: /Hesaplar defterine geç/i })
+    expect(switchLink).toHaveAttribute('href', '#/h/ozet')
+    expect(getByRole('group', { name: 'Para birimi' })).toBeInTheDocument()
+    expect(getByRole('combobox', { name: 'Dönem' })).toBeInTheDocument()
+  })
+
+  it('hesaplar cildinde switch Yatırım gösterir, 4 sekme görünür, para birimi ve dönem gizlidir', () => {
+    window.location.hash = '#/h/ozet'
+    const { getByRole, queryByRole } = render(App)
+    const switchLink = getByRole('link', { name: /Yatırım defterine geç/i })
+    expect(switchLink).toHaveAttribute('href', '#/')
+    expect(queryByRole('group', { name: 'Para birimi' })).toBeNull()
+    expect(queryByRole('combobox', { name: 'Dönem' })).toBeNull()
+  })
+})

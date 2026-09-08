@@ -5,9 +5,11 @@
     onRouteChange,
     ROUTES,
     HESAP_ROUTES,
+    routesFor,
     type CurrentRouteResult,
   } from './router'
   import ThemeToggle from './lib/ui/ThemeToggle.svelte'
+  import VolumeSwitch from './lib/ui/VolumeSwitch.svelte'
   import EmptyState from './lib/ui/EmptyState.svelte'
   import ConnectDrive from './lib/ui/ConnectDrive.svelte'
   import { createAppStore, load, pickSource, deriveAll } from './lib/data/store'
@@ -38,6 +40,10 @@
   import Temettu from './routes/Temettu.svelte'
   import EkleKaydi from './routes/EkleKaydi.svelte'
   import Log from './routes/Log.svelte'
+  import Ozet from './routes/hesaplar/Ozet.svelte'
+  import Harcamalar from './routes/hesaplar/Harcamalar.svelte'
+  import Taksitler from './routes/hesaplar/Taksitler.svelte'
+  import Borclar from './routes/hesaplar/Borclar.svelte'
 
   let cur = $state<CurrentRouteResult>(currentRoute())
   let route = $derived(cur.route)
@@ -60,6 +66,10 @@
     temettu: Temettu,
     ekle: EkleKaydi,
     log: Log,
+    'h-ozet': Ozet,
+    'h-harcamalar': Harcamalar,
+    'h-taksitler': Taksitler,
+    'h-borclar': Borclar,
   }
   const Active = $derived(pages[route])
   const title = $derived([...ROUTES, ...HESAP_ROUTES].find((r) => r.id === route)?.label ?? 'BBB')
@@ -124,20 +134,23 @@
 </script>
 
 <header class="running">
+  <VolumeSwitch {volume} />
   <strong>{title}</strong>
   <div class="controls">
-    <div class="seg" role="group" aria-label="Para birimi">
-      <button class:on={settings.currency === 'USD'} onclick={() => setCurrency('USD')}>USD</button>
-      <button class:on={settings.currency === 'TRY'} onclick={() => setCurrency('TRY')}>₺ TL</button>
-    </div>
-    <select
-      class="period"
-      aria-label="Dönem"
-      value={settings.period}
-      onchange={(e) => setPeriod((e.currentTarget as HTMLSelectElement).value as PeriodKey)}
-    >
-      {#each PERIODS as p}<option value={p.key}>{p.label}</option>{/each}
-    </select>
+    {#if volume === 'yatirim'}
+      <div class="seg" role="group" aria-label="Para birimi">
+        <button class:on={settings.currency === 'USD'} onclick={() => setCurrency('USD')}>USD</button>
+        <button class:on={settings.currency === 'TRY'} onclick={() => setCurrency('TRY')}>₺ TL</button>
+      </div>
+      <select
+        class="period"
+        aria-label="Dönem"
+        value={settings.period}
+        onchange={(e) => setPeriod((e.currentTarget as HTMLSelectElement).value as PeriodKey)}
+      >
+        {#each PERIODS as p}<option value={p.key}>{p.label}</option>{/each}
+      </select>
+    {/if}
     <span class="stamp num" data-testid="source-stamp">{$store.sourceText ?? '—'}</span>
     <select class="src num" aria-label="Veri kaynağı" value={source.id} onchange={onSrcChange}>
       <option value="local">local</option>
@@ -166,7 +179,7 @@
     <ThemeToggle />
   </div>
 </header>
-{#if settings.currency === 'TRY' && settings.rate > 1}
+{#if volume === 'yatirim' && settings.currency === 'TRY' && settings.rate > 1}
   <p class="ratenote">{rateNote}</p>
 {/if}
 
@@ -186,7 +199,7 @@
 {/if}
 
 <nav class="tabs">
-  {#each ROUTES as r}
+  {#each routesFor(volume) as r}
     <a href={r.path} class:active={r.id === route}>{r.label}</a>
   {/each}
 </nav>
