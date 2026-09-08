@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { currentRoute, onRouteChange, ROUTES, type Route } from './router'
+  import {
+    currentRoute,
+    onRouteChange,
+    ROUTES,
+    HESAP_ROUTES,
+    type CurrentRouteResult,
+  } from './router'
   import ThemeToggle from './lib/ui/ThemeToggle.svelte'
   import EmptyState from './lib/ui/EmptyState.svelte'
   import ConnectDrive from './lib/ui/ConnectDrive.svelte'
@@ -33,16 +39,18 @@
   import EkleKaydi from './routes/EkleKaydi.svelte'
   import Log from './routes/Log.svelte'
 
-  let route = $state<Route>(currentRoute())
+  let cur = $state<CurrentRouteResult>(currentRoute())
+  let route = $derived(cur.route)
+  let volume = $derived(cur.volume)
   const store = createAppStore()
   const source = pickSource()
   const drive = source instanceof DriveSource ? source : null
   onMount(() => {
     hydratePrices()
     load(store, source)
-    return onRouteChange((r) => (route = r))
+    return onRouteChange((c) => (cur = c))
   })
-  const pages = {
+  const pages: Record<string, any> = {
     panorama: Panorama,
     portfoyler: Portfoyler,
     kurumlar: Kurumlar,
@@ -54,7 +62,7 @@
     log: Log,
   }
   const Active = $derived(pages[route])
-  const title = $derived(ROUTES.find((r) => r.id === route)!.label)
+  const title = $derived([...ROUTES, ...HESAP_ROUTES].find((r) => r.id === route)?.label ?? 'BBB')
 
   // Re-derive reactively when the global period changes (no reload).
   const activeDerived = $derived(

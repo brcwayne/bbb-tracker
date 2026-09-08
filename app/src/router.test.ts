@@ -1,41 +1,43 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { currentRoute, ROUTES } from './router'
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  currentRoute,
+  FIRST_PATH,
+  HESAP_ROUTES,
+  ROUTES,
+  routesFor,
+} from './router'
+
+const go = (h: string) => { location.hash = h }
 
 beforeEach(() => { location.hash = '' })
 
-describe('router', () => {
-  it('defaults to panorama', () => expect(currentRoute()).toBe('panorama'))
-  it('maps known hashes', () => {
-    location.hash = '#/pozisyonlar'; expect(currentRoute()).toBe('pozisyonlar')
-    location.hash = '#/aylik'; expect(currentRoute()).toBe('aylik')
+describe('router with volumes', () => {
+  it('kişisel yollar hesaplar cildine çözülür', () => {
+    go('#/h/ozet'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-ozet' })
+    go('#/h/borclar'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-borclar' })
+    go('#/h/harcamalar'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-harcamalar' })
+    go('#/h/taksitler'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-taksitler' })
   })
-  it('unknown hash -> panorama', () => { location.hash = '#/zzz'; expect(currentRoute()).toBe('panorama') })
-  it('exposes 9 routes', () => expect(ROUTES.length).toBe(9))
-  it('maps the new P1.6 hashes', () => {
-    location.hash = '#/portfoyler'
-    expect(currentRoute()).toBe('portfoyler')
-    location.hash = '#/kurumlar'
-    expect(currentRoute()).toBe('kurumlar')
-    location.hash = '#/banka'
-    expect(currentRoute()).toBe('banka')
-    location.hash = '#/temettu'
-    expect(currentRoute()).toBe('temettu')
-    location.hash = ''
+
+  it('mevcut yatırım yolları aynen çalışmaya devam eder', () => {
+    for (const r of ROUTES) {
+      go(r.path)
+      expect(currentRoute()).toEqual({ volume: 'yatirim', route: r.id })
+    }
   })
-  it('ROUTES has 9 entries in nav order', () => {
-    expect(ROUTES.map((r) => r.id)).toEqual([
-      'panorama', 'portfoyler', 'kurumlar', 'pozisyonlar', 'aylik', 'banka', 'temettu', 'ekle', 'log',
-    ])
+
+  it('bilinmeyen adres panoramaya düşer', () => {
+    go('#/yok-boyle-bir-sey')
+    expect(currentRoute()).toEqual({ volume: 'yatirim', route: 'panorama' })
   })
-  it('maps #/ekle and #/log', () => {
-    location.hash = '#/ekle'
-    expect(currentRoute()).toBe('ekle')
-    location.hash = '#/log'
-    expect(currentRoute()).toBe('log')
-    location.hash = ''
+
+  it('sekme şeridi cilde göre değişir', () => {
+    expect(routesFor('yatirim')).toHaveLength(9)
+    expect(routesFor('hesaplar')).toHaveLength(4)
+    expect(HESAP_ROUTES.map((r) => r.label)).toEqual(['Özet', 'Harcamalar', 'Taksitler', 'Borçlar'])
   })
-  it('ROUTES has 9 entries', () => {
-    expect(ROUTES).toHaveLength(9)
-    expect(ROUTES.at(-1)?.id).toBe('log')
+
+  it('her cildin bir giriş sayfası var', () => {
+    expect(FIRST_PATH).toEqual({ yatirim: '#/', hesaplar: '#/h/ozet' })
   })
 })
