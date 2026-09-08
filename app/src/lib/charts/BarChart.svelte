@@ -34,6 +34,8 @@
 </script>
 
 <svg
+  width={width}
+  height={height}
   viewBox={`0 0 ${width} ${height}`}
   role="img"
   aria-label="bar grafik"
@@ -54,6 +56,13 @@
         style:cursor="pointer"
         onmouseenter={() => (hoverI = i)}
       />
+      <text
+        data-bar-label={b.label}
+        x={(band(b.label) ?? 0) + band.bandwidth() / 2}
+        y={height - 8}
+        text-anchor="middle"
+        style="font-size: 10px; fill: var(--ink-soft);">{b.label}</text
+      >
     {:else}
       <rect
         data-bar={b.label}

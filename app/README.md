@@ -187,3 +187,17 @@ Manuel olarak eklenmiş kayıtlar (Excel'den gelen migration verisi hariç) art�
 Tüm 4 giriş formu artık bir tarih alanı içeriyor (varsayılan: bugün) — geçmişe dönük kayıt girmek mümkün, ancak gelecek bir tarih girilemez.
 
 Excel'den gelen (migration) kayıtlar bu ekrandan hiçbir zaman düzenlenemez veya silinemez — onlar için hâlâ doğrudan Drive dosyası düzenlemesi gerekir.
+
+## Kişisel Defter (Hesaplar Cildi)
+
+Uygulama artık iki ayrı cilt olarak çalışır: **Yatırım** (mevcut 9 sekme) ve **Hesaplar** (Kişisel Defter, 4 sekme).
+
+- **Ciltler arası geçiş:** Başlığın sol üstündeki cilt değiştirici (`Hesaplar →` veya `Yatırım →`) ile iki cilt arasında doğrudan geçiş yapılır. Alt sekme çubuğu her zaman yalnızca aktif cildin sekmelerini gösterir.
+- **Dört Sayfa:**
+  - **Özet:** Aylık harcama seyri grafiği (₺ ve $), bu ayın harcama ve gelir toplamları, kategori dağılımı halka grafiği ve önümüzdeki 3 ayın taksit yükü.
+  - **Harcamalar:** Yeniden eskiye sıralı tüm kişisel harcamalar; kategori, sahip ve hesaba göre filtreleme, açıklamada arama, taksit ilerleme rozeti (`3/6`) ve gelecek tarihli taksit işaretçisi.
+  - **Taksitler:** Aktif taksit planları, ödenen/kalan tutar ve ilerleme çubuğu ile önümüzdeki 12 ayın taksit yükü grafiği.
+  - **Borçlar:** Kişi bazında açık alacak, borç ve net durum bakiyeleri; yeşil (`--gain`) ve kırmızı (`--loss`) renk ayrımı.
+- **Opsiyonel Yükleme:** Kişisel defter dosyaları (`personal_tx.json`, `payment_plans.json`, `personal_accounts.json`, `categories.json`, `people.json`, `debts.json`) opsiyonel olarak yüklenir. Dosyalar henüz Drive veya local klasöründe oluşmamış olsa bile uygulama çökmez, boş durum ekranları gösterilir ve yatırım cildi kesintisiz çalışmaya devam eder.
+- **Faz 1 Salt-Okunur:** Kişisel Defter Faz 1 kapsamında salt-okunurdur; kayıtlar Telegram botu üzerinden girilir. Web üzerinden düzenleme ve ekleme Faz 2'de sunulacaktır.
+

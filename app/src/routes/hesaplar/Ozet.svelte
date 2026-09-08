@@ -27,6 +27,20 @@
 
   const [currYear, currMonth] = $derived(today.split('-').map(Number))
 
+  const emptyMonths = $derived.by(() => {
+    const res: { label: string; value: number }[] = []
+    for (let i = 11; i >= 0; i--) {
+      const mIndex = currYear * 12 + (currMonth - 1) - i
+      const y = Math.floor(mIndex / 12)
+      const m = (mIndex % 12) + 1
+      res.push({
+        label: monthLabel(`${y}-${String(m).padStart(2, '0')}-01`),
+        value: 0,
+      })
+    }
+    return res
+  })
+
   const monthly = $derived(monthlyTotals(rows, today, 12))
   const summary = $derived(monthSummary(rows, currYear, currMonth, today))
   const catBreakdown = $derived(categoryBreakdown(rows, currYear, currMonth, today, 'TRY'))
@@ -70,15 +84,23 @@
   const gelirUsd = $derived(summary.gelir['USD'] ?? 0)
 </script>
 
-{#if !hasRows}
-  <div class="empty-container">
-    <EmptyState
-      title="Henüz kayıt yok"
-      detail="Telegram botundan harcama girdikçe burası dolacak. Örnek: markette 340 lira"
-    />
-  </div>
-{:else}
-  <div class="ozet-container">
+<div class="ozet-container">
+  {#if !hasRows}
+    <div class="empty-banner">
+      <EmptyState
+        title="Henüz kayıt yok"
+        detail="Telegram botundan harcama girdikçe burası dolacak. Örnek: markette 340 lira"
+      />
+    </div>
+
+    <!-- Boş durumda da eksenleri çizili aylık grafik gösterilir -->
+    <div class="charts-row">
+      <section class="chart-card" data-chart="aylik-seyir">
+        <h3 class="chart-title">Aylık Seyir (₺ TL)</h3>
+        <BarChart bars={emptyMonths} fmt={(v) => tryFmt(v, { whole: true })} />
+      </section>
+    </div>
+  {:else}
     <!-- Bu Ay Özeti Kartı -->
     <section class="summary-card">
       <div class="card-header">
@@ -144,12 +166,12 @@
         </section>
       {/if}
     </div>
-  </div>
-{/if}
+  {/if}
+</div>
 
 <style>
-  .empty-container {
-    padding: 3rem 1rem;
+  .empty-banner {
+    padding: 1rem 0;
   }
   .ozet-container {
     padding: 1rem 1.25rem;
