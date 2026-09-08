@@ -3,7 +3,8 @@
   import type { Dataset, PersonalTx } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { deleteRecord } from '../../lib/data/store'
+  import { deleteRecord, load } from '../../lib/data/store'
+  import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HarcamaFormu from './HarcamaFormu.svelte'
@@ -110,8 +111,17 @@
         allowKaynak: ['telegram', 'manual'],
       })
       deleteTarget = null
-    } catch (e) {
-      deleteError = e instanceof Error ? e.message : String(e)
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+        deleteError = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — düzenlemeyi tekrar yapar mısın?'
+      } else {
+        deleteError = e instanceof Error ? e.message : String(e)
+      }
     } finally {
       deleting = false
     }

@@ -3,8 +3,14 @@
   import type { Dataset, PersonalTx } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord, updateRecord } from '../../lib/data/store'
+  import { appendRecord, updateRecord, load } from '../../lib/data/store'
+  import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd } from '../../lib/format'
+
+  function todayIso() {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
 
   let {
     dataset,
@@ -21,11 +27,6 @@
     onCancel?: () => void
     editing?: PersonalTx
   } = $props()
-
-  function todayIso() {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
 
   let tur = $state<'GIDER' | 'GELIR'>(editing?.tur ?? 'GIDER')
   let tarih = $state(editing?.tarih ?? todayIso())
@@ -146,8 +147,17 @@
         await appendRecord<PersonalTx>(store, source, 'personal_tx', newRecord)
       }
       onSaved()
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e)
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+        error = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — düzenlemeyi tekrar yapar mısın?'
+      } else {
+        error = e instanceof Error ? e.message : String(e)
+      }
     } finally {
       saving = false
     }

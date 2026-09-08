@@ -3,7 +3,8 @@
   import type { Dataset, Debt } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { updateRecord, deleteRecord } from '../../lib/data/store'
+  import { updateRecord, deleteRecord, load } from '../../lib/data/store'
+  import { ConflictError } from '../../lib/data/drive'
   import { debtBalances } from '../../lib/data/personal'
   import { tryFmt, usd } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
@@ -54,7 +55,16 @@
         { allowKaynak: ['telegram', 'manual'] },
       )
     } catch (err: any) {
-      closeError = err?.message || 'Borç kapatılırken hata oluştu'
+      if (err instanceof ConflictError || err?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+        closeError = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — düzenlemeyi tekrar yapar mısın?'
+      } else {
+        closeError = err?.message || 'Borç kapatılırken hata oluştu'
+      }
     } finally {
       closingId = null
     }
@@ -91,7 +101,16 @@
       )
       editingDebt = null
     } catch (err: any) {
-      editError = err?.message || 'Borç güncellenirken hata oluştu'
+      if (err instanceof ConflictError || err?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+        editError = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — düzenlemeyi tekrar yapar mısın?'
+      } else {
+        editError = err?.message || 'Borç güncellenirken hata oluştu'
+      }
     } finally {
       editSaving = false
     }
@@ -111,7 +130,16 @@
       )
       deletingDebt = null
     } catch (err: any) {
-      deleteError = err?.message || 'Borç silinirken hata oluştu'
+      if (err instanceof ConflictError || err?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+        deleteError = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — düzenlemeyi tekrar yapar mısın?'
+      } else {
+        deleteError = err?.message || 'Borç silinirken hata oluştu'
+      }
     } finally {
       deleting = false
     }

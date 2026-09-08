@@ -3,7 +3,8 @@
   import type { Dataset, PaymentPlan, PersonalTx } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { deleteRecord } from '../../lib/data/store'
+  import { deleteRecord, load } from '../../lib/data/store'
+  import { ConflictError } from '../../lib/data/drive'
   import { activePlans, instalmentSchedule } from '../../lib/data/personal'
   import { tryFmt, usd, monthLabel } from '../../lib/format'
   import BarChart from '../../lib/charts/BarChart.svelte'
@@ -80,7 +81,16 @@
       )
       cancellingPlan = null
     } catch (err: any) {
-      cancelError = err?.message || 'Plan iptal edilirken bir hata oluştu'
+      if (err instanceof ConflictError || err?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+        cancelError = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — düzenlemeyi tekrar yapar mısın?'
+      } else {
+        cancelError = err?.message || 'Plan iptal edilirken bir hata oluştu'
+      }
     } finally {
       cancelling = false
     }
