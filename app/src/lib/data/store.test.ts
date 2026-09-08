@@ -278,3 +278,92 @@ describe('deleteRecord', () => {
     ).rejects.toThrow('Kayıt bulunamadı')
   })
 })
+
+describe('allowKaynak and personal writes (Task 5)', () => {
+  const row = {
+    id: 'px_a',
+    tarih: '2026-09-01',
+    tur: 'GIDER' as const,
+    tutar: 100,
+    paraBirimi: 'TRY' as const,
+    kategori: 'market',
+    aciklama: 'Market',
+    hesap: 'NAKIT',
+    sahip: 'ENIS',
+    taksitPlaniId: null,
+    taksitNo: null,
+    taksitToplam: null,
+    not: '',
+    kaynak: 'telegram',
+    olusturulma: '2026-09-01T10:00:00Z',
+  }
+  const migratedRow = { ...fixture.transactions[0], lot: 99 }
+
+  function setup(initialRows = [row]) {
+    const ds = {
+      ...fixture,
+      personal_tx: initialRows,
+    }
+    const store = createAppStore()
+    const saved: Record<string, any> = {}
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (name: string, data: unknown) => {
+        saved[name] = data
+      },
+    }
+    return { store, source, saved, ds }
+  }
+
+  it('varsayılan olarak telegram kaydını düzenlemeyi reddeder', async () => {
+    const { store, source } = setup()
+    await load(store, source)
+    await expect(
+      updateRecord(store, source, 'personal_tx', (r: typeof row) => r.id === 'px_a', { ...row, tutar: 5 }),
+    ).rejects.toThrow(/manuel/i)
+  })
+
+  it('allowKaynak verilince telegram kaydını düzenler', async () => {
+    const { store, source, saved } = setup()
+    await load(store, source)
+    await updateRecord(
+      store,
+      source,
+      'personal_tx',
+      (r: typeof row) => r.id === 'px_a',
+      { ...row, tutar: 5 },
+      { allowKaynak: ['telegram', 'manual'] },
+    )
+    expect(saved.personal_tx[0].tutar).toBe(5)
+  })
+
+  it('allowKaynak silmede de geçerli', async () => {
+    const { store, source, saved } = setup()
+    await load(store, source)
+    await deleteRecord(
+      store,
+      source,
+      'personal_tx',
+      (r: typeof row) => r.id === 'px_a',
+      { allowKaynak: ['telegram'] },
+    )
+    expect(saved.personal_tx).toHaveLength(0)
+  })
+
+  it('yatırım tarafının davranışı değişmez', async () => {
+    const { store, source } = setup()
+    await load(store, source)
+    await expect(
+      updateRecord(store, source, 'transactions', (r: typeof migratedRow) => r.id === migratedRow.id, migratedRow),
+    ).rejects.toThrow(/manuel/i)
+  })
+
+  it('kişisel dosyalara yazılabilir', async () => {
+    const { store, source, saved } = setup([])
+    await load(store, source)
+    await appendRecord(store, source, 'personal_tx', row)
+    expect(saved.personal_tx).toHaveLength(1)
+  })
+})
+

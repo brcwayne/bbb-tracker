@@ -99,7 +99,17 @@ export function pickSource(): DataSource {
   return new LocalFileSource()
 }
 
-export type Kind = 'transactions' | 'cashflows' | 'assetTransfers' | 'brokers'
+export type Kind =
+  | 'transactions'
+  | 'cashflows'
+  | 'assetTransfers'
+  | 'brokers'
+  | 'personal_tx'
+  | 'payment_plans'
+  | 'personal_accounts'
+  | 'categories'
+  | 'people'
+  | 'debts'
 
 async function writeAndCommit(
   store: Writable<AppState>,
@@ -145,9 +155,10 @@ export async function appendRecord<T>(
 
 /**
  * `allowImported` lets the Log page edit/delete an Excel-migrated row after an
- * explicit warning. Everywhere else the `kaynak === 'manual'` gate still holds.
+ * explicit warning. Everywhere else the `kaynak === 'manual'` gate still holds,
+ * unless widened via `allowKaynak` (default `['manual']`).
  */
-export type MutateOpts = { allowImported?: boolean }
+export type MutateOpts = { allowImported?: boolean; allowKaynak?: string[] }
 
 export async function updateRecord<T extends { kaynak?: string }>(
   store: Writable<AppState>,
@@ -161,7 +172,8 @@ export async function updateRecord<T extends { kaynak?: string }>(
     const arr = current as T[]
     const idx = arr.findIndex(matches)
     if (idx === -1) throw new Error('Kayıt bulunamadı — başka bir yerden silinmiş olabilir.')
-    if (!opts.allowImported && arr[idx].kaynak !== 'manual')
+    const allowed = opts.allowKaynak ?? ['manual']
+    if (!opts.allowImported && !allowed.includes(arr[idx].kaynak ?? ''))
       throw new Error('Sadece manuel kayıtlar düzenlenebilir.')
     const next = [...arr]
     next[idx] = patch
@@ -180,7 +192,8 @@ export async function deleteRecord<T extends { kaynak?: string }>(
     const arr = current as T[]
     const target = arr.find(matches)
     if (!target) throw new Error('Kayıt bulunamadı — başka bir yerden silinmiş olabilir.')
-    if (!opts.allowImported && target.kaynak !== 'manual')
+    const allowed = opts.allowKaynak ?? ['manual']
+    if (!opts.allowImported && !allowed.includes(target.kaynak ?? ''))
       throw new Error('Sadece manuel kayıtlar silinebilir.')
     return arr.filter((r) => !matches(r))
   })
