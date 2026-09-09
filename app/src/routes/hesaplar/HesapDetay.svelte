@@ -10,6 +10,7 @@
   import AyTakvimi from '../../lib/ui/AyTakvimi.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HarcamaFormu from './HarcamaFormu.svelte'
+  import TransferFormu from './TransferFormu.svelte'
 
   let {
     dataset,
@@ -44,6 +45,30 @@
   let silinecek = $state<PersonalTx | null>(null)
   let deleting = $state(false)
   let deleteError = $state<string | null>(null)
+
+  let transferAcik = $state(false)
+  let transferKaynak = $state<string | undefined>(undefined)
+  let transferHedef = $state<string | undefined>(undefined)
+  let transferBasligi = $state('Transfer')
+  let duzenlenenTransfer = $state<PersonalTx | null>(null)
+
+  function acTransfer() {
+    if (!account) return
+    transferKaynak = account.kod
+    transferHedef = undefined
+    transferBasligi = 'Transfer'
+    duzenlenenTransfer = null
+    transferAcik = true
+  }
+
+  function acKartOdemesi() {
+    if (!account) return
+    transferKaynak = undefined
+    transferHedef = account.kod
+    transferBasligi = 'Kart Ödemesi'
+    duzenlenenTransfer = null
+    transferAcik = true
+  }
 
   const bakiye = $derived(
     account ? (accountBalances(rows, [account], today).get(account.kod) ?? 0) : 0,
@@ -171,6 +196,23 @@
       </div>
     {/if}
 
+    {#if (transferAcik || duzenlenenTransfer) && dataset}
+      <div class="form-modal">
+        <TransferFormu
+          {dataset}
+          {source}
+          {store}
+          editing={duzenlenenTransfer ?? undefined}
+          kaynakHesap={transferKaynak}
+          hedefHesap={transferHedef}
+          baslik={transferBasligi}
+          tarih={seciliGun ? iso(seciliGun) : today}
+          onSaved={() => { transferAcik = false; duzenlenenTransfer = null }}
+          onCancel={() => { transferAcik = false; duzenlenenTransfer = null }}
+        />
+      </div>
+    {/if}
+
     {#if silinecek}
       <div class="confirm-delete">
         <p>
@@ -240,7 +282,20 @@
               </span>
               <span class="tutar num" class:gain={t.isaret > 0} class:loss={t.isaret < 0}>{t.metin}</span>
               <div class="hareket-islemler">
-                {#if r.tur !== 'DUZELTME' && r.tur !== 'TRANSFER'}
+                {#if r.tur === 'TRANSFER'}
+                  <button
+                    type="button"
+                    class="btn-icon"
+                    title="Düzenle"
+                    aria-label="Düzenle"
+                    disabled={!isDrive}
+                    onclick={() => {
+                      duzenlenenTransfer = r
+                      transferBasligi = 'Transferi Düzenle'
+                      transferAcik = true
+                    }}
+                  >✎</button>
+                {:else if r.tur !== 'DUZELTME'}
                   <button
                     type="button"
                     class="btn-icon"
@@ -267,9 +322,9 @@
 
     <div class="eylemler">
       <button type="button" data-action="harcama" disabled={!isDrive} onclick={() => ekle()}>+ Gider/Gelir</button>
-      <button type="button" data-action="transfer" disabled={!isDrive}>⇄ Transfer</button>
+      <button type="button" data-action="transfer" disabled={!isDrive} onclick={acTransfer}>⇄ Transfer</button>
       {#if account.tur === 'KREDI_KARTI'}
-        <button type="button" data-action="odeme" disabled={!isDrive}>💳 Kart ödemesi</button>
+        <button type="button" data-action="odeme" disabled={!isDrive} onclick={acKartOdemesi}>💳 Kart ödemesi</button>
       {/if}
       <button type="button" data-action="duzeltme" disabled={!isDrive}>⚖ Bakiye düzelt</button>
     </div>

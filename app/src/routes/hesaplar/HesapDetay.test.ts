@@ -85,5 +85,28 @@ describe('Hesap detayı', () => {
     const tarih = container.querySelector('#hf-tarih') as HTMLInputElement
     expect(tarih.value).toBe('2026-09-02')
   })
+
+  it('transfer düğmesi transfer formunu kaynak hesapla açar', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { container } = render(HesapDetay, { dataset: fixture, param: 'NAKIT', today: TODAY, source })
+    const btn = container.querySelector('[data-action="transfer"]') as HTMLButtonElement
+    btn.click()
+    await Promise.resolve()
+    const kaynak = container.querySelector('#t-kaynak') as HTMLSelectElement
+    expect(kaynak).toBeTruthy()
+    expect(kaynak.value).toBe('NAKIT')
+  })
+
+  it('kart ödemesi düğmesi kartı hedef yaparak formu açar', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { container } = render(HesapDetay, { dataset: fixture, param: 'GARANTI-DIJI', today: TODAY, source })
+    const btn = container.querySelector('[data-action="odeme"]') as HTMLButtonElement
+    expect(btn).toBeTruthy()
+    btn.click()
+    await Promise.resolve()
+    expect(container.textContent).toContain('Kart Ödemesi')
+    const hedef = container.querySelector('#t-hedef') as HTMLSelectElement
+    expect(hedef.value).toBe('GARANTI-DIJI')
+  })
 })
 
