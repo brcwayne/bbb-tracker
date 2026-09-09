@@ -1,18 +1,31 @@
 <script lang="ts">
-  import type { Dataset } from '../../lib/data/types'
+  import type { Writable } from 'svelte/store'
+  import type { Dataset, PersonalAccount } from '../../lib/data/types'
+  import type { AppState } from '../../lib/data/store'
+  import type { DataSource } from '../../lib/data/source'
   import { accountGroups, netWorthBand } from '../../lib/data/accounts'
   import { tryFmt, usd } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
+  import HesapFormu from './HesapFormu.svelte'
 
   let {
     dataset,
+    source,
+    store,
     today = new Date().toISOString().slice(0, 10),
   }: {
     dataset?: Dataset | null
+    source?: DataSource
+    store?: Writable<AppState>
     today?: string
   } = $props()
 
+  const isDrive = $derived(Boolean(source?.save))
+
   let pasifDahil = $state(false)
+  let duzenlemeModu = $state(false)
+  let yeniHesapAcik = $state(false)
+  let duzenlenenHesap = $state<PersonalAccount | null>(null)
 
   const accounts = $derived(dataset?.personalAccounts ?? [])
   const groups = $derived(
@@ -22,17 +35,66 @@
   const paralar = $derived(Object.keys(band).sort())
 
   const fmt = (v: number, para: string) => (para === 'USD' ? usd(v) : tryFmt(v))
+
+  function duzenle(kod: string, e: MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const a = accounts.find((x) => x.kod === kod)
+    if (a) {
+      duzenlenenHesap = a
+    }
+  }
 </script>
 
-{#if accounts.length === 0}
-  <div class="empty-container">
-    <EmptyState
-      title="Henüz hesap yok"
-      detail="Nakit, banka ve kredi kartlarını ekleyince bakiyeler burada toplanır."
-    />
-  </div>
-{:else}
-  <div class="page-container">
+<div class="page-container">
+  <header class="hesaplar-head">
+    <h2>Hesaplar</h2>
+    <div class="head-actions">
+      <button
+        type="button"
+        class="head-btn"
+        class:active={duzenlemeModu}
+        aria-label="Hesapları düzenle"
+        disabled={!isDrive}
+        onclick={() => (duzenlemeModu = !duzenlemeModu)}
+      >✎</button>
+      <button
+        type="button"
+        class="head-btn add"
+        aria-label="Hesap ekle"
+        disabled={!isDrive}
+        onclick={() => { yeniHesapAcik = true }}
+      >+</button>
+    </div>
+  </header>
+
+  {#if (yeniHesapAcik || duzenlenenHesap) && dataset}
+    <div class="form-modal">
+      <HesapFormu
+        {dataset}
+        {source}
+        {store}
+        editing={duzenlenenHesap ?? undefined}
+        onSaved={() => {
+          yeniHesapAcik = false
+          duzenlenenHesap = null
+        }}
+        onCancel={() => {
+          yeniHesapAcik = false
+          duzenlenenHesap = null
+        }}
+      />
+    </div>
+  {/if}
+
+  {#if accounts.length === 0}
+    <div class="empty-container">
+      <EmptyState
+        title="Henüz hesap yok"
+        detail="Nakit, banka ve kredi kartlarını ekleyince bakiyeler burada toplanır."
+      />
+    </div>
+  {:else}
     <section class="band" data-testid="net-worth">
       <div class="band-head">
         <span>Varlıklar</span><span>Borçlar</span><span>Toplam</span>
@@ -61,26 +123,36 @@
         </header>
 
         {#each g.satirlar as r (r.kod)}
-          <a class="row" class:pasif={r.pasif} href={r.href}>
-            <span class="row-name">
-              {#if r.simge}<span class="simge">{r.simge}</span>{/if}{r.ad}
-            </span>
-            {#if r.kart}
-              <span class="row-figures">
-                <span class="num" class:loss={r.kart.buAy > 0} class:gain={r.kart.buAy < 0}>
-                  {fmt(r.kart.buAy, r.paraBirimi)}
+          <div class="row-wrapper">
+            <a class="row" class:pasif={r.pasif} href={r.href}>
+              <span class="row-name">
+                {#if r.simge}<span class="simge">{r.simge}</span>{/if}{r.ad}
+              </span>
+              {#if r.kart}
+                <span class="row-figures">
+                  <span class="num" class:loss={r.kart.buAy > 0} class:gain={r.kart.buAy < 0}>
+                    {fmt(r.kart.buAy, r.paraBirimi)}
+                  </span>
+                  <span class="num sub">{fmt(r.kart.toplamBorc, r.paraBirimi)}</span>
                 </span>
-                <span class="num sub">{fmt(r.kart.toplamBorc, r.paraBirimi)}</span>
-              </span>
-              <span class="num" class:loss={r.kart.gelecekAy > 0}>
-                {fmt(r.kart.gelecekAy, r.paraBirimi)}
-              </span>
-            {:else}
-              <span class="num" class:loss={r.bakiye < 0} class:gain={r.bakiye > 0}>
-                {fmt(r.bakiye, r.paraBirimi)}
-              </span>
+                <span class="num" class:loss={r.kart.gelecekAy > 0}>
+                  {fmt(r.kart.gelecekAy, r.paraBirimi)}
+                </span>
+              {:else}
+                <span class="num" class:loss={r.bakiye < 0} class:gain={r.bakiye > 0}>
+                  {fmt(r.bakiye, r.paraBirimi)}
+                </span>
+              {/if}
+            </a>
+            {#if g.tur !== 'KISI' && duzenlemeModu}
+              <button
+                type="button"
+                class="row-edit-btn"
+                aria-label={`${r.ad} hesabını düzenle`}
+                onclick={(e) => duzenle(r.kod, e)}
+              >✎</button>
             {/if}
-          </a>
+          </div>
         {/each}
       </section>
     {/each}
@@ -89,8 +161,8 @@
       <input type="checkbox" bind:checked={pasifDahil} />
       Pasif hesapları göster
     </label>
-  </div>
-{/if}
+  {/if}
+</div>
 
 <style>
   .empty-container {
@@ -103,6 +175,56 @@
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
+  }
+
+  .hesaplar-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .hesaplar-head h2 {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+  }
+  .head-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .head-btn {
+    width: 2.2rem;
+    height: 2.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    color: var(--ink);
+    border-radius: 6px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .head-btn:hover:not(:disabled) {
+    background: var(--surface-2);
+    border-color: var(--accent-defter);
+  }
+  .head-btn.active {
+    background: var(--accent-defter, #2ea043);
+    color: #fff;
+    border-color: transparent;
+  }
+  .head-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .form-modal {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 1.25rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   }
 
   /* Net worth band */
@@ -184,6 +306,36 @@
   }
 
   /* Account rows */
+  .row-wrapper {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .row-wrapper:last-child {
+    border-bottom: 0;
+  }
+  .row-wrapper .row {
+    flex: 1;
+    border-bottom: 0;
+  }
+  .row-edit-btn {
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--hairline);
+    color: var(--ink-soft);
+    padding: 0 1rem;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .row-edit-btn:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+
   .row {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -192,12 +344,8 @@
     padding: 0.7rem 1rem;
     color: inherit;
     text-decoration: none;
-    border-bottom: 1px solid var(--hairline);
     transition: background 0.15s ease;
     gap: 0.75rem;
-  }
-  .row:last-child {
-    border-bottom: 0;
   }
   .row:hover {
     background: var(--row-hover);

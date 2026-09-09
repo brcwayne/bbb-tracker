@@ -68,4 +68,34 @@ describe('Hesaplar listesi', () => {
     expect(container.querySelector('[data-group="KISI"]')).toBeTruthy()
     expect(container.querySelector('a[href="#/h/borclar/BORA"]')).toBeTruthy()
   })
+
+  it('Drive yoksa ekleme düğmesi pasif', () => {
+    const { getByLabelText } = render(Hesaplar, { dataset: fixture, today: TODAY })
+    expect((getByLabelText(/hesap ekle/i) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('Drive varsa ekleme düğmesi yeni hesap formunu açar', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { getByLabelText, container } = render(Hesaplar, { dataset: fixture, today: TODAY, source })
+    const btn = getByLabelText(/hesap ekle/i) as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+    btn.click()
+    await Promise.resolve()
+    expect(container.textContent).toContain('Yeni Hesap Ekle')
+  })
+
+  it('düzenleme modunda hesaplarda düzenleme düğmesi çıkar ama kişi satırında çıkmaz', async () => {
+    const ds: Dataset = {
+      ...fixture,
+      debts: [{ id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 2000, paraBirimi: 'TRY', aciklama: '', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z' }],
+    }
+    const source = { id: 'drive' as const, load: async () => ds, save: async () => {} }
+    const { getByLabelText, container } = render(Hesaplar, { dataset: ds, today: TODAY, source })
+    const toggle = getByLabelText(/hesapları düzenle/i) as HTMLButtonElement
+    toggle.click()
+    await Promise.resolve()
+    expect(container.querySelector('[aria-label="Nakit hesabını düzenle"]')).toBeTruthy()
+    const kisiGroup = container.querySelector('[data-group="KISI"]')!
+    expect(kisiGroup.querySelector('.row-edit-btn')).toBeFalsy()
+  })
 })
