@@ -231,4 +231,70 @@ export function netWorthBand(
   return out
 }
 
+export interface DayBucket {
+  giris: number
+  cikis: number
+  adet: number
+}
+
+export interface MonthMovements {
+  /** day-of-month (1-based) → that day's in/out */
+  gunler: Map<number, DayBucket>
+  /** the month's rows for this account, newest first */
+  kayitlar: PersonalTx[]
+  giris: number
+  cikis: number
+  net: number
+  /** rows listed but excluded from every figure because their currency
+   *  differs from the account's (spec §3.4) */
+  yabanciParaAdedi: number
+}
+
+/**
+ * One month of one account. Unlike a balance, this is NOT cut at today —
+ * the calendar shows the whole month, future-dated instalments included.
+ */
+export function monthMovements(
+  rows: PersonalTx[],
+  account: PersonalAccount,
+  year: number,
+  month: number,
+): MonthMovements {
+  const prefix = `${year}-${String(month).padStart(2, '0')}`
+  const gunler = new Map<number, DayBucket>()
+  const kayitlar: PersonalTx[] = []
+  let giris = 0
+  let cikis = 0
+  let yabanciParaAdedi = 0
+
+  for (const r of rows) {
+    if (!r.tarih.startsWith(prefix)) continue
+    const ilgili = r.hesap === account.kod || (r.tur === 'TRANSFER' && r.karsiHesap === account.kod)
+    if (!ilgili) continue
+
+    kayitlar.push(r)
+
+    const d = txDelta(r, account.kod, account.paraBirimi)
+    if (d === 0 && r.paraBirimi !== account.paraBirimi) {
+      yabanciParaAdedi++
+      continue
+    }
+
+    const gun = Number(r.tarih.slice(8, 10))
+    const b = gunler.get(gun) ?? { giris: 0, cikis: 0, adet: 0 }
+    if (d >= 0) b.giris = round2(b.giris + d)
+    else b.cikis = round2(b.cikis - d)
+    b.adet++
+    gunler.set(gun, b)
+
+    if (d >= 0) giris = round2(giris + d)
+    else cikis = round2(cikis - d)
+  }
+
+  kayitlar.sort((a, b) => (a.tarih === b.tarih ? b.id.localeCompare(a.id) : b.tarih.localeCompare(a.tarih)))
+
+  return { gunler, kayitlar, giris, cikis, net: round2(giris - cikis), yabanciParaAdedi }
+}
+
+
 

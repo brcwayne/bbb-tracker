@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountBalances, accountGroups, cardStatement, netWorthBand, txDelta } from './accounts'
+import { accountBalances, accountGroups, cardStatement, monthMovements, netWorthBand, txDelta } from './accounts'
 import type { Debt, PersonalAccount, PersonalTx } from './types'
 
 const tx = (o: Partial<PersonalTx>): PersonalTx => ({
@@ -290,5 +290,79 @@ describe('netWorthBand', () => {
     })
   })
 })
+
+describe('monthMovements', () => {
+  const nakit = acc({ kod: 'NAKIT', tur: 'NAKIT', paraBirimi: 'TRY' })
+
+  it('boş ayda sıfır döner, çökmeden', () => {
+    const out = monthMovements([], nakit, 2026, 9)
+    expect(out.gunler.size).toBe(0)
+    expect(out.kayitlar).toEqual([])
+    expect(out).toMatchObject({ giris: 0, cikis: 0, net: 0, yabanciParaAdedi: 0 })
+  })
+
+  it('günleri giriş/çıkış olarak ayırır', () => {
+    const out = monthMovements([
+      tx({ id: 'a', tarih: '2026-09-02', tur: 'GIDER', tutar: 620 }),
+      tx({ id: 'b', tarih: '2026-09-02', tur: 'GELIR', tutar: 100 }),
+      tx({ id: 'c', tarih: '2026-09-05', tur: 'GIDER', tutar: 480 }),
+    ], nakit, 2026, 9)
+    expect(out.gunler.get(2)).toEqual({ giris: 100, cikis: 620, adet: 2 })
+    expect(out.gunler.get(5)).toEqual({ giris: 0, cikis: 480, adet: 1 })
+    expect(out).toMatchObject({ giris: 100, cikis: 1100, net: -1000 })
+  })
+
+  it('başka ayın satırını almaz', () => {
+    const out = monthMovements([
+      tx({ id: 'a', tarih: '2026-08-31', tutar: 100 }),
+      tx({ id: 'b', tarih: '2026-10-01', tutar: 200 }),
+    ], nakit, 2026, 9)
+    expect(out.kayitlar).toEqual([])
+  })
+
+  it('gelecek tarihli satırı aya dahil eder (bakiyeden farklı)', () => {
+    const out = monthMovements([
+      tx({ id: 'a', tarih: '2026-09-20', tutar: 900 }),
+    ], nakit, 2026, 9)
+    expect(out.cikis).toBe(900)
+  })
+
+  it('transferin her iki yönünü de doğru işaretle alır', () => {
+    const out = monthMovements([
+      tx({ id: 'a', tarih: '2026-09-03', tur: 'TRANSFER', tutar: 5000, hesap: 'NAKIT', karsiHesap: 'GARANTI-BANKA' }),
+      tx({ id: 'b', tarih: '2026-09-04', tur: 'TRANSFER', tutar: 200, hesap: 'GARANTI-BANKA', karsiHesap: 'NAKIT' }),
+    ], nakit, 2026, 9)
+    expect(out.gunler.get(3)).toEqual({ giris: 0, cikis: 5000, adet: 1 })
+    expect(out.gunler.get(4)).toEqual({ giris: 200, cikis: 0, adet: 1 })
+  })
+
+  it('ilgisiz hesabın satırını hiç listelemez', () => {
+    const out = monthMovements([
+      tx({ id: 'a', tarih: '2026-09-03', hesap: 'GARANTI-DIJI', tutar: 1800 }),
+    ], nakit, 2026, 9)
+    expect(out.kayitlar).toEqual([])
+  })
+
+  it('farklı para birimindeki satırı listeler ama toplamlara katmaz', () => {
+    const out = monthMovements([
+      tx({ id: 'a', tarih: '2026-09-04', tutar: 45, paraBirimi: 'USD' }),
+      tx({ id: 'b', tarih: '2026-09-05', tutar: 100 }),
+    ], nakit, 2026, 9)
+    expect(out.kayitlar.map((r) => r.id)).toEqual(['b', 'a'])
+    expect(out.cikis).toBe(100)
+    expect(out.yabanciParaAdedi).toBe(1)
+    expect(out.gunler.has(4)).toBe(false)
+  })
+
+  it('kayıtları tarihe göre yeniden eskiye sıralar', () => {
+    const out = monthMovements([
+      tx({ id: 'a', tarih: '2026-09-02' }),
+      tx({ id: 'b', tarih: '2026-09-09' }),
+      tx({ id: 'c', tarih: '2026-09-05' }),
+    ], nakit, 2026, 9)
+    expect(out.kayitlar.map((r) => r.id)).toEqual(['b', 'c', 'a'])
+  })
+})
+
 
 
