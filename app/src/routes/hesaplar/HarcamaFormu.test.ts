@@ -145,4 +145,19 @@ describe('HarcamaFormu', () => {
     expect(container.textContent).toContain('4/6')
     expect(container.textContent).toMatch(/plan.*bağ.*değiştirilemez/i)
   })
+
+  it('verilen hesap ve tarihle açılır', () => {
+    const { container } = render(HarcamaFormu, {
+      dataset: fixture, hesap: 'GARANTI-DIJI', tarih: '2026-09-12', hesapKilitli: true, onSaved: vi.fn(),
+    })
+    expect((container.querySelector('#hf-hesap') as HTMLSelectElement).value).toBe('GARANTI-DIJI')
+    expect((container.querySelector('#hf-tarih') as HTMLInputElement).value).toBe('2026-09-12')
+    expect((container.querySelector('#hf-hesap') as HTMLSelectElement).disabled).toBe(true)
+  })
+
+  it('hesap kilitli değilse seçilebilir kalır', () => {
+    const { container } = render(HarcamaFormu, { dataset: fixture, hesap: 'NAKIT', onSaved: vi.fn() })
+    expect((container.querySelector('#hf-hesap') as HTMLSelectElement).disabled).toBe(false)
+  })
 })
+

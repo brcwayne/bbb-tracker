@@ -74,4 +74,16 @@ describe('Hesap detayı', () => {
     expect(butonlar.length).toBeGreaterThan(0)
     expect(butonlar.every((b) => b.disabled)).toBe(true)
   })
+
+  it('takvimde ekleme isteği formu o tarihle açar', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { container } = render(HesapDetay, { dataset: fixture, param: 'NAKIT', today: TODAY, source })
+    ;(container.querySelector('[data-day="2"]') as HTMLButtonElement).click()
+    await Promise.resolve()
+    ;(container.querySelector('[data-day="2"] [data-add]') as HTMLButtonElement).click()
+    await Promise.resolve()
+    const tarih = container.querySelector('#hf-tarih') as HTMLInputElement
+    expect(tarih.value).toBe('2026-09-02')
+  })
 })
+

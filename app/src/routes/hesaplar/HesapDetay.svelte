@@ -4,9 +4,12 @@
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { accountBalances, cardStatement, monthMovements } from '../../lib/data/accounts'
+  import { deleteRecord, load } from '../../lib/data/store'
+  import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd } from '../../lib/format'
   import AyTakvimi from '../../lib/ui/AyTakvimi.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
+  import HarcamaFormu from './HarcamaFormu.svelte'
 
   let {
     dataset,
@@ -34,6 +37,13 @@
   let yil = $state(Number(today.slice(0, 4)))
   let ay = $state(Number(today.slice(5, 7)))
   let seciliGun = $state<number | null>(null)
+
+  let formTarihi = $state<string | null>(null)
+  let harcamaAcik = $state(false)
+  let duzenlenen = $state<PersonalTx | null>(null)
+  let silinecek = $state<PersonalTx | null>(null)
+  let deleting = $state(false)
+  let deleteError = $state<string | null>(null)
 
   const bakiye = $derived(
     account ? (accountBalances(rows, [account], today).get(account.kod) ?? 0) : 0,
@@ -85,6 +95,40 @@
     if (r.tur === 'DUZELTME') return '⚖ Bakiye düzeltmesi'
     return `${catName(r.kategori)}${r.aciklama ? ` · ${r.aciklama}` : ''}`
   }
+
+  const iso = (gun: number) =>
+    `${yil}-${String(ay).padStart(2, '0')}-${String(gun).padStart(2, '0')}`
+
+  function ekle(gun?: number) {
+    formTarihi = gun ? iso(gun) : today
+    duzenlenen = null
+    harcamaAcik = true
+  }
+
+  async function confirmDelete() {
+    if (!silinecek || !source || !store) return
+    deleting = true
+    deleteError = null
+    try {
+      await deleteRecord<PersonalTx>(store, source, 'personal_tx', (r) => r.id === silinecek!.id, {
+        allowKaynak: ['telegram', 'manual'],
+      })
+      silinecek = null
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+        deleteError = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — düzenlemeyi tekrar yapar mısın?'
+      } else {
+        deleteError = e instanceof Error ? e.message : String(e)
+      }
+    } finally {
+      deleting = false
+    }
+  }
 </script>
 
 {#if !account}
@@ -111,6 +155,42 @@
       {/if}
     </header>
 
+    {#if (harcamaAcik || duzenlenen) && dataset}
+      <div class="form-modal">
+        <HarcamaFormu
+          {dataset}
+          {source}
+          {store}
+          editing={duzenlenen ?? undefined}
+          hesap={account.kod}
+          tarih={formTarihi ?? today}
+          hesapKilitli
+          onSaved={() => { harcamaAcik = false; duzenlenen = null }}
+          onCancel={() => { harcamaAcik = false; duzenlenen = null }}
+        />
+      </div>
+    {/if}
+
+    {#if silinecek}
+      <div class="confirm-delete">
+        <p>
+          <strong>{silinecek.tarih} · {satirBasligi(silinecek)} ({satirTutari(silinecek).metin})</strong>
+          kaydı silinsin mi?
+        </p>
+        {#if deleteError}
+          <p class="error">{deleteError}</p>
+        {/if}
+        <div class="confirm-actions">
+          <button type="button" class="btn-secondary" onclick={() => (silinecek = null)} disabled={deleting}>
+            Vazgeç
+          </button>
+          <button type="button" class="btn-danger" onclick={confirmDelete} disabled={deleting}>
+            {deleting ? 'Siliniyor…' : 'Evet, Sil'}
+          </button>
+        </div>
+      </div>
+    {/if}
+
     {#if hareket}
       <AyTakvimi
         {yil}
@@ -120,7 +200,7 @@
         secili={seciliGun}
         bugun={today}
         onSelect={(g) => (seciliGun = g)}
-        onAdd={() => {}}
+        onAdd={(g) => isDrive && ekle(g)}
         onAyDegis={(y, m) => { yil = y; ay = m; seciliGun = null }}
       />
 
@@ -159,6 +239,26 @@
                 {#if r.paraBirimi !== account.paraBirimi}<span class="rozet" title="Farklı para birimi">≠</span>{/if}
               </span>
               <span class="tutar num" class:gain={t.isaret > 0} class:loss={t.isaret < 0}>{t.metin}</span>
+              <div class="hareket-islemler">
+                {#if r.tur !== 'DUZELTME' && r.tur !== 'TRANSFER'}
+                  <button
+                    type="button"
+                    class="btn-icon"
+                    title="Düzenle"
+                    aria-label="Düzenle"
+                    disabled={!isDrive}
+                    onclick={() => { duzenlenen = r; formTarihi = r.tarih; harcamaAcik = true; }}
+                  >✎</button>
+                {/if}
+                <button
+                  type="button"
+                  class="btn-icon danger"
+                  title="Sil"
+                  aria-label="Sil"
+                  disabled={!isDrive}
+                  onclick={() => { silinecek = r; }}
+                >🗑</button>
+              </div>
             </li>
           {/each}
         </ul>
@@ -166,7 +266,7 @@
     {/if}
 
     <div class="eylemler">
-      <button type="button" data-action="harcama" disabled={!isDrive}>+ Gider/Gelir</button>
+      <button type="button" data-action="harcama" disabled={!isDrive} onclick={() => ekle()}>+ Gider/Gelir</button>
       <button type="button" data-action="transfer" disabled={!isDrive}>⇄ Transfer</button>
       {#if account.tur === 'KREDI_KARTI'}
         <button type="button" data-action="odeme" disabled={!isDrive}>💳 Kart ödemesi</button>
@@ -275,6 +375,60 @@
     margin-top: 0.15rem;
   }
 
+  /* Form modal */
+  .form-modal {
+    margin-bottom: 0.5rem;
+  }
+
+  /* Delete confirmation */
+  .confirm-delete {
+    background: var(--surface);
+    border: 1px solid var(--loss);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .confirm-delete p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
+  .confirm-delete .error {
+    color: var(--loss);
+    font-size: 0.82rem;
+    margin: 0;
+  }
+  .confirm-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+  .btn-secondary {
+    padding: 0.4rem 0.85rem;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    color: var(--ink);
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+  .btn-danger {
+    padding: 0.4rem 0.85rem;
+    background: var(--loss);
+    border: 1px solid var(--loss);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-secondary:disabled, .btn-danger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   /* Month summary */
   .ay-toplam {
     display: flex;
@@ -371,6 +525,34 @@
     font-size: 0.92rem;
     font-weight: 600;
     text-align: right;
+  }
+
+  .hareket-islemler {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: 0.5rem;
+  }
+  .btn-icon {
+    background: transparent;
+    border: 0;
+    color: var(--ink-soft);
+    padding: 0.2rem 0.35rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .btn-icon:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .btn-icon.danger:hover:not(:disabled) {
+    color: var(--loss);
+  }
+  .btn-icon:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 
   .gain {

@@ -20,6 +20,9 @@
     onSaved,
     onCancel,
     editing,
+    hesap: hesapOn,
+    tarih: tarihOn,
+    hesapKilitli = false,
   }: {
     dataset: Dataset
     source?: DataSource
@@ -27,14 +30,17 @@
     onSaved: () => void
     onCancel?: () => void
     editing?: PersonalTx
+    hesap?: string
+    tarih?: string
+    hesapKilitli?: boolean
   } = $props()
 
   let tur = $state<'GIDER' | 'GELIR'>(editing?.tur === 'GELIR' ? 'GELIR' : 'GIDER')
-  let tarih = $state(editing?.tarih ?? todayIso())
+  let tarih = $state(editing?.tarih ?? tarihOn ?? todayIso())
   let tutar = $state(editing ? String(editing.tutar) : '')
   let paraBirimi = $state<'TRY' | 'USD'>(editing?.paraBirimi ?? 'TRY')
   let kategori = $state(editing?.kategori ?? '')
-  let hesap = $state(editing?.hesap ?? '')
+  let hesap = $state(editing?.hesap ?? hesapOn ?? '')
   let sahip = $state(editing?.sahip ?? '')
   let aciklama = $state(editing?.aciklama ?? '')
   let notText = $state(editing?.not ?? '')
@@ -226,7 +232,7 @@
 
         <div class="field flex-1">
           <label for="hf-hesap">Hesap</label>
-          <select id="hf-hesap" aria-label="Hesap" bind:value={hesap}>
+          <select id="hf-hesap" aria-label="Hesap" bind:value={hesap} disabled={hesapKilitli && !editing}>
             {#each accounts as a}
               <option value={a.kod}>{a.ad} ({a.kod})</option>
             {/each}
