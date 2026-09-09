@@ -119,5 +119,38 @@ describe('Hesap detayı', () => {
     expect(container.textContent).toContain('Bakiye Düzeltmesi')
     expect(container.querySelector('#b-gercek')).toBeTruthy()
   })
+
+  it('(a) form açıkken takvimde ikinci bir güne basınca #hf-tarih o güne güncellenmeli', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { container } = render(HesapDetay, { dataset: fixture, param: 'NAKIT', today: TODAY, source })
+    ;(container.querySelector('[data-day="2"]') as HTMLElement).click()
+    await Promise.resolve()
+    ;(container.querySelector('[data-day="2"] [data-add]') as HTMLElement).click()
+    await Promise.resolve()
+    expect((container.querySelector('#hf-tarih') as HTMLInputElement).value).toBe('2026-09-02')
+
+    ;(container.querySelector('[data-day="5"]') as HTMLElement).click()
+    await Promise.resolve()
+    expect((container.querySelector('#hf-tarih') as HTMLInputElement).value).toBe('2026-09-05')
+  })
+
+  it('(b) form açıkken ikinci kaydın Düzenle\'sine basınca #hf-tutar o kaydın tutarını göstermeli', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { container } = render(HesapDetay, { dataset: fixture, param: 'NAKIT', today: TODAY, source })
+    const editBtns = container.querySelectorAll('.hareket .btn-icon[title="Düzenle"]')
+    expect(editBtns.length).toBeGreaterThanOrEqual(2)
+
+    ;(editBtns[0] as HTMLButtonElement).click()
+    await Promise.resolve()
+    const tutarInput = container.querySelector('#hf-tutar') as HTMLInputElement
+    const ilkTutar = tutarInput.value
+    expect(ilkTutar).toBeTruthy()
+
+    ;(editBtns[1] as HTMLButtonElement).click()
+    await Promise.resolve()
+    const yeniTutar = (container.querySelector('#hf-tutar') as HTMLInputElement).value
+    expect(yeniTutar).toBeTruthy()
+    expect(yeniTutar).not.toBe(ilkTutar)
+  })
 })
 

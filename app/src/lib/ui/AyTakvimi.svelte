@@ -128,26 +128,37 @@
         <div class="hucre disari" data-outside></div>
       {:else}
         {@const b = gunler.get(gun)}
-        <button
-          type="button"
-          class="hucre"
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <div
+          class="hucre-sarma"
           data-day={gun}
           data-today={gun === bugunGun ? 'true' : null}
-          class:secili={gun === secili}
-          class:bugun-ring={gun === bugunGun}
           aria-label={etiket(gun)}
-          aria-pressed={gun === secili}
-          onpointerdown={(e) => basla(e, gun)}
-          onpointermove={kimilda}
-          onpointerup={iptal}
-          onpointercancel={iptal}
-          onpointerleave={iptal}
-          oncontextmenu={(e) => e.preventDefault()}
           onclick={() => tikla(gun)}
         >
-          <span class="gun-no">{gun}</span>
-          {#if b && b.giris > 0}<span class="tutar in" data-in>{kisa(b.giris)}</span>{/if}
-          {#if b && b.cikis > 0}<span class="tutar out" data-out>{kisa(b.cikis)}</span>{/if}
+          <button
+            type="button"
+            class="hucre"
+            data-today={gun === bugunGun ? 'true' : null}
+            class:secili={gun === secili}
+            class:bugun-ring={gun === bugunGun}
+            aria-label={etiket(gun)}
+            aria-pressed={gun === secili}
+            onpointerdown={(e) => basla(e, gun)}
+            onpointermove={kimilda}
+            onpointerup={iptal}
+            onpointercancel={iptal}
+            onpointerleave={iptal}
+            oncontextmenu={(e) => e.preventDefault()}
+            onclick={(e) => {
+              e.stopPropagation()
+              tikla(gun)
+            }}
+          >
+            <span class="gun-no">{gun}</span>
+            {#if b && b.giris > 0}<span class="tutar in" data-in>{kisa(b.giris)}</span>{/if}
+            {#if b && b.cikis > 0}<span class="tutar out" data-out>{kisa(b.cikis)}</span>{/if}
+          </button>
           {#if gun === secili}
             <button
               type="button"
@@ -160,7 +171,7 @@
               }}
             >+</button>
           {/if}
-        </button>
+        </div>
       {/if}
     {/each}
   </div>
@@ -229,8 +240,17 @@
     padding: 0.3rem 0 0.5rem;
   }
 
+  .hucre-sarma {
+    position: relative;
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+  }
+
   .hucre {
     position: relative;
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;

@@ -184,17 +184,19 @@
 
     {#if (harcamaAcik || duzenlenen) && dataset}
       <div class="form-modal">
-        <HarcamaFormu
-          {dataset}
-          {source}
-          {store}
-          editing={duzenlenen ?? undefined}
-          hesap={account.kod}
-          tarih={formTarihi ?? today}
-          hesapKilitli
-          onSaved={() => { harcamaAcik = false; duzenlenen = null }}
-          onCancel={() => { harcamaAcik = false; duzenlenen = null }}
-        />
+        {#key duzenlenen?.id ?? formTarihi}
+          <HarcamaFormu
+            {dataset}
+            {source}
+            {store}
+            editing={duzenlenen ?? undefined}
+            hesap={account.kod}
+            tarih={formTarihi ?? today}
+            hesapKilitli
+            onSaved={() => { harcamaAcik = false; duzenlenen = null }}
+            onCancel={() => { harcamaAcik = false; duzenlenen = null }}
+          />
+        {/key}
       </div>
     {/if}
 
@@ -257,7 +259,10 @@
         paraBirimi={account.paraBirimi}
         secili={seciliGun}
         bugun={today}
-        onSelect={(g) => (seciliGun = g)}
+        onSelect={(g) => {
+          seciliGun = g
+          if (harcamaAcik && g) formTarihi = iso(g)
+        }}
         onAdd={(g) => isDrive && ekle(g)}
         onAyDegis={(y, m) => { yil = y; ay = m; seciliGun = null }}
       />

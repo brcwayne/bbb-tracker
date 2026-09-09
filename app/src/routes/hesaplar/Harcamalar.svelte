@@ -97,6 +97,9 @@
       })
   })
 
+  const duzenlenen = $derived(editing)
+  const formTarihi = $derived(showAdd ? 'yeni' : null)
+
   function onFormSaved() {
     showAdd = false
     editing = null
@@ -162,14 +165,16 @@
     <!-- Ekleme / Düzenleme Formu -->
     {#if (showAdd || editing) && dataset}
       <div class="form-modal">
-        <HarcamaFormu
-          {dataset}
-          {source}
-          {store}
-          editing={editing ?? undefined}
-          onSaved={onFormSaved}
-          onCancel={() => { showAdd = false; editing = null; }}
-        />
+        {#key duzenlenen?.id ?? formTarihi}
+          <HarcamaFormu
+            {dataset}
+            {source}
+            {store}
+            editing={editing ?? undefined}
+            onSaved={onFormSaved}
+            onCancel={() => { showAdd = false; editing = null; }}
+          />
+        {/key}
       </div>
     {/if}
 
