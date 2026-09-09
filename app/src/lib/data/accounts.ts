@@ -1,4 +1,5 @@
-import type { PersonalAccount, PersonalTx } from './types'
+import type { Debt, PersonalAccount, PersonalTx } from './types'
+import { debtBalances } from './personal'
 
 /** Two decimals, and never `-0`. `Math.round(-0.001 * 100) / 100` yields `-0`,
  *  which `toEqual(0)` rejects — an empty statement window would fail a test
@@ -119,4 +120,115 @@ export function cardStatement(
     toplamBorc: round2(borc),
   }
 }
+
+export interface AccountRow {
+  kod: string
+  ad: string
+  simge?: string
+  paraBirimi: string
+  bakiye: number
+  /** Present only on credit cards. */
+  kart?: { buAy: number; gelecekAy: number; toplamBorc: number }
+  href?: string
+  pasif?: boolean
+}
+
+export interface AccountGroup {
+  baslik: string
+  tur: 'NAKIT' | 'BANKA' | 'KREDI_KARTI' | 'KISI'
+  satirlar: AccountRow[]
+  /** currency → subtotal */
+  toplam: Record<string, number>
+}
+
+const GRUP_SIRASI = [
+  { tur: 'NAKIT', baslik: 'Nakit' },
+  { tur: 'BANKA', baslik: 'Banka Hesapları' },
+  { tur: 'KREDI_KARTI', baslik: 'Kredi Kartı' },
+] as const
+
+const trSort = (a: string, b: string) => a.localeCompare(b, 'tr')
+
+function toplamla(satirlar: AccountRow[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const r of satirlar) out[r.paraBirimi] = round2((out[r.paraBirimi] ?? 0) + r.bakiye)
+  return out
+}
+
+/**
+ * The grouped list the page renders. Groups always come back in the order of
+ * `GRUP_SIRASI`, with Alacak/Verecek last and omitted entirely when there are
+ * no open debts. An empty account group is still returned so the page can
+ * show it — an account with no movements is a true `₺ 0,00`, not an absence.
+ */
+export function accountGroups(
+  rows: PersonalTx[],
+  accounts: PersonalAccount[],
+  debts: Debt[],
+  today: string,
+  opts: { pasifDahil?: boolean } = {},
+): AccountGroup[] {
+  const gorunen = accounts.filter((a) => a.aktif || opts.pasifDahil)
+  const bakiyeler = accountBalances(rows, gorunen, today)
+
+  const gruplar: AccountGroup[] = []
+  for (const { tur, baslik } of GRUP_SIRASI) {
+    const uyeler = gorunen
+      .filter((a) => a.tur === tur)
+      .sort((a, b) => (a.aktif === b.aktif ? trSort(a.ad, b.ad) : a.aktif ? -1 : 1))
+
+    const satirlar: AccountRow[] = uyeler.map((a) => ({
+      kod: a.kod,
+      ad: a.ad,
+      simge: a.simge,
+      paraBirimi: a.paraBirimi,
+      bakiye: bakiyeler.get(a.kod) ?? 0,
+      kart: a.tur === 'KREDI_KARTI' ? cardStatement(rows, a, today) : undefined,
+      href: `#/h/hesap/${a.kod}`,
+      pasif: a.aktif ? undefined : true,
+    }))
+
+    gruplar.push({ baslik, tur, satirlar, toplam: toplamla(satirlar) })
+  }
+
+  const kisiler = debtBalances(debts)
+  if (kisiler.length > 0) {
+    const satirlar: AccountRow[] = kisiler.map((k) => ({
+      kod: k.kisi,
+      ad: k.kisi,
+      paraBirimi: k.para,
+      bakiye: k.net,
+      href: `#/h/borclar/${k.kisi}`,
+    }))
+    gruplar.push({
+      baslik: 'Alacak / Verecek',
+      tur: 'KISI',
+      satirlar,
+      toplam: toplamla(satirlar),
+    })
+  }
+
+  return gruplar
+}
+
+/**
+ * Varlıklar / Borçlar / Toplam per currency (spec §5). `borclar` stays
+ * negative and `toplam` is the sum, not the difference — that is what makes
+ * the three figures reconcile on screen.
+ */
+export function netWorthBand(
+  groups: AccountGroup[],
+): Record<string, { varliklar: number; borclar: number; toplam: number }> {
+  const out: Record<string, { varliklar: number; borclar: number; toplam: number }> = {}
+  for (const g of groups) {
+    for (const r of g.satirlar) {
+      const cur = (out[r.paraBirimi] ??= { varliklar: 0, borclar: 0, toplam: 0 })
+      if (r.bakiye >= 0) cur.varliklar = round2(cur.varliklar + r.bakiye)
+      else cur.borclar = round2(cur.borclar + r.bakiye)
+      cur.toplam = round2(cur.varliklar + cur.borclar)
+    }
+  }
+  return out
+}
+
 

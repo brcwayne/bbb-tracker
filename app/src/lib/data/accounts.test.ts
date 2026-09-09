@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { accountBalances, cardStatement, txDelta } from './accounts'
-import type { PersonalAccount, PersonalTx } from './types'
+import { accountBalances, accountGroups, cardStatement, netWorthBand, txDelta } from './accounts'
+import type { Debt, PersonalAccount, PersonalTx } from './types'
 
 const tx = (o: Partial<PersonalTx>): PersonalTx => ({
   id: 'px_1', tarih: '2026-09-02', tur: 'GIDER', tutar: 100, paraBirimi: 'TRY',
@@ -187,4 +187,108 @@ describe('cardStatement', () => {
     expect(out.buAy).toBe(-500)
   })
 })
+
+const debt = (o: Partial<Debt>): Debt => ({
+  id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 1000,
+  paraBirimi: 'TRY', aciklama: '', hesap: 'NAKIT', durum: 'ACIK',
+  kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z', ...o,
+})
+
+describe('accountGroups', () => {
+  const accounts = [
+    acc({ kod: 'GARANTI-BANKA', ad: 'Garanti Bankası', tur: 'BANKA' }),
+    acc({ kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT' }),
+    acc({ kod: 'GARANTI-DIJI', ad: 'Garanti Diji', tur: 'KREDI_KARTI', hesapKesim: 15 }),
+    acc({ kod: 'ESKI', ad: 'Kapanmış', tur: 'BANKA', aktif: false }),
+  ]
+
+  it('grupları sabit sırada döner', () => {
+    const g = accountGroups([], accounts, [], TODAY)
+    expect(g.map((x) => x.tur)).toEqual(['NAKIT', 'BANKA', 'KREDI_KARTI'])
+  })
+
+  it('pasif hesabı varsayılan olarak gizler, istenince gösterir', () => {
+    const gizli = accountGroups([], accounts, [], TODAY)
+    expect(gizli.find((x) => x.tur === 'BANKA')!.satirlar.map((r) => r.kod)).toEqual(['GARANTI-BANKA'])
+    const acik = accountGroups([], accounts, [], TODAY, { pasifDahil: true })
+    expect(acik.find((x) => x.tur === 'BANKA')!.satirlar.map((r) => r.kod)).toEqual(['GARANTI-BANKA', 'ESKI'])
+  })
+
+  it('grup içinde Türkçe sıralar', () => {
+    const tr = [
+      acc({ kod: 'Z', ad: 'Ziraat', tur: 'BANKA' }),
+      acc({ kod: 'I', ad: 'İş Bankası', tur: 'BANKA' }),
+      acc({ kod: 'S', ad: 'Şeker', tur: 'BANKA' }),
+    ]
+    const g = accountGroups([], tr, [], TODAY)
+    expect(g.find((x) => x.tur === 'BANKA')!.satirlar.map((r) => r.ad))
+      .toEqual(['İş Bankası', 'Şeker', 'Ziraat'])
+  })
+
+  it('grup toplamını para birimi bazında verir', () => {
+    const g = accountGroups([
+      tx({ id: 'a', tur: 'GELIR', tutar: 1000, hesap: 'NAKIT', tarih: '2026-09-01' }),
+    ], accounts, [], TODAY)
+    expect(g.find((x) => x.tur === 'NAKIT')!.toplam).toEqual({ TRY: 1000 })
+  })
+
+  it('kart satırına dönem bilgisini iliştirir', () => {
+    const g = accountGroups([
+      tx({ id: 'a', hesap: 'GARANTI-DIJI', tutar: 1800, tarih: '2026-09-03' }),
+    ], accounts, [], TODAY)
+    const kart = g.find((x) => x.tur === 'KREDI_KARTI')!.satirlar[0]
+    expect(kart.kart).toEqual({ buAy: 1800, gelecekAy: 0, toplamBorc: -1800 })
+  })
+
+  it('hesap satırı detay adresine bağlanır', () => {
+    const g = accountGroups([], accounts, [], TODAY)
+    expect(g.find((x) => x.tur === 'NAKIT')!.satirlar[0].href).toBe('#/h/hesap/NAKIT')
+  })
+
+  it('açık borçlardan Alacak/Verecek grubu üretir', () => {
+    const g = accountGroups([], accounts, [
+      debt({ id: 'd1', kisi: 'BORA', yon: 'VERDIM', tutar: 2000 }),
+      debt({ id: 'd2', kisi: 'ALPER', yon: 'ALDIM', tutar: 500 }),
+      debt({ id: 'd3', kisi: 'ZEK', yon: 'VERDIM', tutar: 900, durum: 'KAPALI' }),
+    ], TODAY)
+    const kisiler = g.find((x) => x.tur === 'KISI')!
+    expect(kisiler.satirlar.map((r) => [r.kod, r.bakiye])).toEqual([['BORA', 2000], ['ALPER', -500]])
+    expect(kisiler.satirlar[0].href).toBe('#/h/borclar/BORA')
+    expect(kisiler.toplam).toEqual({ TRY: 1500 })
+  })
+
+  it('borç yoksa Alacak/Verecek grubunu hiç üretmez', () => {
+    expect(accountGroups([], accounts, [], TODAY).some((x) => x.tur === 'KISI')).toBe(false)
+  })
+})
+
+describe('netWorthBand', () => {
+  it('pozitifleri varlık, negatifleri borç olarak ayırır ve toplar', () => {
+    const accounts = [
+      acc({ kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT' }),
+      acc({ kod: 'GARANTI-DIJI', ad: 'Diji', tur: 'KREDI_KARTI', hesapKesim: 15 }),
+    ]
+    const g = accountGroups([
+      tx({ id: 'a', tur: 'GELIR', tutar: 1000, hesap: 'NAKIT', tarih: '2026-09-01' }),
+      tx({ id: 'b', tur: 'GIDER', tutar: 300, hesap: 'GARANTI-DIJI', tarih: '2026-09-03' }),
+    ], accounts, [], TODAY)
+    expect(netWorthBand(g)).toEqual({ TRY: { varliklar: 1000, borclar: -300, toplam: 700 } })
+  })
+
+  it('para birimlerini ayrı satırlarda tutar', () => {
+    const accounts = [
+      acc({ kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT' }),
+      acc({ kod: 'USD-HESAP', ad: 'Dolar', tur: 'BANKA', paraBirimi: 'USD' }),
+    ]
+    const g = accountGroups([
+      tx({ id: 'a', tur: 'GELIR', tutar: 1000, hesap: 'NAKIT', tarih: '2026-09-01' }),
+      tx({ id: 'b', tur: 'GELIR', tutar: 40, hesap: 'USD-HESAP', paraBirimi: 'USD', tarih: '2026-09-01' }),
+    ], accounts, [], TODAY)
+    expect(netWorthBand(g)).toEqual({
+      TRY: { varliklar: 1000, borclar: 0, toplam: 1000 },
+      USD: { varliklar: 40, borclar: 0, toplam: 40 },
+    })
+  })
+})
+
 
