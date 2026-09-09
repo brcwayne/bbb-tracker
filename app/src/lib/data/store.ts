@@ -1,7 +1,7 @@
 import { writable, type Writable, get } from 'svelte/store'
 import type { Dataset } from './types'
 import type { DataSource } from './source'
-import { describeSource } from './source'
+import { describeSource, PERSONAL_KEY_MAP } from './source'
 import { LocalFileSource } from './local'
 import { DriveSource, NeedsAuthError, ConflictError } from './drive'
 import { initRate } from '../settings.svelte'
@@ -121,10 +121,16 @@ async function writeAndCommit(
   const state = get(store)
   if (!state.dataset) throw new Error('Veri henüz yüklenmedi.')
 
+  // The Drive file is `<file>.json`, but the Dataset field it lands in is
+  // camelCase for the personal ledger (personal_tx -> personalTx). Reading
+  // ds[file] there finds nothing and `build` throws "current is not iterable",
+  // so the file name and the dataset key must be resolved separately.
+  const key = (PERSONAL_KEY_MAP as Record<string, string>)[file] ?? file
+
   const attempt = async (ds: Dataset): Promise<Dataset> => {
-    const updatedArray = build(ds[file] as unknown as unknown[])
+    const updatedArray = build((ds[key as keyof Dataset] ?? []) as unknown as unknown[])
     await source.save!(file, updatedArray)
-    return { ...ds, [file]: updatedArray }
+    return { ...ds, [key]: updatedArray }
   }
 
   let newDataset: Dataset

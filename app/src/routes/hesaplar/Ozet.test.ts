@@ -6,14 +6,14 @@ import type { Dataset } from '../../lib/data/types'
 
 const emptyDataset: Dataset = {
   ...fixture,
-  personal_tx: [],
-  payment_plans: [],
+  personalTx: [],
+  paymentPlans: [],
   debts: [],
 }
 
 const tryOnlyDataset: Dataset = {
   ...fixture,
-  personal_tx: fixture.personal_tx!.filter((tx) => tx.paraBirimi === 'TRY'),
+  personalTx: fixture.personalTx!.filter((tx) => tx.paraBirimi === 'TRY'),
 }
 
 describe('Ozet sayfası', () => {

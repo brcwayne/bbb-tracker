@@ -48,7 +48,7 @@
   }
 
   const allRows = $derived<PersonalTx[]>(
-    dataset?.personal_tx !== undefined ? dataset.personal_tx : dataset?.personalTx ?? [],
+    dataset?.personalTx ?? [],
   )
   const categories = $derived(dataset?.categories ?? [])
   const catName = (kod: string) => categories.find((c) => c.kod === kod)?.ad ?? kod

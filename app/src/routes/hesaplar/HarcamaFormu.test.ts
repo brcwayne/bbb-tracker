@@ -84,7 +84,7 @@ describe('HarcamaFormu', () => {
     }
     const ds = {
       ...fixture,
-      personal_tx: [...(fixture.personal_tx ?? []), editingTx],
+      personalTx: [...(fixture.personalTx ?? []), editingTx],
     }
     const store = createAppStore()
     await load(store, { id: 'local', load: () => Promise.resolve(ds) })

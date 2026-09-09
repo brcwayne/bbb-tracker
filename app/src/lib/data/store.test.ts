@@ -302,7 +302,7 @@ describe('allowKaynak and personal writes (Task 5)', () => {
   function setup(initialRows = [row]) {
     const ds = {
       ...fixture,
-      personal_tx: initialRows,
+      personalTx: initialRows,
     }
     const store = createAppStore()
     const saved: Record<string, any> = {}

@@ -6,9 +6,7 @@ import type { Dataset, PaymentPlan } from '../../lib/data/types'
 
 const emptyDataset: Dataset = {
   ...fixture,
-  payment_plans: [],
   paymentPlans: [],
-  personal_tx: [],
   personalTx: [],
 }
 

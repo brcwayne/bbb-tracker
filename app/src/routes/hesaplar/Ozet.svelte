@@ -20,7 +20,7 @@
   } = $props()
 
   const rows = $derived<PersonalTx[]>(
-    dataset?.personal_tx !== undefined ? dataset.personal_tx : dataset?.personalTx ?? [],
+    dataset?.personalTx ?? [],
   )
   const categories = $derived(dataset?.categories ?? [])
   const hasRows = $derived(rows.length > 0)

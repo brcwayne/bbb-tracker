@@ -48,7 +48,7 @@
   const filteredCategories = $derived(allCategories.filter((c) => c.tur === tur && c.aktif !== false))
 
   const accounts = $derived(
-    (dataset?.personal_accounts ?? dataset?.personalAccounts ?? []).filter((a) => a.aktif !== false),
+    (dataset?.personalAccounts ?? dataset?.personalAccounts ?? []).filter((a) => a.aktif !== false),
   )
   const people = $derived((dataset?.people ?? []).filter((p) => p.aktif !== false))
 

@@ -7,7 +7,6 @@ import { createAppStore, load } from '../../lib/data/store'
 
 const emptyDataset: Dataset = {
   ...fixture,
-  personal_tx: [],
   personalTx: [],
 }
 

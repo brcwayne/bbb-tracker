@@ -29,10 +29,10 @@
   let cancelError = $state<string | null>(null)
 
   const plans = $derived<PaymentPlan[]>(
-    dataset?.payment_plans !== undefined ? dataset.payment_plans : dataset?.paymentPlans ?? [],
+    dataset?.paymentPlans !== undefined ? dataset.paymentPlans : dataset?.paymentPlans ?? [],
   )
   const rows = $derived<PersonalTx[]>(
-    dataset?.personal_tx !== undefined ? dataset.personal_tx : dataset?.personalTx ?? [],
+    dataset?.personalTx ?? [],
   )
   const categories = $derived(dataset?.categories ?? [])
   const catName = (kod: string) => categories.find((c) => c.kod === kod)?.ad ?? kod
