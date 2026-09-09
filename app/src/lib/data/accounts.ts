@@ -48,3 +48,75 @@ export function accountBalances(
   }
   return out
 }
+
+/** Last calendar day of a 1-based month. `Date.UTC`'s month argument is
+ *  0-based, so `(y, m, 0)` is the last day of month `m`. */
+function lastDayOf(y: number, m: number): number {
+  return new Date(Date.UTC(y, m, 0)).getUTCDate()
+}
+
+/** An ISO date for `day` in month `m`, clamped to the month's real length —
+ *  a cut day of 31 lands on the 30th in November and the 28th in February. */
+function clampedDate(y: number, m: number, day: number): string {
+  const d = Math.min(day, lastDayOf(y, m))
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+function shiftMonth(y: number, m: number, delta: number): [number, number] {
+  const i = y * 12 + (m - 1) + delta
+  return [Math.floor(i / 12), (i % 12) + 1]
+}
+
+/**
+ * The card's two statement windows and its overall debt (spec §4.1).
+ *
+ * `toplamBorc` is the raw balance and is negative when money is owed.
+ * `buAy` / `gelecekAy` are positive magnitudes of the amount to pay, which is
+ * why the window sums are negated.
+ *
+ * With no `hesapKesim`, a cut day of 31 clamps to the last day of every month,
+ * making the windows the calendar months exactly — the fallback needs no
+ * separate branch.
+ */
+export function cardStatement(
+  rows: PersonalTx[],
+  account: PersonalAccount,
+  today: string,
+): { buAy: number; gelecekAy: number; toplamBorc: number } {
+  const kesim = account.hesapKesim ?? 31
+  const y = Number(today.slice(0, 4))
+  const m = Number(today.slice(5, 7))
+
+  // C0 — the first cut date on or after today.
+  let c0 = clampedDate(y, m, kesim)
+  if (c0 < today) {
+    const [ny, nm] = shiftMonth(y, m, 1)
+    c0 = clampedDate(ny, nm, kesim)
+  }
+  const [py, pm] = shiftMonth(Number(c0.slice(0, 4)), Number(c0.slice(5, 7)), -1)
+  const [ny, nm] = shiftMonth(Number(c0.slice(0, 4)), Number(c0.slice(5, 7)), 1)
+  const cPrev = clampedDate(py, pm, kesim)
+  const cNext = clampedDate(ny, nm, kesim)
+
+  const window = (from: string, to: string) => {
+    let sum = 0
+    for (const r of rows) {
+      if (r.tarih <= from || r.tarih > to) continue
+      sum += txDelta(r, account.kod, account.paraBirimi)
+    }
+    return round2(-sum)
+  }
+
+  let borc = 0
+  for (const r of rows) {
+    if (r.tarih > today) continue
+    borc += txDelta(r, account.kod, account.paraBirimi)
+  }
+
+  return {
+    buAy: window(cPrev, c0),
+    gelecekAy: window(c0, cNext),
+    toplamBorc: round2(borc),
+  }
+}
+

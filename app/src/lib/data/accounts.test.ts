@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountBalances, txDelta } from './accounts'
+import { accountBalances, cardStatement, txDelta } from './accounts'
 import type { PersonalAccount, PersonalTx } from './types'
 
 const tx = (o: Partial<PersonalTx>): PersonalTx => ({
@@ -90,3 +90,101 @@ describe('accountBalances', () => {
     expect(out.get('NAKIT')).toBe(-0.3)
   })
 })
+
+describe('cardStatement', () => {
+  const kart = acc({ kod: 'GARANTI-DIJI', tur: 'KREDI_KARTI', hesapKesim: 15 })
+  const kartSatiri = (o: Partial<PersonalTx>) =>
+    tx({ hesap: 'GARANTI-DIJI', tur: 'GIDER', ...o })
+
+  it('kesim gününe göre dönemi böler', () => {
+    // TODAY = 2026-09-08 → ilk kesim 2026-09-15, önceki 2026-08-15
+    const out = cardStatement([
+      kartSatiri({ id: 'a', tarih: '2026-08-20', tutar: 1000 }), // bu dönem
+      kartSatiri({ id: 'b', tarih: '2026-09-03', tutar: 800 }),  // bu dönem
+      kartSatiri({ id: 'c', tarih: '2026-09-20', tutar: 900 }),  // gelecek dönem
+      kartSatiri({ id: 'd', tarih: '2026-08-10', tutar: 500 }),  // geçmiş dönem
+    ], kart, TODAY)
+    expect(out.buAy).toBe(1800)
+    expect(out.gelecekAy).toBe(900)
+  })
+
+  it('toplam borç negatif kalır ve geleceği saymaz', () => {
+    const out = cardStatement([
+      kartSatiri({ id: 'a', tarih: '2026-09-03', tutar: 1800 }),
+      kartSatiri({ id: 'b', tarih: '2026-09-20', tutar: 900 }),
+    ], kart, TODAY)
+    expect(out.toplamBorc).toBe(-1800)
+  })
+
+  it('karta gelen ödeme dönem borcunu azaltır', () => {
+    const out = cardStatement([
+      kartSatiri({ id: 'a', tarih: '2026-09-03', tutar: 1800 }),
+      tx({ id: 'b', tarih: '2026-09-05', tur: 'TRANSFER', tutar: 500, hesap: 'GARANTI-BANKA', karsiHesap: 'GARANTI-DIJI' }),
+    ], kart, TODAY)
+    expect(out.buAy).toBe(1300)
+  })
+
+  it('kesim günü yoksa takvim ayına düşer', () => {
+    const kesimsiz = acc({ kod: 'SAGLAM-KART', tur: 'KREDI_KARTI' })
+    const out = cardStatement([
+      tx({ id: 'a', hesap: 'SAGLAM-KART', tarih: '2026-09-03', tutar: 300 }),
+      tx({ id: 'b', hesap: 'SAGLAM-KART', tarih: '2026-09-30', tutar: 200 }),
+      tx({ id: 'c', hesap: 'SAGLAM-KART', tarih: '2026-10-02', tutar: 700 }),
+      tx({ id: 'd', hesap: 'SAGLAM-KART', tarih: '2026-08-29', tutar: 400 }),
+    ], kesimsiz, TODAY)
+    expect(out.buAy).toBe(500)
+    expect(out.gelecekAy).toBe(700)
+  })
+
+  it('kesim günü 1 ise dönem ayın başında kapanır', () => {
+    const k1 = acc({ kod: 'K1', tur: 'KREDI_KARTI', hesapKesim: 1 })
+    // TODAY = 2026-09-08 → bu ayın 1'i geçti, ilk kesim 2026-10-01, önceki 2026-09-01
+    const out = cardStatement([
+      tx({ id: 'a', hesap: 'K1', tarih: '2026-09-02', tutar: 300 }),
+      tx({ id: 'b', hesap: 'K1', tarih: '2026-10-01', tutar: 400 }),
+      tx({ id: 'c', hesap: 'K1', tarih: '2026-10-02', tutar: 500 }),
+      tx({ id: 'd', hesap: 'K1', tarih: '2026-09-01', tutar: 900 }),
+    ], k1, TODAY)
+    expect(out.buAy).toBe(700)
+    expect(out.gelecekAy).toBe(500)
+  })
+
+  it('kesim günü 31 ise kısa ayda ayın sonuna kırpılır', () => {
+    const k31 = acc({ kod: 'K31', tur: 'KREDI_KARTI', hesapKesim: 31 })
+    // 2026-11-08 → ilk kesim 2026-11-30 (Kasım 30 çeker), önceki 2026-10-31
+    const out = cardStatement([
+      tx({ id: 'a', hesap: 'K31', tarih: '2026-11-30', tutar: 100 }),
+      tx({ id: 'b', hesap: 'K31', tarih: '2026-12-01', tutar: 200 }),
+    ], k31, '2026-11-08')
+    expect(out.buAy).toBe(100)
+    expect(out.gelecekAy).toBe(200)
+  })
+
+  it('kesim günü 30 ise şubatta ayın sonuna kırpılır', () => {
+    const k30 = acc({ kod: 'K30', tur: 'KREDI_KARTI', hesapKesim: 30 })
+    // 2026-02-10 → ilk kesim 2026-02-28 (2026 artık yıl değil)
+    const out = cardStatement([
+      tx({ id: 'a', hesap: 'K30', tarih: '2026-02-28', tutar: 100 }),
+      tx({ id: 'b', hesap: 'K30', tarih: '2026-03-01', tutar: 200 }),
+    ], k30, '2026-02-10')
+    expect(out.buAy).toBe(100)
+    expect(out.gelecekAy).toBe(200)
+  })
+
+  it('bugün kesim gününün tam üstündeyse dönem bugün kapanır', () => {
+    const out = cardStatement([
+      tx({ id: 'a', hesap: 'GARANTI-DIJI', tarih: '2026-09-15', tutar: 100 }),
+      tx({ id: 'b', hesap: 'GARANTI-DIJI', tarih: '2026-09-16', tutar: 200 }),
+    ], kart, '2026-09-15')
+    expect(out.buAy).toBe(100)
+    expect(out.gelecekAy).toBe(200)
+  })
+
+  it('dönem alacaktaysa negatif döner', () => {
+    const out = cardStatement([
+      tx({ id: 'a', tarih: '2026-09-03', tur: 'TRANSFER', tutar: 500, hesap: 'GARANTI-BANKA', karsiHesap: 'GARANTI-DIJI' }),
+    ], kart, TODAY)
+    expect(out.buAy).toBe(-500)
+  })
+})
+
