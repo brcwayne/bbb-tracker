@@ -11,6 +11,7 @@
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HarcamaFormu from './HarcamaFormu.svelte'
   import TransferFormu from './TransferFormu.svelte'
+  import BakiyeDuzeltme from './BakiyeDuzeltme.svelte'
 
   let {
     dataset,
@@ -51,6 +52,7 @@
   let transferHedef = $state<string | undefined>(undefined)
   let transferBasligi = $state('Transfer')
   let duzenlenenTransfer = $state<PersonalTx | null>(null)
+  let duzeltmeAcik = $state(false)
 
   function acTransfer() {
     if (!account) return
@@ -213,6 +215,20 @@
       </div>
     {/if}
 
+    {#if duzeltmeAcik && dataset && account}
+      <div class="form-modal">
+        <BakiyeDuzeltme
+          {dataset}
+          {source}
+          {store}
+          {account}
+          {today}
+          onSaved={() => (duzeltmeAcik = false)}
+          onCancel={() => (duzeltmeAcik = false)}
+        />
+      </div>
+    {/if}
+
     {#if silinecek}
       <div class="confirm-delete">
         <p>
@@ -326,7 +342,7 @@
       {#if account.tur === 'KREDI_KARTI'}
         <button type="button" data-action="odeme" disabled={!isDrive} onclick={acKartOdemesi}>💳 Kart ödemesi</button>
       {/if}
-      <button type="button" data-action="duzeltme" disabled={!isDrive}>⚖ Bakiye düzelt</button>
+      <button type="button" data-action="duzeltme" disabled={!isDrive} onclick={() => (duzeltmeAcik = true)}>⚖ Bakiye düzelt</button>
     </div>
     {#if !isDrive}
       <span class="drive-notice">Düzenleme için Drive bağlantısı gerekiyor</span>

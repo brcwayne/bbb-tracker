@@ -108,5 +108,16 @@ describe('Hesap detayı', () => {
     const hedef = container.querySelector('#t-hedef') as HTMLSelectElement
     expect(hedef.value).toBe('GARANTI-DIJI')
   })
+
+  it('bakiye düzelt düğmesi düzeltme formunu açar', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { container } = render(HesapDetay, { dataset: fixture, param: 'NAKIT', today: TODAY, source })
+    const btn = container.querySelector('[data-action="duzeltme"]') as HTMLButtonElement
+    expect(btn).toBeTruthy()
+    btn.click()
+    await Promise.resolve()
+    expect(container.textContent).toContain('Bakiye Düzeltmesi')
+    expect(container.querySelector('#b-gercek')).toBeTruthy()
+  })
 })
 
