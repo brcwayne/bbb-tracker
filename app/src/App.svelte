@@ -44,6 +44,8 @@
   import Harcamalar from './routes/hesaplar/Harcamalar.svelte'
   import Taksitler from './routes/hesaplar/Taksitler.svelte'
   import Borclar from './routes/hesaplar/Borclar.svelte'
+  import Hesaplar from './routes/hesaplar/Hesaplar.svelte'
+  import HesapDetay from './routes/hesaplar/HesapDetay.svelte'
 
   let cur = $state<CurrentRouteResult>(currentRoute())
   let route = $derived(cur.route)
@@ -66,13 +68,20 @@
     temettu: Temettu,
     ekle: EkleKaydi,
     log: Log,
+    'h-hesaplar': Hesaplar,
     'h-ozet': Ozet,
     'h-harcamalar': Harcamalar,
     'h-taksitler': Taksitler,
     'h-borclar': Borclar,
+    'h-hesap': HesapDetay,
   }
   const Active = $derived(pages[route])
-  const title = $derived([...ROUTES, ...HESAP_ROUTES].find((r) => r.id === route)?.label ?? 'BBB')
+  const param = $derived(cur.param)
+  const title = $derived(
+    route === 'h-hesap'
+      ? ($store.dataset?.personalAccounts?.find((a) => a.kod === param)?.ad ?? 'Hesap')
+      : ([...ROUTES, ...HESAP_ROUTES].find((r) => r.id === route)?.label ?? 'BBB'),
+  )
 
   // Re-derive reactively when the global period changes (no reload).
   const activeDerived = $derived(
@@ -195,12 +204,12 @@
 {:else if $store.status === 'error'}
   <EmptyState title="Veri yüklenemedi" detail={$store.error} />
 {:else}
-  <Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} source={source} store={store} />
+  <Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} source={source} store={store} {param} />
 {/if}
 
 <nav class="tabs">
   {#each routesFor(volume) as r}
-    <a href={r.path} class:active={r.id === route}>{r.label}</a>
+    <a href={r.path} class:active={r.id === route || (route === 'h-hesap' && r.id === 'h-hesaplar')}>{r.label}</a>
   {/each}
 </nav>
 

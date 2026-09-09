@@ -5,7 +5,7 @@ import VolumeSwitch from './VolumeSwitch.svelte'
 it('yatırımdayken hesaplara götürür', () => {
   render(VolumeSwitch, { volume: 'yatirim' })
   const a = screen.getByRole('link')
-  expect(a).toHaveAttribute('href', '#/h/ozet')
+  expect(a).toHaveAttribute('href', '#/h/hesaplar')
   expect(a.textContent).toContain('Hesaplar')
 })
 

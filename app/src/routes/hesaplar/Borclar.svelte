@@ -13,14 +13,20 @@
     dataset,
     source,
     store,
+    param,
   }: {
     dataset?: Dataset | null
     source?: DataSource
     store?: Writable<AppState>
+    param?: string
   } = $props()
 
+  let fKisi = $state(param ?? '')
+
   const isDrive = $derived(Boolean(source?.save))
-  const allDebts = $derived<Debt[]>(dataset?.debts ?? [])
+  const allDebts = $derived<Debt[]>(
+    (dataset?.debts ?? []).filter((d) => !fKisi || d.kisi === fKisi),
+  )
   const people = $derived(dataset?.people ?? [])
   const personName = (kod: string) => people.find((p) => p.kod === kod)?.ad ?? kod
 
@@ -148,6 +154,11 @@
 
 {#if balances.length === 0 && openDebts.length === 0}
   <div class="empty-container">
+    {#if fKisi}
+      <button type="button" class="kisi-rozeti" data-testid="kisi-rozeti" onclick={() => (fKisi = '')}>
+        {personName(fKisi)} ✕
+      </button>
+    {/if}
     <EmptyState
       title="Henüz açık borç yok"
       detail="Telegram botundan borç veya alacak girdikçe bakiyeler burada listelenecek."
@@ -155,6 +166,11 @@
   </div>
 {:else}
   <div class="page-container">
+    {#if fKisi}
+      <button type="button" class="kisi-rozeti" data-testid="kisi-rozeti" onclick={() => (fKisi = '')}>
+        {personName(fKisi)} ✕
+      </button>
+    {/if}
     {#if !isDrive}
       <div class="offline-note">
         <span>Düzenleme için Drive bağlantısı gerekiyor (yerel kaynakta sadece okuma yapılır).</span>
@@ -638,5 +654,23 @@
     font-size: 0.8rem;
     color: var(--loss);
   }
+  .kisi-rozeti {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--surface);
+    border: 1px solid var(--accent-defter);
+    color: var(--accent-defter);
+    border-radius: 999px;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 0.75rem;
+  }
+  .kisi-rozeti:hover {
+    opacity: 0.85;
+  }
 </style>
+
 

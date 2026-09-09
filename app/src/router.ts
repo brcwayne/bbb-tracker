@@ -11,7 +11,7 @@ export type Route =
   | 'ekle'
   | 'log'
 
-export type HesapRoute = 'h-ozet' | 'h-harcamalar' | 'h-taksitler' | 'h-borclar'
+export type HesapRoute = 'h-hesaplar' | 'h-ozet' | 'h-harcamalar' | 'h-taksitler' | 'h-borclar' | 'h-hesap'
 
 export interface RouteEntry<T extends string = string> {
   id: T
@@ -32,6 +32,7 @@ export const ROUTES: RouteEntry<Route>[] = [
 ]
 
 export const HESAP_ROUTES: RouteEntry<HesapRoute>[] = [
+  { id: 'h-hesaplar', path: '#/h/hesaplar', label: 'Hesaplar' },
   { id: 'h-ozet', path: '#/h/ozet', label: 'Özet' },
   { id: 'h-harcamalar', path: '#/h/harcamalar', label: 'Harcamalar' },
   { id: 'h-taksitler', path: '#/h/taksitler', label: 'Taksitler' },
@@ -40,7 +41,7 @@ export const HESAP_ROUTES: RouteEntry<HesapRoute>[] = [
 
 export const FIRST_PATH: Record<Volume, string> = {
   yatirim: '#/',
-  hesaplar: '#/h/ozet',
+  hesaplar: '#/h/hesaplar',
 }
 
 export function routesFor(volume: Volume): RouteEntry<Route | HesapRoute>[] {
@@ -50,6 +51,9 @@ export function routesFor(volume: Volume): RouteEntry<Route | HesapRoute>[] {
 export interface CurrentRouteResult {
   volume: Volume
   route: Route | HesapRoute
+  /** The path segment after a parameterised route: an account `kod` on
+   *  `h-hesap`, a person `kod` on `h-borclar`. */
+  param?: string
 }
 
 export function otherVolume(v: Volume): { volume: Volume; href: string; label: string; ariaLabel: string } {
@@ -73,18 +77,23 @@ export function currentRoute(): CurrentRouteResult {
   const h = location.hash.replace(/^#\/?/, '')
 
   if (h.startsWith('h/')) {
-    const sub = h.slice(2).replace(/^\//, '')
+    const rest = h.slice(2).replace(/^\//, '')
+    const [sub, param] = rest.split('/')
     const hesapMap: Record<string, HesapRoute> = {
+      hesaplar: 'h-hesaplar',
       ozet: 'h-ozet',
       harcamalar: 'h-harcamalar',
       taksitler: 'h-taksitler',
       borclar: 'h-borclar',
+      hesap: 'h-hesap',
     }
     const matched = hesapMap[sub]
-    if (matched) {
-      return { volume: 'hesaplar', route: matched }
-    }
-    return { volume: 'hesaplar', route: 'h-ozet' }
+    if (!matched) return { volume: 'hesaplar', route: 'h-hesaplar' }
+    // The detail route is meaningless without an account code.
+    if (matched === 'h-hesap' && !param) return { volume: 'hesaplar', route: 'h-hesaplar' }
+    return param
+      ? { volume: 'hesaplar', route: matched, param: decodeURIComponent(param) }
+      : { volume: 'hesaplar', route: matched }
   }
 
   const ids = ['portfoyler', 'kurumlar', 'pozisyonlar', 'aylik', 'banka', 'temettu', 'ekle', 'log'] as const

@@ -172,4 +172,59 @@ describe('Borçlar sayfası', () => {
     expect(savedDebts).toBeDefined()
     expect(savedDebts!.some((d) => d.id === 'db_1')).toBe(false)
   })
+
+  it('param verilince sadece o kişinin kayıtlarını gösterir', () => {
+    const ds: Dataset = {
+      ...fixture,
+      people: [
+        { kod: 'BORA', ad: 'Bora', haneUyesi: false, aktif: true },
+        { kod: 'ALPER', ad: 'Alper', haneUyesi: false, aktif: true },
+      ],
+      debts: [
+        { id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 2000, paraBirimi: 'TRY', aciklama: 'Bora borcu', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z' },
+        { id: 'db_2', tarih: '2026-09-02', yon: 'ALDIM', kisi: 'ALPER', tutar: 500, paraBirimi: 'TRY', aciklama: 'Alper borcu', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-02T00:00:00Z' },
+      ],
+    }
+    const { container } = render(Borclar, { dataset: ds, param: 'BORA' })
+    expect(container.textContent).toContain('Bora borcu')
+    expect(container.textContent).not.toContain('Alper borcu')
+  })
+
+  it('filtre rozetinden tüm kişilere dönülür', async () => {
+    const ds: Dataset = {
+      ...fixture,
+      people: [
+        { kod: 'BORA', ad: 'Bora', haneUyesi: false, aktif: true },
+        { kod: 'ALPER', ad: 'Alper', haneUyesi: false, aktif: true },
+      ],
+      debts: [
+        { id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 2000, paraBirimi: 'TRY', aciklama: 'Bora borcu', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z' },
+        { id: 'db_2', tarih: '2026-09-02', yon: 'ALDIM', kisi: 'ALPER', tutar: 500, paraBirimi: 'TRY', aciklama: 'Alper borcu', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-02T00:00:00Z' },
+      ],
+    }
+    const { container } = render(Borclar, { dataset: ds, param: 'BORA' })
+    const rozet = container.querySelector('[data-testid="kisi-rozeti"]') as HTMLButtonElement
+    expect(rozet).toBeTruthy()
+    rozet.click()
+    await Promise.resolve()
+    expect(container.textContent).toContain('Alper borcu')
+  })
+
+  it('param yoksa herkesi gösterir', () => {
+    const ds: Dataset = {
+      ...fixture,
+      people: [
+        { kod: 'BORA', ad: 'Bora', haneUyesi: false, aktif: true },
+        { kod: 'ALPER', ad: 'Alper', haneUyesi: false, aktif: true },
+      ],
+      debts: [
+        { id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 2000, paraBirimi: 'TRY', aciklama: 'Bora borcu', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z' },
+        { id: 'db_2', tarih: '2026-09-02', yon: 'ALDIM', kisi: 'ALPER', tutar: 500, paraBirimi: 'TRY', aciklama: 'Alper borcu', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-02T00:00:00Z' },
+      ],
+    }
+    const { container } = render(Borclar, { dataset: ds })
+    expect(container.textContent).toContain('Bora borcu')
+    expect(container.textContent).toContain('Alper borcu')
+  })
 })
+

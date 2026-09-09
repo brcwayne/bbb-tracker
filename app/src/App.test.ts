@@ -52,13 +52,13 @@ describe('App — iki cilt ve kabuk', () => {
     window.location.hash = '#/'
     const { getByRole, queryByRole, getAllByRole } = render(App)
     const switchLink = getByRole('link', { name: /Hesaplar defterine geç/i })
-    expect(switchLink).toHaveAttribute('href', '#/h/ozet')
+    expect(switchLink).toHaveAttribute('href', '#/h/hesaplar')
     expect(getByRole('group', { name: 'Para birimi' })).toBeInTheDocument()
     expect(getByRole('combobox', { name: 'Dönem' })).toBeInTheDocument()
   })
 
-  it('hesaplar cildinde switch Yatırım gösterir, 4 sekme görünür, para birimi ve dönem gizlidir', () => {
-    window.location.hash = '#/h/ozet'
+  it('hesaplar cildinde switch Yatırım gösterir, 5 sekme görünür, para birimi ve dönem gizlidir', () => {
+    window.location.hash = '#/h/hesaplar'
     const { getByRole, queryByRole } = render(App)
     const switchLink = getByRole('link', { name: /Yatırım defterine geç/i })
     expect(switchLink).toHaveAttribute('href', '#/')

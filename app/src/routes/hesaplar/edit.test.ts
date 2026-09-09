@@ -66,7 +66,7 @@ describe('Kişisel Defter düzenleme, çakışma ve çevrimdışı kontrolleri',
     }
 
     for (const Page of [Harcamalar, Taksitler, Borclar]) {
-      const { container } = render(Page, {
+      const { container } = render(Page as any, {
         props: { dataset: fixture, source: localSource, store, today: '2026-09-08' },
       })
 
