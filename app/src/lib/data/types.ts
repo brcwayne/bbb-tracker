@@ -108,12 +108,15 @@ export type FxRates = Record<string, number>
 export interface PersonalTx {
   id: string
   tarih: string
-  tur: 'GIDER' | 'GELIR'
+  tur: 'GIDER' | 'GELIR' | 'TRANSFER' | 'DUZELTME'
   tutar: number
   paraBirimi: 'TRY' | 'USD'
   kategori: string
   aciklama: string
   hesap: string
+  /** The receiving account on a TRANSFER. Written by the Telegram bot since
+   *  the transfer flow shipped; declared here for the first time. */
+  karsiHesap?: string
   sahip: string
   taksitPlaniId: string | null
   taksitNo: number | null
@@ -147,7 +150,14 @@ export interface PersonalAccount {
   paraBirimi: string
   sahip: string
   aktif: boolean
+  /** The Telegram bot's NLP account matcher reads this. It is already in
+   *  `personal_accounts.json`; any write of an account row must preserve it. */
+  takmaAdlar?: string[]
+  /** One emoji, rendered before the name. */
+  simge?: string
+  /** Statement cut day, 1–31. */
   hesapKesim?: number
+  /** Payment due day, 1–31. */
   sonOdeme?: number
 }
 

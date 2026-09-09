@@ -50,6 +50,11 @@ export const fixture: Dataset = {
     { id: 'px_p4', tarih: '2026-10-07', tur: 'GIDER', tutar: 2000, paraBirimi: 'TRY', kategori: 'ev', aciklama: 'Beyaz eşya 4/6', hesap: 'NAKIT', sahip: 'ENIS', taksitPlaniId: 'pp_1', taksitNo: 4, taksitToplam: 6, not: '', kaynak: 'telegram', olusturulma: '2026-07-07T12:00:00Z' },
     { id: 'px_p5', tarih: '2026-11-07', tur: 'GIDER', tutar: 2000, paraBirimi: 'TRY', kategori: 'ev', aciklama: 'Beyaz eşya 5/6', hesap: 'NAKIT', sahip: 'ENIS', taksitPlaniId: 'pp_1', taksitNo: 5, taksitToplam: 6, not: '', kaynak: 'telegram', olusturulma: '2026-07-07T12:00:00Z' },
     { id: 'px_p6', tarih: '2026-12-07', tur: 'GIDER', tutar: 2000, paraBirimi: 'TRY', kategori: 'ev', aciklama: 'Beyaz eşya 6/6', hesap: 'NAKIT', sahip: 'ENIS', taksitPlaniId: 'pp_1', taksitNo: 6, taksitToplam: 6, not: '', kaynak: 'telegram', olusturulma: '2026-07-07T12:00:00Z' },
+    { id: 'px_t1', tarih: '2026-09-03', tur: 'TRANSFER', tutar: 5000, paraBirimi: 'TRY', kategori: 'transfer', aciklama: 'Nakit → Garanti', hesap: 'NAKIT', karsiHesap: 'GARANTI-BANKA', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'telegram', olusturulma: '2026-09-03T10:00:00Z' },
+    { id: 'px_d1', tarih: '2026-09-06', tur: 'DUZELTME', tutar: -250, paraBirimi: 'TRY', kategori: 'duzeltme', aciklama: 'Bakiye düzeltmesi', hesap: 'NAKIT', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '2026-09-06T10:00:00Z' },
+    { id: 'px_k1', tarih: '2026-09-03', tur: 'GIDER', tutar: 1800, paraBirimi: 'TRY', kategori: 'teknoloji', aciklama: 'Kulaklık', hesap: 'GARANTI-DIJI', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'telegram', olusturulma: '2026-09-03T14:00:00Z' },
+    { id: 'px_k2', tarih: '2026-09-20', tur: 'GIDER', tutar: 900, paraBirimi: 'TRY', kategori: 'giyim', aciklama: 'Mont', hesap: 'GARANTI-DIJI', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'telegram', olusturulma: '2026-09-08T14:00:00Z' },
+    { id: 'px_k3', tarih: '2026-09-08', tur: 'TRANSFER', tutar: 500, paraBirimi: 'TRY', kategori: 'transfer', aciklama: 'Kart ödemesi', hesap: 'GARANTI-BANKA', karsiHesap: 'GARANTI-DIJI', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '2026-09-08T15:00:00Z' },
   ],
   paymentPlans: [
     {
@@ -70,7 +75,11 @@ export const fixture: Dataset = {
     },
   ],
   personalAccounts: [
-    { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true },
+    { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true, simge: '💵', takmaAdlar: ['nakit', 'elden'] },
+    { kod: 'GARANTI-BANKA', ad: 'Garanti Bankası', tur: 'BANKA', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true, simge: '🍀', takmaAdlar: ['garanti'] },
+    { kod: 'GARANTI-DIJI', ad: 'Garanti Diji', tur: 'KREDI_KARTI', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true, simge: '🍀', hesapKesim: 15, sonOdeme: 25, takmaAdlar: ['diji'] },
+    { kod: 'SAGLAM-KART', ad: 'Sağlam Kart', tur: 'KREDI_KARTI', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true, takmaAdlar: ['saglam'] },
+    { kod: 'ESKI-HESAP', ad: 'Kapanmış Hesap', tur: 'BANKA', paraBirimi: 'TRY', sahip: 'ENIS', aktif: false },
   ],
   categories: [
     { kod: 'market', ad: 'Market', tur: 'GIDER', aktif: true },

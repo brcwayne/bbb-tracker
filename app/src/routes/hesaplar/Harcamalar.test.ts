@@ -92,5 +92,21 @@ describe('Harcamalar sayfası', () => {
     expect(editButtons[0].disabled).toBe(true)
     expect(container.textContent).toMatch(/drive bağlantısı gerekiyor/i)
   })
+
+  it('transfer ve düzeltme satırlarını harcama listesine koymaz', () => {
+    const ds: Dataset = {
+      ...fixture,
+      personalTx: [
+        { id: 'px_g', tarih: '2026-09-02', tur: 'GIDER', tutar: 100, paraBirimi: 'TRY', kategori: 'market', aciklama: 'Market', hesap: 'NAKIT', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'telegram', olusturulma: '2026-09-02T10:00:00Z' },
+        { id: 'px_t', tarih: '2026-09-03', tur: 'TRANSFER', tutar: 5000, paraBirimi: 'TRY', kategori: 'transfer', aciklama: 'Bankaya aktarım', hesap: 'NAKIT', karsiHesap: 'GARANTI-BANKA', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'telegram', olusturulma: '2026-09-03T10:00:00Z' },
+        { id: 'px_d', tarih: '2026-09-04', tur: 'DUZELTME', tutar: -250, paraBirimi: 'TRY', kategori: 'duzeltme', aciklama: 'Bakiye düzeltmesi', hesap: 'NAKIT', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '2026-09-04T10:00:00Z' },
+      ],
+    }
+    const { container } = render(Harcamalar, { dataset: ds })
+    expect(container.textContent).toContain('Market')
+    expect(container.textContent).not.toContain('Bankaya aktarım')
+    expect(container.textContent).not.toContain('Bakiye düzeltmesi')
+    expect(container.textContent).toContain('1 kayıt')
+  })
 })
 

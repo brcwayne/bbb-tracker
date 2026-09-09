@@ -137,3 +137,24 @@ describe('personal ledger derivations: instalments and debts', () => {
     expect(debtBalances([])).toEqual([])
   })
 })
+
+describe('yeni tur değerleri harcama figürlerine sızmaz', () => {
+  const rows = [
+    tx({ id: 'g', tarih: '2026-09-02', tutar: 100 }),
+    tx({ id: 't', tarih: '2026-09-03', tur: 'TRANSFER', tutar: 5000, hesap: 'NAKIT', karsiHesap: 'GARANTI-BANKA', kategori: 'transfer' }),
+    tx({ id: 'd', tarih: '2026-09-04', tur: 'DUZELTME', tutar: -250, kategori: 'duzeltme' }),
+  ]
+
+  it('monthlyTotals sadece GIDER toplar', () => {
+    expect(monthlyTotals(rows, TODAY)).toEqual([{ ay: '2026-09', para: 'TRY', toplam: 100 }])
+  })
+
+  it('monthSummary transfer ve düzeltmeyi saymaz', () => {
+    expect(monthSummary(rows, 2026, 9, TODAY)).toEqual({ gider: { TRY: 100 }, gelir: {}, adet: 1 })
+  })
+
+  it('categoryBreakdown transfer ve düzeltme kategorisi üretmez', () => {
+    expect(categoryBreakdown(rows, 2026, 9, TODAY, 'TRY')).toEqual([{ kod: 'market', toplam: 100 }])
+  })
+})
+

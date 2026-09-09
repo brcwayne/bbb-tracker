@@ -6,6 +6,7 @@
   import { appendRecord, updateRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd } from '../../lib/format'
+  import { newPersonalId } from '../../lib/data/ids'
 
   function todayIso() {
     const d = new Date()
@@ -28,7 +29,7 @@
     editing?: PersonalTx
   } = $props()
 
-  let tur = $state<'GIDER' | 'GELIR'>(editing?.tur ?? 'GIDER')
+  let tur = $state<'GIDER' | 'GELIR'>(editing?.tur === 'GELIR' ? 'GELIR' : 'GIDER')
   let tarih = $state(editing?.tarih ?? todayIso())
   let tutar = $state(editing ? String(editing.tutar) : '')
   let paraBirimi = $state<'TRY' | 'USD'>(editing?.paraBirimi ?? 'TRY')
@@ -125,10 +126,8 @@
           allowKaynak: ['telegram', 'manual'],
         })
       } else {
-        const rand = crypto.getRandomValues(new Uint8Array(6))
-        const id = 'px_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
         const newRecord: PersonalTx = {
-          id,
+          id: newPersonalId(),
           tarih,
           tur,
           tutar: Number(tutar),
