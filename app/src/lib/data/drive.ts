@@ -209,7 +209,7 @@ export class DriveSource implements DataSource {
     const q = `'${folderId}' in parents and trashed = false`
     const listRes = await fetch(
       'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name,md5Checksum)',
-      { headers },
+      { headers, cache: 'no-store' },
     )
     if (listRes.status === 401 || listRes.status === 403) {
       this.setToken(null)
@@ -226,7 +226,10 @@ export class DriveSource implements DataSource {
       NAMES.map(async (n) => {
         const file = files.find((f) => f.name === `${n}.json`)
         if (!file) throw new Error(`Drive: ${n}.json bulunamadı`)
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers })
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+          headers,
+          cache: 'no-store',
+        })
         if (res.status === 401 || res.status === 403) {
           this.setToken(null)
           throw new NeedsAuthError('oturum süresi doldu')
@@ -240,7 +243,10 @@ export class DriveSource implements DataSource {
     if (atFile) {
       // assetTransfers.json is optional (Ruling P2-4): a transient read failure on this one
       // file shouldn't break the whole dataset load, so fall back to [] rather than throwing.
-      const atRes = await fetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, { headers })
+      const atRes = await fetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, {
+        headers,
+        cache: 'no-store',
+      })
       dataset.assetTransfers = atRes.ok ? await atRes.json() : []
     } else {
       dataset.assetTransfers = []
@@ -255,7 +261,10 @@ export class DriveSource implements DataSource {
           return
         }
         try {
-          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, { headers })
+          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+            headers,
+            cache: 'no-store',
+          })
           if (res.status === 401 || res.status === 403) {
             this.setToken(null)
             throw new NeedsAuthError('oturum süresi doldu')
