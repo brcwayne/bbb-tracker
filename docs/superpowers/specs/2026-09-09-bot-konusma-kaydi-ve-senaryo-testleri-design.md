@@ -12,7 +12,7 @@ Enis botu günlük kullanıyor ve çeşitli anlatım biçimlerini kendisi deneme
 
 Botta hâlihazırda `logging.basicConfig` ile bir `bot.log` var; bu serbest metin bir uygulama günlüğü, konuşmayı yeniden kurmaya elverişli değil. Test tarafında 450 test geçiyor (1.44 sn) ve `tests/test_debt_flow.py` içinde `FakeMessage` / `FakeUpdate` / `FakeContext` üçlüsüyle iyi bir sahte Telegram iskeleti var — ama bu üçlü **9 ayrı test dosyasında kopyalanmış** durumda, ve mevcut testler akışa ham cümleyle değil hazır taslakla giriyor. Yani "ham cümle → nihai kayıt" yolu bugün kapsanmıyor.
 
-Bu tasarımın çıktısı tek bir döngü: **Enis elle dener → hatalıyı işaretler → kayıt Drive'a düşer → ben okurum → işaretlenen konuşma test senaryosuna dönüşür.**
+Bu tasarımın çıktısı tek bir döngü: **Enis elle dener → hatalıyı işaretler → kayıt VM'de logs/ altına düşer → /kayit ile Telegram'dan .md belgesi olarak alınır → işaretlenen konuşma test senaryosuna dönüşür.**
 
 ---
 

@@ -4,7 +4,7 @@
 
 **Goal:** Telegram botuyla yapılan her konuşmayı yeniden kurulabilir biçimde kaydetmek, hatalı çıkarımların tek dokunuşla işaretlenebilmesini sağlamak, ve bu kaydın beslediği bir senaryo test sürecini kurmak.
 
-**Architecture:** Üç kanca (gelen güncelleme, sarmalanmış `Bot` nesnesi, `merge_parses`) tüm konuşmayı `logs/conv-<gün>.ndjson`'a satır satır yazar; kayıt yolu tamamen fail-safe'tir ve botu asla düşürmez. Loglar ayrı bir rclone push'uyla Drive'a çıkar. Faz B, mevcut sahte Telegram katmanını tek sürüme indirip üstüne bildirimsel bir senaryo motoru kurar; model çağıran anlama eval'leri ayrı bir ağaçta ve CI dışında durur.
+**Architecture:** Üç kanca (gelen güncelleme, sarmalanmış `Bot` nesnesi, `merge_parses`) tüm konuşmayı `logs/conv-<gün>.ndjson`'a satır satır yazar; kayıt yolu tamamen fail-safe'tir ve botu asla düşürmez. Kayıtlar `/kayit` komutu ile Telegram'dan .md belgesi olarak teslim edilir. Faz B, mevcut sahte Telegram katmanını tek sürüme indirip üstüne bildirimsel bir senaryo motoru kurar; model çağıran anlama eval'leri ayrı bir ağaçta ve CI dışında durur.
 
 **Tech Stack:** Python 3.14, python-telegram-bot ≥22, pytest 9.1.1 (`asyncio_mode=auto`), rclone, systemd. Yeni bağımlılık yok — eval külliyatı için `PyYAML` gerekiyorsa `requirements.txt`'e eklenir, başka hiçbir şey.
 
@@ -869,7 +869,7 @@ def test_isaretli_filtresi_sadece_isaretlileri_verir(tmp_path, monkeypatch):
 
 `gun(gun, sadece_isaretli=False, conv=None) -> str`: NDJSON'ı okur, `conv`'a göre gruplar, her grup için markdown üretir — başlık satırında konuşma id'si, zamanı ve işaretliyse `⚠️`; gövdede zaman damgalı akış; `cikarim` bloğu ``` içinde; `yazim` sonda kalın.
 
-`python -m src.obs.render <gun> [--isaretli] [--conv X] [--yaz]` — `--yaz` çıktıyı `logs/render/<gun>.md`'ye koyar (Drive'a gider, ben oradan okurum).
+`python -m src.obs.render <gun> [--isaretli] [--conv X] [--yaz]` — `--yaz` çıktıyı `logs/render/<gun>.md`'ye koyar (transkript Telegram'dan `/kayit` ile .md belgesi olarak da alınabilir).
 
 - [ ] **Adım 4: Geçtiğini gör.**
 
