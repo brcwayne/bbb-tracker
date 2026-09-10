@@ -22,7 +22,7 @@ Aksi belirtilmedikçe 2026-09-09'da Enis tarafından verildi.
 
 | # | Karar | Gerekçe |
 |---|---|---|
-| K1 | **Kayıtlar ayrı bir `logs/` klasörüne yazılır ve kendi rclone push'uyla Drive'a çıkar.** | Enis'in seçimi. Defter JSON'larıyla karışmaz, istenirse tümü tek hamlede silinir, ve Drive'a çıktığı için ben SSH'sız okuyabilirim — asıl amaç buydu. |
+| K1 | **Kayıtlar ayrı bir `logs/` klasörüne yazılır; Drive'a push EDİLMEZ, `/kayit` komutu ile Telegram'dan .md belgesi olarak alınır.** *(2026-09-10 güncellendi)* | **İlk karar:** rclone ile Drive'a çıkarma seçilmişti.<br>**Değişiklik gerekçesi:** Üretimde `gdrive:` rclone uzağının bir servis hesabı kullandığı ve Google Drive servis hesaplarının depolama kotası (storage quota) olmadığı görüldü. Yeni `logs/` klasörü açıp içine dosya yazmak `Error 403: Service Accounts do not have storage quota` hatasıyla tüm senkron döngüsünü kilitledi. Logların bu uzakla Drive'a çıkması imkânsız olduğundan push iptal edildi; transkript teslimi Telegram üzerinden `/kayit` komutuyla (4096 karakter sınırına takılmamak için `reply_document` ile `.md` belgesi) sağlandı. |
 | K2 | **İşaretleme: iptal ekranında gerekçe + `/hata` komutu.** | Enis'in seçimi. Her mesaja düğme koymak ekranı kalabalıklaştırır; hata en sık iptal anında belli olur, o an zaten akış bitiyor, bir dokunuş maliyeti yok. |
 | K3 | **Modelin ham çıktısı da kaydedilir** — istem özeti, ham yanıt, hangi motor, kaç ms. | Enis'in seçimi. "Bu çıkarım neden yanlış oldu" sorusunun cevabı neredeyse her zaman burada. |
 | K4 | **Saklama sınırsız; silme elle yapılır.** | Enis'in seçimi. Bu yüzden dosyalar **günlük** bölünür (`conv-2026-09-09.ndjson`) — tek dosya şişmez, bir günü silmek bir `rm`. |
@@ -38,8 +38,8 @@ Aksi belirtilmedikçe 2026-09-09'da Enis tarafından verildi.
 - **Bot davranışı bu işte değişmez.** Tek istisna K2'nin getirdiği iptal gerekçesi sorusu ve yeni `/hata` komutu. Çıkarım mantığına, kayıt biçimine, mevcut akışlara dokunulmaz.
 - **Kayıt asenkron yolu yavaşlatmaz.** Satır ekleme (`append`) tek süreçli bot için yeterli; kilit yok, `jsonstore`'un atomik yazma makinesi kullanılmaz — o dosyanın tamamını yeniden yazanlar içindir.
 - **Gizli değer kaydedilmez.** Bot token'ı, API anahtarları, `.env` içeriği hiçbir olayda yer almaz.
-- **`logs/` Drive'dan geri **çekilmez**.** Mevcut `pull` komutu `gdrive:` kökünü `data/` içine kopyalıyor; dışlanmazsa loglar `data/logs/` olarak geri iner. Bu, tasarımın en kolay gözden kaçan gerçek dünya ayrıntısı (§4.2).
-- **`logs/` systemd `.path` biriminde izlenmez.** İzlenirse her Telegram mesajı bir rclone koşusu tetikler. Loglar bir sonraki zamanlanmış senkronla gider.
+- **`logs/` Drive'a itilmez ve geri çekilmez.** Drive push'u servis hesabı kota kısıtı nedeniyle kaldırılmıştır (K1). Mevcut `pull` komutundaki `--exclude logs/**` ise ucuz sigorta olarak korunur (Drive'a elle bir logs klasörü açılırsa geri inmemesi için).
+- **`logs/` systemd `.path` biriminde izlenmez.** İzlenirse her Telegram mesajı gereksiz senkron tetikler.
 - Mevcut 450 test yeşil kalır; `pytest` (9.1.1, `asyncio_mode=auto`) tek komutla koşar.
 - Kullanıcıya görünen metinler Türkçe, mevcut botun diline uygun.
 
@@ -128,7 +128,7 @@ python -m src.obs.render 2026-09-09 --isaretli   # sadece işaretlenenler
 python -m src.obs.render --conv c_2026...        # tek konuşma
 ```
 
-Markdown üretir: her konuşma bir başlık, altında zaman damgalı akış, çıkarım bloğu daraltılmış kod bloğunda, yazılan satır sonda. `--yaz` bayrağıyla `logs/render/<gun>.md` dosyasına yazar; o dosya da Drive'a gider, böylece ben NDJSON ayrıştırmadan doğrudan okuyabilirim.
+Markdown üretir: her konuşma bir başlık, altında zaman damgalı akış, çıkarım bloğu daraltılmış kod bloğunda, yazılan satır sonda. İstenen günün transkripti Telegram üzerinden `/kayit` komutu ile `.md` belgesi olarak doğrudan sohbete gönderilir; CLI'da `--yaz` bayrağıyla `logs/render/<gun>.md` dosyasına yerel olarak da yazılabilir.
 
 ---
 
@@ -148,10 +148,8 @@ Markdown üretir: her konuşma bir başlık, altında zaman damgalı akış, ç�
 
 `src/sync/once.py` içindeki `_run_rclone`:
 
-- **push**: mevcut `data/ → gdrive:` çağrısından sonra ikinci bir çağrı — `rclone copy /home/ubuntu/BBB/logs/ gdrive:logs/`.
-- **pull**: mevcut `gdrive: → data/` çağrısına `--exclude logs/**` eklenir.
-
-İkinci madde ihmal edilirse loglar bir sonraki çekmede `data/logs/` olarak geri iner ve her döngüde büyüyerek kopyalanır. Mevcut kodda zaten `--exclude backups/**` var; aynı kalıp izlenir.
+- **push**: **`push-logs` çağrısı tamamen kaldırıldı.** İlk tasarımda `rclone copy ... logs/ gdrive:logs/` eklenmişti; ancak servis hesaplarının Drive kotası olmadığı için `Error 403: Service Accounts do not have storage quota` hatası alınıp tüm senkronu kilitlediği görüldü. Artık push yalnızca defter verisini (`data/`) Drive'a iletir; loglara kesinlikle dokunmaz.
+- **pull**: mevcut `gdrive: → data/` çağrısındaki `--exclude logs/**` filtresi **korunur**. Bu ucuz bir sigortadır; Drive'a ileride elle bir `logs/` klasörü konursa yerel `data/logs/` altına inmesini engeller.
 
 `.path` birimi **değiştirilmez** (§2).
 
