@@ -150,6 +150,100 @@ export function holdingsByPortfolio(
     .sort((a, b) => b.totalCostUsd - a.totalCostUsd)
 }
 
+export function derivePositionsByBroker(
+  txns: Transaction[],
+  transfers: AssetTransfer[],
+): Map<string, OpenPosition[]> {
+  const EPS = 1e-9
+  type Event =
+    | { kind: 'txn'; tarih: string; id: string; hesap: string; sym: string; yon: 'AL' | 'SAT'; lot: number; net_usd: number }
+    | { kind: 'transfer'; tarih: string; id: string; kaynakHesap: string; hedefHesap: string; sym: string; lot: number }
+
+  const events: Event[] = [
+    ...txns.map((t) => ({
+      kind: 'txn' as const,
+      tarih: t.tarih,
+      id: t.id,
+      hesap: t.hesap,
+      sym: t.enstruman,
+      yon: t.yon,
+      lot: t.lot,
+      net_usd: t.net_usd,
+    })),
+    ...transfers.map((tr) => ({
+      kind: 'transfer' as const,
+      tarih: tr.tarih,
+      id: tr.id,
+      kaynakHesap: tr.kaynakHesap,
+      hedefHesap: tr.hedefHesap,
+      sym: tr.enstruman,
+      lot: tr.lot,
+    })),
+  ]
+
+  events.sort((a, b) => {
+    if (a.tarih !== b.tarih) return a.tarih < b.tarih ? -1 : 1
+    if (a.kind !== b.kind) return a.kind === 'transfer' ? 1 : -1
+    return a.id < b.id ? -1 : 1
+  })
+
+  const store = new Map<string, Map<string, OpenPosition>>()
+  const getPos = (hesap: string, sym: string): OpenPosition => {
+    let brokerMap = store.get(hesap)
+    if (!brokerMap) {
+      brokerMap = new Map()
+      store.set(hesap, brokerMap)
+    }
+    let pos = brokerMap.get(sym)
+    if (!pos) {
+      pos = { kod: sym, lot: 0, ortMaliyetUsd: 0, toplamMaliyetUsd: 0 }
+      brokerMap.set(sym, pos)
+    }
+    return pos
+  }
+
+  for (const e of events) {
+    if (e.kind === 'txn') {
+      const pos = getPos(e.hesap, e.sym)
+      if (e.yon === 'AL') {
+        pos.toplamMaliyetUsd += e.net_usd
+        pos.lot += e.lot
+        pos.ortMaliyetUsd = pos.lot > EPS ? pos.toplamMaliyetUsd / pos.lot : 0
+      } else {
+        const sell = Math.min(e.lot, pos.lot)
+        if (sell > EPS) {
+          const ort = pos.ortMaliyetUsd
+          pos.lot -= sell
+          pos.toplamMaliyetUsd -= ort * sell
+          if (pos.lot <= EPS) {
+            store.get(e.hesap)?.delete(e.sym)
+          }
+        }
+      }
+    } else {
+      const src = getPos(e.kaynakHesap, e.sym)
+      const dst = getPos(e.hedefHesap, e.sym)
+      const moveLot = Math.min(e.lot, src.lot > EPS ? src.lot : e.lot)
+      const moveCost = src.lot > EPS ? src.ortMaliyetUsd * moveLot : 0
+      if (src.lot > EPS) {
+        src.lot -= moveLot
+        src.toplamMaliyetUsd -= moveCost
+        if (src.lot <= EPS) store.get(e.kaynakHesap)?.delete(e.sym)
+      }
+      dst.lot += moveLot
+      dst.toplamMaliyetUsd += moveCost
+      dst.ortMaliyetUsd = dst.lot > EPS ? dst.toplamMaliyetUsd / dst.lot : 0
+    }
+  }
+
+  const result = new Map<string, OpenPosition[]>()
+  for (const [hesap, map] of store) {
+    const list = [...map.values()].filter((p) => p.lot > EPS).sort((a, b) => a.kod.localeCompare(b.kod))
+    result.set(hesap, list)
+  }
+  return result
+}
+
 export function holdingsByBroker(
   open: OpenPosition[],
   txns: Transaction[],
@@ -158,13 +252,8 @@ export function holdingsByBroker(
   transfers: AssetTransfer[],
   p: PriceLookup,
 ): HoldingGroup[] {
-  const byKod = latestFieldByKod(attributionEvents(txns, transfers), 'hesap')
-  const byBrokerKod = new Map<string, OpenPosition[]>()
-  for (const pos of open) {
-    const key = byKod.get(pos.kod) ?? '?'
-    ;(byBrokerKod.get(key) ?? byBrokerKod.set(key, []).get(key)!).push(pos)
-  }
+  const byBroker = derivePositionsByBroker(txns, transfers)
   return brokers.map((b) =>
-    summarise(b.ad, rowsFor(byBrokerKod.get(b.kod) ?? [], instruments, p), b.sahip),
+    summarise(b.ad, rowsFor(byBroker.get(b.kod) ?? [], instruments, p), b.sahip),
   )
 }
