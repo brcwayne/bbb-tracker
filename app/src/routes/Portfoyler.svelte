@@ -1,16 +1,56 @@
 <script lang="ts">
   import type { Dataset } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
-  import { holdingsByPortfolio, type HoldingGroup, type HoldingRow } from '../lib/data/breakdowns'
+  import {
+    holdingsByPortfolio,
+    derivePositionsByBroker,
+    type HoldingGroup,
+    type HoldingRow,
+  } from '../lib/data/breakdowns'
+  import type { OpenPosition } from '../lib/data/derive'
   import { prices } from '../lib/prices.svelte'
   import { money } from '../lib/settings.svelte'
-  import { pct, lot, DASH } from '../lib/format'
+  import { pct, lot, dateShort, DASH } from '../lib/format'
   import Donut from '../lib/charts/Donut.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
 
   let { dataset, view }: { dataset?: Dataset; view?: DerivedBundle } = $props()
+
+  const positionsByBroker = $derived.by(() => {
+    if (!dataset) return new Map<string, OpenPosition[]>()
+    return derivePositionsByBroker(dataset.transactions, dataset.assetTransfers ?? [])
+  })
+
+  function getBrokerBreakdownFor(kod: string) {
+    if (!dataset) return []
+    const res: { kod: string; hesap: string; ad: string; lot: number; pay: number; ortMaliyetUsd: number }[] = []
+    let totalSymbolLot = 0
+
+    for (const [hesap, posList] of positionsByBroker) {
+      const pos = posList.find((p) => p.kod === kod)
+      if (pos && pos.lot > 1e-9) {
+        const broker = dataset.brokers?.find((b) => b.kod === hesap)
+        res.push({
+          kod,
+          hesap,
+          ad: broker?.ad ?? hesap,
+          lot: pos.lot,
+          pay: 0,
+          ortMaliyetUsd: pos.ortMaliyetUsd,
+        })
+        totalSymbolLot += pos.lot
+      }
+    }
+
+    if (totalSymbolLot > 0) {
+      for (const item of res) {
+        item.pay = item.lot / totalSymbolLot
+      }
+    }
+    return res.sort((a, b) => b.lot - a.lot)
+  }
 
   const groups = $derived.by<HoldingGroup[]>(() => {
     if (!dataset || !view) return []
@@ -112,6 +152,78 @@
   </div>
 {/snippet}
 
+{#snippet rowDetail(row: { kod: string; lot: number })}
+  {@const brokers = getBrokerBreakdownFor(row.kod)}
+  {@const txns = (dataset?.transactions ?? [])
+    .filter((t) => t.enstruman === row.kod)
+    .sort((a, b) =>
+      a.tarih < b.tarih ? 1 : a.tarih > b.tarih ? -1 : a.id < b.id ? 1 : a.id > b.id ? -1 : 0,
+    )}
+  <div class="rowdetail">
+    <div class="bd-section">
+      <div class="bd-title">📍 Kurum Dağılımı ({row.kod})</div>
+      {#if brokers.length}
+        <div class="bd-grid">
+          {#each brokers as b}
+            <div class="bd-card">
+              <div class="bd-broker-title">
+                <span class="bd-name">{b.ad}</span>
+                {#if b.hesap !== b.ad}<span class="bd-code">({b.hesap})</span>{/if}
+              </div>
+              <div class="bd-lot-info">
+                <span class="bd-lot">{lot(b.lot)} Lot</span>
+                <span class="bd-pct">%{ (b.pay * 100).toFixed(1) }</span>
+              </div>
+              {#if b.ortMaliyetUsd > 0}
+                <div class="bd-cost">Ort: {money(b.ortMaliyetUsd)}</div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="muted">Açık kurum pozisyonu bulunamadı.</p>
+      {/if}
+    </div>
+
+    {#if txns.length}
+      <div class="rd-sum">
+        <span>İşlem Geçmişi ({txns.length} işlem):</span>
+      </div>
+      <div class="subtable-wrap">
+        <table class="subtable">
+          <thead>
+            <tr>
+              <th>Tarih</th>
+              <th>Yön</th>
+              <th class="r">Lot</th>
+              <th class="r">Fiyat</th>
+              <th>Kurum</th>
+              <th>Portföy</th>
+              <th>Not</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each txns.slice(0, 10) as t}
+              <tr>
+                <td>{dateShort(t.tarih)}</td>
+                <td class="yon" class:al={t.yon === 'AL'} class:sat={t.yon === 'SAT'}>{t.yon}</td>
+                <td class="r num">{lot(t.lot)}</td>
+                <td class="r num">{t.girisParaBirimi === 'USD' ? money(t.fiyat_usd) : `${t.fiyat_tl ? t.fiyat_tl.toFixed(2) : t.fiyat_usd} TL`}</td>
+                <td><strong class="hsp-tag">{t.hesap}</strong></td>
+                <td>{t.portfoy}</td>
+                <td class="note">{t.not || DASH}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      {#if txns.length > 10}
+        <p class="more-txns">ve {txns.length - 10} işlem daha...</p>
+      {/if}
+    {/if}
+  </div>
+{/snippet}
+
 {#if dataset && view}
   <section class="portfoyler">
     <SectionHeader title="Portföyler" />
@@ -146,7 +258,13 @@
           title={g.key}
           note={`${money(g.totalCostUsd)} maliyet · ${g.totalValueUsd == null ? DASH : money(g.totalValueUsd)} değer · ${g.unrealUsd == null ? DASH : money(g.unrealUsd, { sign: true })}`}
         />
-        <DataTable columns={cols} rows={rowsFor(g)} initialSort={{ key: 'toplamMaliyetUsd', dir: 'desc' }} />
+        <DataTable
+          columns={cols}
+          rows={rowsFor(g)}
+          initialSort={{ key: 'toplamMaliyetUsd', dir: 'desc' }}
+          detail={rowDetail}
+          rowKey={(r) => `${g.key}-${r.kod}`}
+        />
       </div>
     {/each}
   </section>
@@ -214,5 +332,129 @@
     border-radius: 6px;
     padding: 0.25rem 1rem 1rem;
     margin-bottom: 1.25rem;
+  }
+  .rowdetail {
+    padding: 0.75rem 1rem 1rem;
+    background: var(--surface);
+    border-top: 1px solid var(--hairline);
+  }
+  .bd-section {
+    margin-bottom: 0.85rem;
+  }
+  .bd-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: 0.02em;
+    margin-bottom: 0.45rem;
+  }
+  .bd-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .bd-card {
+    background: var(--surface-raised, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 0.45rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 140px;
+  }
+  .bd-broker-title {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.82rem;
+  }
+  .bd-name {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .bd-code {
+    color: var(--ink-soft);
+    font-size: 0.85em;
+  }
+  .bd-lot-info {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  .bd-lot {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--gold, #f59e0b);
+  }
+  .bd-pct {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+  .bd-cost {
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+  }
+  .rd-sum {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-bottom: 0.4rem;
+  }
+  .subtable-wrap {
+    overflow-x: auto;
+  }
+  .subtable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  .subtable th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--ink-soft);
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .subtable td {
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--hairline);
+    color: var(--ink);
+  }
+  .subtable .r {
+    text-align: right;
+  }
+  .subtable .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+  .subtable .yon.al {
+    color: var(--gain, #10b981);
+    font-weight: 600;
+  }
+  .subtable .yon.sat {
+    color: var(--loss, #ef4444);
+    font-weight: 600;
+  }
+  .hsp-tag {
+    color: var(--ink);
+  }
+  .subtable .note {
+    color: var(--ink-soft);
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .more-txns {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    margin: 0.35rem 0 0;
+    font-style: italic;
+  }
+  .muted {
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    margin: 0;
   }
 </style>

@@ -70,4 +70,19 @@ describe('Portfoyler', () => {
     const { getByText } = render(Portfoyler, { props: {} })
     expect(getByText(/Portföyler/i)).toBeInTheDocument()
   })
+
+  it('toggling a row open reveals the broker breakdown detail', async () => {
+    const d = await v()
+    const { getByText, queryByText } = render(Portfoyler, {
+      props: { dataset: d.dataset, view: d.derived },
+    })
+    expect(queryByText(/Kurum Dağılımı/i)).not.toBeInTheDocument()
+
+    // Click on THYAO row
+    const thyaoCell = getByText('THYAO')
+    await fireEvent.click(thyaoCell)
+
+    expect(getByText(/Kurum Dağılımı/i)).toBeInTheDocument()
+    expect(getByText(/Garanti Yatırım/i)).toBeInTheDocument()
+  })
 })
