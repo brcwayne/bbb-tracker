@@ -36,7 +36,11 @@
     const lastSnap = snaps.at(-1)
     const equityUsd = lastSnap ? lastSnap.toplamOzkaynak_usd : NaN
     const realizedUsd = d.positions.realizedTotalUsd
-    const nakitUsd = Object.values(ds.meta.nakitHesapBazli).reduce((s, v) => s + v, 0)
+    // Live total: meta.nakitHesapBazli is the migration-day baseline only —
+    // summing it directly (as this used to) freezes "Nakit" at that date.
+    // d.cashByHesap starts from that same baseline and adds every non-
+    // migration transaction/cashflow since, so its sum stays current.
+    const nakitUsd = Object.values(d.cashByHesap).reduce((s, v) => s + v, 0)
     const ytd = d.periods.find((p) => p.period === 'YTD')
     const ytdUsd = ytd ? ytd.netKzUsd : NaN
     const periodLabel = PERIODS.find((p) => p.key === settings.period)?.label ?? ''
