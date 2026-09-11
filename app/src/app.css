@@ -17,6 +17,8 @@
   --loss: #e0736a;
   --gold: #c9a86a;
   --accent-defter: #6f9a94;
+  --cash-tl: #38bdf8;
+  --cash-usd: #4ade80;
   /* Table legibility: numeric columns sit a step below --ink so a screenful of
      figures doesn't glare; --row-hover is a barely-there warm-ink wash. */
   --ink-num: #d3cec5;
@@ -35,6 +37,8 @@
     --loss: #9a4f37;
     --gold: #a9863f;
     --accent-defter: #4a7671;
+    --cash-tl: #0284c7;
+    --cash-usd: #16a34a;
     --ink-num: #38332d;
     --row-hover: rgba(28, 26, 23, 0.045);
   }
@@ -50,6 +54,8 @@
   --loss: #9a4f37;
   --gold: #a9863f;
   --accent-defter: #4a7671;
+  --cash-tl: #0284c7;
+  --cash-usd: #16a34a;
   --ink-num: #38332d;
   --row-hover: rgba(28, 26, 23, 0.045);
 }
@@ -64,6 +70,8 @@
   --loss: #e0736a;
   --gold: #c9a86a;
   --accent-defter: #6f9a94;
+  --cash-tl: #38bdf8;
+  --cash-usd: #4ade80;
   --ink-num: #d3cec5;
   --row-hover: rgba(232, 228, 220, 0.05);
 }

@@ -65,13 +65,21 @@
   function requestEdit(t: Transaction) {
     deleteTarget = null
     message = null
-    editing = t
+    if (editing?.id === t.id) {
+      editing = null
+    } else {
+      editing = t
+    }
   }
   function requestDelete(t: Transaction) {
     editing = null
     message = null
     deleteError = null
-    deleteTarget = t
+    if (deleteTarget?.id === t.id) {
+      deleteTarget = null
+    } else {
+      deleteTarget = t
+    }
   }
   function editSaved() {
     editing = null
@@ -134,36 +142,6 @@
       </div>
     </div>
 
-    {#if editing}
-      {#if isImported(editing)}
-        <p class="warn">
-          Bu kayıt Excel'den geldi. Kaydedersen Excel'deki geçmiş veriden kalıcı olarak ayrışır —
-          yalnızca gerçek bir hatayı düzeltmek için kullan.
-        </p>
-      {/if}
-      {#key editing.id}
-        <div class="form-area">
-          <IslemFormu {dataset} {view} source={source!} store={store!} editing={editing} onSaved={editSaved} />
-        </div>
-      {/key}
-      <button class="cancel" onclick={() => (editing = null)}>Vazgeç</button>
-    {/if}
-
-    {#if deleteTarget}
-      <div class="confirm-delete">
-        <p>
-          <strong>{dateShort(deleteTarget.tarih)} · {deleteTarget.yon} {instName(deleteTarget.enstruman)} · {lot(deleteTarget.lot)} lot</strong>
-          kalıcı olarak silinsin mi? Bu işlem geri alınamaz.
-        </p>
-        {#if isImported(deleteTarget)}
-          <p class="warn">Bu kayıt Excel'den geldi — silersen Excel'deki geçmişten kalıcı olarak ayrışır.</p>
-        {/if}
-        {#if deleteError}<p class="error">{deleteError}</p>{/if}
-        <button onclick={() => (deleteTarget = null)} disabled={deleting}>Vazgeç</button>
-        <button class="danger" onclick={confirmDelete} disabled={deleting}>{deleting ? 'Siliniyor…' : 'Evet, sil'}</button>
-      </div>
-    {/if}
-
     <div class="tbl-wrap">
       <table>
         <thead>
@@ -182,7 +160,7 @@
         </thead>
         <tbody>
           {#each rows as t (t.id)}
-            <tr class:editing={editing?.id === t.id}>
+            <tr class:editing={editing?.id === t.id} class:deleting={deleteTarget?.id === t.id}>
               <td class="nowrap">{dateShort(t.tarih)}</td>
               <td class:pos={t.yon === 'AL'} class:neg={t.yon === 'SAT'}>{t.yon}</td>
               <td>
@@ -214,6 +192,54 @@
                   onclick={() => requestDelete(t)}>🗑</button>
               </td>
             </tr>
+            {#if editing?.id === t.id}
+              <tr class="inline-row inline-edit-row">
+                <td colspan="10">
+                  <div class="inline-edit-box">
+                    <div class="inline-box-header">
+                      <span class="inline-box-title">
+                        İşlem Düzenleme: <strong>{instName(t.enstruman)} ({t.enstruman})</strong> · {dateShort(t.tarih)}
+                      </span>
+                      <button type="button" class="inline-close" aria-label="Kapat" onclick={() => (editing = null)}>✕</button>
+                    </div>
+                    {#if isImported(editing)}
+                      <p class="warn">
+                        Bu kayıt Excel'den geldi. Kaydedersen Excel'deki geçmiş veriden kalıcı olarak ayrışır —
+                        yalnızca gerçek bir hatayı düzeltmek için kullan.
+                      </p>
+                    {/if}
+                    {#key editing.id}
+                      <div class="form-area">
+                        <IslemFormu {dataset} {view} source={source!} store={store!} editing={editing} onSaved={editSaved} />
+                      </div>
+                    {/key}
+                    <div class="inline-box-actions">
+                      <button type="button" class="cancel" onclick={() => (editing = null)}>Vazgeç</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            {/if}
+            {#if deleteTarget?.id === t.id}
+              <tr class="inline-row inline-delete-row">
+                <td colspan="10">
+                  <div class="confirm-delete">
+                    <p>
+                      <strong>{dateShort(deleteTarget.tarih)} · {deleteTarget.yon} {instName(deleteTarget.enstruman)} · {lot(deleteTarget.lot)} lot</strong>
+                      kalıcı olarak silinsin mi? Bu işlem geri alınamaz.
+                    </p>
+                    {#if isImported(deleteTarget)}
+                      <p class="warn">Bu kayıt Excel'den geldi — silersen Excel'deki geçmişten kalıcı olarak ayrışır.</p>
+                    {/if}
+                    {#if deleteError}<p class="error">{deleteError}</p>{/if}
+                    <div class="inline-box-actions">
+                      <button type="button" onclick={() => (deleteTarget = null)} disabled={deleting}>Vazgeç</button>
+                      <button type="button" class="danger" onclick={confirmDelete} disabled={deleting}>{deleting ? 'Siliniyor…' : 'Evet, sil'}</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            {/if}
           {/each}
         </tbody>
       </table>
@@ -265,29 +291,30 @@
     font: inherit;
   }
   .form-area {
-    background: var(--surface);
-    border: 1px solid var(--hairline);
-    border-radius: 6px;
-    padding: 1rem;
     margin-bottom: 0.5rem;
   }
   .cancel {
     appearance: none;
     border: 1px solid var(--hairline);
     border-radius: 4px;
-    background: var(--surface);
+    background: var(--surface-2);
     color: var(--ink);
     font: inherit;
     padding: 0.4rem 0.9rem;
-    margin-bottom: 1rem;
     cursor: pointer;
   }
+  .cancel:hover {
+    border-color: var(--gold);
+  }
   .confirm-delete {
+    background: var(--surface);
     border: 1px solid var(--loss);
+    border-left: 3px solid var(--loss);
     border-radius: 6px;
     padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
+    margin: 0.25rem 0 0.5rem;
     font-size: 0.85rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   }
   .confirm-delete .error {
     color: var(--loss);
@@ -296,7 +323,7 @@
     appearance: none;
     border: 1px solid var(--hairline);
     border-radius: 4px;
-    background: var(--surface);
+    background: var(--surface-2);
     color: var(--ink);
     font: inherit;
     padding: 0.4rem 0.8rem;
@@ -307,6 +334,64 @@
   .confirm-delete button.danger {
     color: var(--loss);
     border-color: var(--loss);
+  }
+  tbody tr.editing > td {
+    background: var(--surface-2);
+    border-bottom: none;
+  }
+  tbody tr.deleting > td {
+    background: rgba(224, 115, 106, 0.08);
+    border-bottom: none;
+  }
+  tbody tr.inline-row > td {
+    padding: 0.25rem 0.75rem 1rem;
+    white-space: normal;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .inline-edit-box {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--gold);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 0.25rem 0 0.5rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+  .inline-box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .inline-box-title {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+  .inline-box-title strong {
+    color: var(--ink);
+  }
+  .inline-close {
+    appearance: none;
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .inline-close:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+  .inline-box-actions {
+    margin-top: 0.5rem;
+    display: flex;
+    gap: 0.5rem;
   }
   .tbl-wrap {
     overflow-x: auto;
