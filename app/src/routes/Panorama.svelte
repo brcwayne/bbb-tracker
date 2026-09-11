@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Dataset } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
-  import { usd, pct, dateShort, DASH } from '../lib/format'
-  import { money, settings, PERIODS } from '../lib/settings.svelte'
+  import { pct, dateShort, DASH } from '../lib/format'
+  import { money as formatMoney, settings, PERIODS } from '../lib/settings.svelte'
   import KpiBand from '../lib/ui/KpiBand.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
@@ -13,6 +13,13 @@
   import BarChart from '../lib/charts/BarChart.svelte'
   import { prices } from '../lib/prices.svelte'
   import { unrealizedTotalUsd } from '../lib/data/unrealized'
+
+  // Panorama displays high-level macro overview numbers, so strip cents/kuruş (whole: true)
+  // to avoid visual clutter and excessively long numbers.
+  const money = (
+    nUsd: number | null | undefined,
+    opts: { sign?: boolean; whole?: boolean } = {},
+  ) => formatMoney(nUsd, { whole: true, ...opts })
 
   // RULING P1-3 annotation form; props optional, guarded in the template.
   // The prop name `derived` collides with the `$derived` rune, so the view

@@ -19,8 +19,8 @@ describe('Panorama', () => {
     const v = await derived()
     const { getByText, container } = render(Panorama, { props: { dataset: v.dataset, derived: v.derived } })
     expect(getByText('Gerçekleşmiş Kâr')).toBeInTheDocument()
-    expect(container.textContent).toContain('$475.00') // 175 + 300
-    expect(container.textContent).toContain('$5,475.00') // son snapshot toplamOzkaynak
+    expect(container.textContent).toContain('$475') // 175 + 300
+    expect(container.textContent).toContain('$5,475') // son snapshot toplamOzkaynak
     expect(container.textContent).toMatch(/son bilinen/i)
   })
   it('renders each chart once', async () => {
@@ -50,7 +50,7 @@ describe('Panorama', () => {
     expect(getByText('Yatırılan Sermaye')).toBeInTheDocument()
     expect(getByText('Kapanan İşlemler')).toBeInTheDocument()
     // fixture: toplamSermaye 5000
-    expect(container.textContent).toContain('$5,000.00')
+    expect(container.textContent).toContain('$5,000')
     // Gerçekleşmemiş K/Z appears both here and as a KPI label; scope by textContent.
     expect(container.textContent).toContain('Gerçekleşmemiş K/Z')
   })
@@ -78,8 +78,8 @@ describe('Panorama', () => {
     expect(liveTotal).toBeCloseTo(frozenTotal + 1000, 2)
 
     const { container } = render(Panorama, { props: { dataset: v.dataset, derived: v.derived } })
-    expect(container.textContent).toContain(money(liveTotal))
-    expect(container.textContent).not.toContain(money(frozenTotal))
+    expect(container.textContent).toContain(money(liveTotal, { whole: true }))
+    expect(container.textContent).not.toContain(money(frozenTotal, { whole: true }))
   })
 
   it('shows THIS MONTH block from the newest snapshot', async () => {
