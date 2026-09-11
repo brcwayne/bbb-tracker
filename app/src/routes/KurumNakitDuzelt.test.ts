@@ -60,7 +60,7 @@ describe('KurumNakitDuzelt', () => {
     expect(container.textContent).toMatch(/fark yok/i)
   })
 
-  it('farkı işaretli DUZELTME cashflow satırı olarak yazar', async () => {
+  it('farkı işaretli DUZELTME cashflow satırları olarak yazar (TL ve USD ayrı)', async () => {
     settings.rate = 48
     let yazilan: any = null
     const save = vi.fn(async (_n: string, d: unknown) => {
@@ -68,25 +68,35 @@ describe('KurumNakitDuzelt', () => {
     })
     const onSaved = vi.fn()
     const { container, getByText } = render(KurumNakitDuzelt, {
-      hesap: 'QNB', hesapAdi: 'QNB Finansinvest', hesaplananUsd: -56675.08, today: TODAY,
+      hesap: 'QNB', hesapAdi: 'QNB Finansinvest', hesaplananTl: 1000, hesaplananUsd: 50, today: TODAY,
       store: makeStore(),
       source: { id: 'drive', load: async () => ({}) as any, save },
       onSaved,
     })
     await setInput(container, 'TL nakit', '2286')
+    await setInput(container, 'USD nakit', '100')
     ;(getByText(/kaydet/i) as HTMLButtonElement).click()
     await new Promise((r) => setTimeout(r, 0))
 
     expect(onSaved).toHaveBeenCalled()
-    const eklenen = yazilan[yazilan.length - 1]
-    expect(eklenen).toMatchObject({
+    const eklenenler = yazilan.slice(-2)
+    expect(eklenenler[0]).toMatchObject({
       tur: 'DUZELTME',
       hesap: 'QNB',
       tarih: TODAY,
       kaynak: 'manual',
+      tutar_tl: 1286,
       kur: 48,
     })
-    // gerçek = 2286/48 = 47.625 ; fark = 47.625 - (-56675.08) = 56722.705 -> rounded 56722.71
-    expect(eklenen.tutar_usd).toBeCloseTo(56722.71, 2)
+    expect(eklenenler[0].tutar_usd).toBeCloseTo(26.79, 2)
+    expect(eklenenler[1]).toMatchObject({
+      tur: 'DUZELTME',
+      hesap: 'QNB',
+      tarih: TODAY,
+      kaynak: 'manual',
+      tutar_tl: null,
+      tutar_usd: 50,
+      kur: 48,
+    })
   })
 })

@@ -3,17 +3,19 @@
   import type { Dataset, Cashflow } from '../lib/data/types'
   import type { AppState } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
-  import { appendRecord, load } from '../lib/data/store'
+  import { appendRecords, load } from '../lib/data/store'
   import { ConflictError } from '../lib/data/drive'
   import { newCashflowId } from '../lib/data/ids'
   import { money, settings } from '../lib/settings.svelte'
+  import { tryFmt, usd } from '../lib/format'
 
   let {
     source,
     store,
     hesap,
     hesapAdi,
-    hesaplananUsd,
+    hesaplananTl = 0,
+    hesaplananUsd = 0,
     today = new Date().toISOString().slice(0, 10),
     onSaved = () => {},
     onCancel,
@@ -22,14 +24,17 @@
     store?: Writable<AppState>
     hesap: string
     hesapAdi: string
-    hesaplananUsd: number
+    hesaplananTl?: number
+    hesaplananUsd?: number
     today?: string
     onSaved?: () => void
     onCancel?: () => void
   } = $props()
 
-  let tlText = $state<string | number>('')
-  let usdText = $state<string | number>('')
+  // svelte-ignore state_referenced_locally
+  let tlText = $state<string | number>(hesaplananTl !== 0 ? hesaplananTl : '')
+  // svelte-ignore state_referenced_locally
+  let usdText = $state<string | number>(hesaplananUsd !== 0 ? hesaplananUsd : '')
   let saving = $state(false)
   let error = $state<string | null>(null)
 
@@ -38,12 +43,19 @@
   const hasInput = $derived(tlText !== '' || usdText !== '')
   const rateOk = $derived(Number.isFinite(settings.rate) && settings.rate > 0)
 
+  const farkTl = $derived(
+    Number.isFinite(tl) ? Math.round((tl - hesaplananTl) * 100) / 100 : 0,
+  )
+  const farkUsd = $derived(
+    Number.isFinite(usdDirect) ? Math.round((usdDirect - hesaplananUsd) * 100) / 100 : 0,
+  )
+  const hasChange = $derived(hasInput && (farkTl !== 0 || farkUsd !== 0))
+
   const gercekUsd = $derived(
     hasInput && rateOk && Number.isFinite(tl) && Number.isFinite(usdDirect)
       ? tl / settings.rate + usdDirect
       : null,
   )
-  const fark = $derived(gercekUsd == null ? null : Math.round((gercekUsd - hesaplananUsd) * 100) / 100)
 
   async function kaydet() {
     if (!source || !store) return
@@ -51,27 +63,45 @@
       error = 'Gerçek nakit tutarını (TL ve/veya USD) gir.'
       return
     }
-    if (fark === 0) {
+    if (!hasChange) {
       error = 'Fark yok — düzeltmeye gerek kalmadı.'
       return
     }
     saving = true
     error = null
     try {
-      const satir: Cashflow = {
-        id: newCashflowId(),
-        tarih: today,
-        hesap,
-        portfoy: null,
-        tur: 'DUZELTME',
-        enstruman: null,
-        tutar_tl: null,
-        tutar_usd: fark as number, // signed — this is the delta, not the target
-        kur: settings.rate,
-        aciklama: `Nakit düzeltmesi (hesaplanan ${money(hesaplananUsd)} → gerçek ${money(gercekUsd)})`,
-        kaynak: 'manual',
+      const recordsToAppend: Cashflow[] = []
+      if (farkTl !== 0) {
+        recordsToAppend.push({
+          id: newCashflowId(),
+          tarih: today,
+          hesap,
+          portfoy: null,
+          tur: 'DUZELTME',
+          enstruman: null,
+          tutar_tl: farkTl,
+          tutar_usd: Math.round((farkTl / settings.rate) * 100) / 100,
+          kur: settings.rate,
+          aciklama: `TL nakit düzeltmesi (${tryFmt(hesaplananTl)} → ${tryFmt(tl)})`,
+          kaynak: 'manual',
+        })
       }
-      await appendRecord<Cashflow>(store, source, 'cashflows', satir)
+      if (farkUsd !== 0) {
+        recordsToAppend.push({
+          id: newCashflowId(),
+          tarih: today,
+          hesap,
+          portfoy: null,
+          tur: 'DUZELTME',
+          enstruman: null,
+          tutar_tl: null,
+          tutar_usd: farkUsd,
+          kur: settings.rate,
+          aciklama: `USD nakit düzeltmesi (${usd(hesaplananUsd)} → ${usd(usdDirect)})`,
+          kaynak: 'manual',
+        })
+      }
+      await appendRecords<Cashflow>(store, source, 'cashflows', recordsToAppend)
       onSaved()
     } catch (e: any) {
       if (e instanceof ConflictError || e?.name === 'ConflictError') {
@@ -97,7 +127,14 @@
   </div>
 
   <p class="satir">
-    Hesaplanan nakit: <b class="num" data-testid="hesaplanan" data-value={hesaplananUsd}>{money(hesaplananUsd)}</b>
+    Hesaplanan nakit:
+    {#if Math.abs(hesaplananTl) >= 0.005 && Math.abs(hesaplananUsd) >= 0.005}
+      <b class="num" data-testid="hesaplanan" data-value={hesaplananUsd}>{tryFmt(hesaplananTl)} · {usd(hesaplananUsd)}</b>
+    {:else if Math.abs(hesaplananTl) >= 0.005}
+      <b class="num" data-testid="hesaplanan" data-value={hesaplananUsd}>{tryFmt(hesaplananTl)}</b>
+    {:else}
+      <b class="num" data-testid="hesaplanan" data-value={hesaplananUsd}>{usd(hesaplananUsd)}</b>
+    {/if}
   </p>
 
   <p class="hint">{hesapAdi}'da gerçekte ne kadar nakit var? İkisini birden girebilirsin (ör. hem TL hem USD nakit).</p>
@@ -115,12 +152,21 @@
 
   {#if !rateOk}
     <div class="alert-error">Kur bilgisi yok — düzeltme hesaplanamıyor.</div>
-  {:else if gercekUsd !== null}
+  {:else if hasInput && hasChange && gercekUsd !== null}
     <p class="ozet">
       Gerçek toplam: <b class="num">{money(gercekUsd)}</b>
-      {#if fark !== null && fark !== 0}
-        — {hesapAdi} <b class="num">{money(Math.abs(fark))}</b> {fark > 0 ? 'artırılacak' : 'azaltılacak'}.
+      {#if farkTl !== 0 && farkUsd !== 0}
+        — TL nakit <b class="num">{tryFmt(Math.abs(farkTl))}</b> {farkTl > 0 ? 'artırılacak' : 'azaltılacak'},
+        USD nakit <b class="num">{usd(Math.abs(farkUsd))}</b> {farkUsd > 0 ? 'artırılacak' : 'azaltılacak'}.
+      {:else if farkTl !== 0}
+        — TL nakit <b class="num">{tryFmt(Math.abs(farkTl))}</b> {farkTl > 0 ? 'artırılacak' : 'azaltılacak'}.
+      {:else if farkUsd !== 0}
+        — USD nakit <b class="num">{usd(Math.abs(farkUsd))}</b> {farkUsd > 0 ? 'artırılacak' : 'azaltılacak'}.
       {/if}
+    </p>
+  {:else if hasInput && !hasChange}
+    <p class="ozet">
+      Fark yok — girilen tutarlar mevcut bakiye ile aynı.
     </p>
   {/if}
 
@@ -132,7 +178,7 @@
     {#if onCancel}
       <button type="button" class="btn-secondary" onclick={onCancel} disabled={saving}>Vazgeç</button>
     {/if}
-    <button type="button" class="btn-primary" onclick={kaydet} disabled={saving || !rateOk}>
+    <button type="button" class="btn-primary" onclick={kaydet} disabled={saving || !rateOk || !hasChange}>
       {saving ? 'Kaydediliyor…' : 'Kaydet'}
     </button>
   </div>

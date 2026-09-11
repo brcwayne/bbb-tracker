@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { cashBalanceByHesap } from './cashBalances'
+import {
+  cashBalanceByHesap,
+  cashSplitByHesap,
+  formatBrokerCash,
+  formatBrokerCashTable,
+} from './cashBalances'
 import type { Dataset, Transaction, Cashflow } from './types'
 
 const baseMeta = { semaVersiyonu: 1, olusturulma: '2026-01-01', kaynak: 'x', nakitHesapBazli: { MIDAS: 1000, GARAN: 500 }, p0Sinirlari: [] }
@@ -13,7 +18,7 @@ const cf = (o: Partial<Cashflow>): Cashflow => ({
   enstruman: null, tutar_tl: null, tutar_usd: 0, kur: null, aciklama: '', kaynak: 'manual', ...o,
 })
 const ds = (over: Partial<Dataset>): Dataset => ({
-  transactions: [], cashflows: [], snapshots: [], instruments: [], brokers: [], portfolios: [],
+  transactions: [], cashflows: [], snapshots: [], instruments: [], brokers: [{ kod: 'MIDAS', ad: 'Midas', tur: 'ARACI_KURUM', sahip: 'ENIS', aktif: true }], portfolios: [],
   meta: baseMeta, fxrates: {}, assetTransfers: [], ...over,
 })
 
@@ -64,5 +69,45 @@ describe('cashBalanceByHesap', () => {
     }))
     expect(bal.MIDAS).toBeCloseTo(1000 + 62991.17, 6)
     expect(bal.GARAN).toBeCloseTo(500 - 250, 6)
+  })
+})
+
+describe('cashSplitByHesap', () => {
+  it('TL ve USD nakit hareketlerini ayrı ayrı takip eder', () => {
+    const split = cashSplitByHesap(
+      ds({
+        transactions: [
+          tx({ yon: 'AL', hesap: 'MIDAS', girisParaBirimi: 'TL', fiyat_tl: 100, lot: 5, kaynak: 'manual' }),
+          tx({ yon: 'AL', hesap: 'MIDAS', girisParaBirimi: 'USD', net_usd: 50, kaynak: 'manual' }),
+        ],
+        cashflows: [
+          cf({ tur: 'DUZELTME', hesap: 'MIDAS', tutar_tl: 2500, tutar_usd: 52.08 }),
+          cf({ tur: 'DUZELTME', hesap: 'MIDAS', tutar_tl: null, tutar_usd: 100 }),
+        ],
+      }),
+      48,
+    )
+
+    // TL: -500 (AL) + 2500 (DUZELTME) = 2000
+    expect(split.MIDAS.tl).toBe(2000)
+    // USD: 1000 (baseline) - 50 (AL) + 100 (DUZELTME) = 1050
+    expect(split.MIDAS.usd).toBe(1050)
+    // totalUsd = 1050 + 2000 / 48 = 1091.67
+    expect(split.MIDAS.totalUsd).toBeCloseTo(1091.67, 2)
+  })
+
+  it('formatBrokerCash hem TL hem USD olduğunda ikisini birden gösterir', () => {
+    const s = { tl: 5000, usd: 200, totalUsd: 304.17 }
+    const res = formatBrokerCash(s, 'TRY', 48)
+    expect(res).toContain('₺5.000,00')
+    expect(res).toContain('$200.00')
+    expect(res).toContain('Toplam:')
+  })
+
+  it('formatBrokerCashTable kompakt format sunar', () => {
+    const s = { tl: 5000, usd: 200, totalUsd: 304.17 }
+    const res = formatBrokerCashTable(s, 'TRY', 48)
+    expect(res).toContain('₺5.000,00 · $200.00')
+    expect(res).not.toContain('Toplam:')
   })
 })

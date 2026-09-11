@@ -4,8 +4,13 @@
   import type { AppState, DerivedBundle } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
   import { holdingsByBroker, type HoldingGroup } from '../lib/data/breakdowns'
+  import {
+    cashSplitByHesap,
+    formatBrokerCash,
+    formatBrokerCashTable,
+  } from '../lib/data/cashBalances'
   import { prices } from '../lib/prices.svelte'
-  import { money } from '../lib/settings.svelte'
+  import { money, settings } from '../lib/settings.svelte'
   import { pct, lot, DASH } from '../lib/format'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
@@ -26,6 +31,10 @@
   let duzeltHesap = $state<string | null>(null)
   const isDrive = $derived(Boolean(source?.save))
 
+  const splits = $derived(
+    dataset ? cashSplitByHesap(dataset, settings.rate) : {},
+  )
+
   const groups = $derived.by<HoldingGroup[]>(() => {
     if (!dataset || !view) return []
     void prices.status
@@ -40,17 +49,30 @@
   })
 
   const summaryRows = $derived(
-    groups.map((g) => ({
-      kurum: g.key,
-      sahip: g.sahip ?? '',
-      maliyet: g.totalCostUsd,
-      deger: g.totalValueUsd,
-      kz: g.unrealUsd,
-    })),
+    groups.map((g) => {
+      const kod = findBrokerKod(g.key, dataset?.brokers ?? [])
+      const split = splits[kod] ?? { tl: 0, usd: 0, totalUsd: 0 }
+      return {
+        kurum: g.key,
+        sahip: g.sahip ?? '',
+        nakit: split.totalUsd,
+        nakitSplit: split,
+        maliyet: g.totalCostUsd,
+        deger: g.totalValueUsd,
+        kz: g.unrealUsd,
+      }
+    }),
   )
   const summaryCols = [
     { key: 'kurum', label: 'Kurum', sortable: true },
     { key: 'sahip', label: 'Sahip' },
+    {
+      key: 'nakit',
+      label: 'Nakit',
+      align: 'right' as const,
+      sortable: true,
+      fmt: (_: number, r: any) => formatBrokerCashTable(r.nakitSplit, settings.currency, settings.rate),
+    },
     { key: 'maliyet', label: 'Maliyet', align: 'right' as const, sortable: true, fmt: (v: number) => money(v) },
     { key: 'deger', label: 'Değer', align: 'right' as const, fmt: (v: number | null) => (v == null ? DASH : money(v)) },
     { key: 'kz', label: 'K/Z', align: 'right' as const, tone: 'sign' as const, fmt: (v: number | null) => (v == null ? DASH : money(v, { sign: true })) },
@@ -74,10 +96,13 @@
     <DataTable columns={summaryCols} rows={summaryRows} initialSort={{ key: 'maliyet', dir: 'desc' }} />
     {#each groups as g}
       {@const kod = findBrokerKod(g.key, dataset.brokers)}
-      {@const nakit = view.cashByHesap[kod] ?? 0}
+      {@const split = splits[kod] ?? { tl: 0, usd: 0, totalUsd: 0 }}
       <div class="panel">
         <div class="panel-head">
-          <SectionHeader title={g.key} note={`${g.sahip} · Nakit: ${money(nakit)}`} />
+          <SectionHeader
+            title={g.key}
+            note={`${g.sahip} · Nakit: ${formatBrokerCash(split, settings.currency, settings.rate)}`}
+          />
           <button
             type="button"
             class="btn-duzelt"
@@ -95,7 +120,8 @@
               {store}
               hesap={kod}
               hesapAdi={g.key}
-              hesaplananUsd={nakit}
+              hesaplananTl={split.tl}
+              hesaplananUsd={split.usd}
               onSaved={() => (duzeltHesap = null)}
               onCancel={() => (duzeltHesap = null)}
             />

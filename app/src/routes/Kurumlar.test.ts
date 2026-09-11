@@ -54,4 +54,11 @@ describe('Kurumlar', () => {
     await fireEvent.click(btn)
     expect(getByText(/Nakit Düzeltmesi/)).toBeInTheDocument()
   })
+
+  it('includes a Nakit column in the summary table', async () => {
+    const d = await v()
+    const { container } = render(Kurumlar, { props: { dataset: d.dataset, view: d.derived } })
+    const ths = [...container.querySelectorAll('thead th')].map((th) => th.textContent?.trim())
+    expect(ths).toContain('Nakit')
+  })
 })

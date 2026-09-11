@@ -159,6 +159,16 @@ export async function appendRecord<T>(
   return writeAndCommit(store, source, file, (current) => [...(current as T[]), record])
 }
 
+export async function appendRecords<T>(
+  store: Writable<AppState>,
+  source: DataSource,
+  file: Kind,
+  records: T[],
+): Promise<void> {
+  if (records.length === 0) return
+  return writeAndCommit(store, source, file, (current) => [...(current as T[]), ...records])
+}
+
 /**
  * `allowImported` lets the Log page edit/delete an Excel-migrated row after an
  * explicit warning. Everywhere else the `kaynak === 'manual'` gate still holds,
