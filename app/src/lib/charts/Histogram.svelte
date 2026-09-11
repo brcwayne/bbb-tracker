@@ -21,6 +21,41 @@
   // every 4th bucket plus the last — keep the axis readable at 23 buckets.
   const ticks = $derived(buckets.filter((_, i) => i % 4 === 0 || i === buckets.length - 1))
   let hoverI = $state<number | null>(null)
+
+  function barColor(b: { label: string }, i: number, total: number): string {
+    let ratio: number | null = null
+    if (b.label.startsWith('<-')) {
+      ratio = -1
+    } else if (b.label.startsWith('>')) {
+      ratio = 1
+    } else if (b.label.includes('–')) {
+      const parts = b.label.replace(/%/g, '').split('–').map(Number)
+      if (parts.length === 2 && !Number.isNaN(parts[0]) && !Number.isNaN(parts[1])) {
+        const midVal = (parts[0] + parts[1]) / 2
+        ratio = midVal < 0 ? Math.max(-1, midVal / 22) : Math.min(1, midVal / 20)
+      }
+    }
+    if (ratio == null) {
+      const mid = (total - 1) / 2
+      ratio = total > 1 ? (i - mid) / mid : 0
+    }
+
+    if (ratio < -0.05) {
+      const t = (ratio - -1) / 0.95
+      const h = 2 + t * 14
+      const s = 82 - t * 35
+      const l = 50 + t * 16
+      return `hsl(${h.toFixed(0)}, ${s.toFixed(0)}%, ${l.toFixed(0)}%)`
+    }
+    if (ratio <= 0.05) {
+      return 'var(--ink-soft)'
+    }
+    const t = (ratio - 0.05) / 0.95
+    const h = 152 - t * 12
+    const s = 45 + t * 35
+    const l = 66 - t * 24
+    return `hsl(${h.toFixed(0)}, ${s.toFixed(0)}%, ${l.toFixed(0)}%)`
+  }
 </script>
 
 <svg
@@ -38,7 +73,7 @@
       width={band.bandwidth()}
       y={y(b.count)}
       height={height - pad - y(b.count)}
-      fill={hoverI === i ? 'var(--gold)' : 'var(--ink-soft)'}
+      fill={hoverI === i ? 'var(--gold)' : barColor(b, i, buckets.length)}
       style:cursor="pointer"
       onmouseenter={() => (hoverI = i)}
     />
@@ -59,7 +94,7 @@
     {@const cx = Math.min(Math.max((band(b.label) ?? 0) + band.bandwidth() / 2, 72), width - 72)}
     <g transform={`translate(${cx}, ${pad})`} style="pointer-events:none;">
       <rect x="-68" y="0" width="136" height={boxH} rx="3" fill="var(--surface)" stroke="var(--hairline)" />
-      <rect x="-68" y="0" width="136" height="2" fill="var(--gold)" />
+      <rect x="-68" y="0" width="136" height="2" fill={barColor(b, hoverI, buckets.length)} />
       <text x="0" y="12" text-anchor="middle" style="font-size:9px; fill:var(--ink-soft);">{b.label}</text>
       <text
         x="0"

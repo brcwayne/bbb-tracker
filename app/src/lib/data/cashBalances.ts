@@ -29,7 +29,16 @@ export function cashBalanceByHesap(ds: Dataset): Record<string, number> {
     // unlike YATIRMA/CEKME's always-positive tutar_usd with sign implied by
     // tur — same "row stores the delta, not the target" convention as the
     // personal ledger's balance correction.
-    else if (c.tur === 'DUZELTME') bump(c.hesap, c.tutar_usd)
+    else if (c.tur === 'DUZELTME') {
+      bump(c.hesap, c.tutar_usd)
+      // When broker accounts are corrected from negative baseline (caused by
+      // historical migration having all deposits under 'TOPLU' while trades were
+      // under individual brokers), offset the delta against TOPLU so total cash
+      // does not double count.
+      if (c.tutar_usd > 0 && c.hesap !== 'TOPLU' && (bal['TOPLU'] ?? 0) > 0) {
+        bal['TOPLU'] = Math.max(0, bal['TOPLU'] - c.tutar_usd)
+      }
+    }
   }
   return bal
 }
@@ -81,6 +90,10 @@ export function cashSplitByHesap(
     if (c.tur === 'DUZELTME') {
       if (isTl) e.tl += c.tutar_tl!
       else e.usd += c.tutar_usd
+
+      if (c.tutar_usd > 0 && c.hesap !== 'TOPLU' && splits['TOPLU'] && splits['TOPLU'].usd > 0) {
+        splits['TOPLU'].usd = Math.max(0, splits['TOPLU'].usd - c.tutar_usd)
+      }
     } else if (c.tur === 'YATIRMA' || c.tur === 'TEMETTU') {
       if (isTl) e.tl += c.tutar_tl!
       else e.usd += c.tutar_usd

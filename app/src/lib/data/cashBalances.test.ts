@@ -70,6 +70,19 @@ describe('cashBalanceByHesap', () => {
     expect(bal.MIDAS).toBeCloseTo(1000 + 62991.17, 6)
     expect(bal.GARAN).toBeCloseTo(500 - 250, 6)
   })
+
+  it('DUZELTME pozitif farkı TOPLU havuzundan düşer ve çift sayımı önler', () => {
+    const bal = cashBalanceByHesap(ds({
+      meta: { ...baseMeta, nakitHesapBazli: { MIDAS: -50000, TOPLU: 100000 } },
+      cashflows: [
+        cf({ tur: 'DUZELTME', hesap: 'MIDAS', tutar_usd: 52000 }),
+      ],
+    }))
+    expect(bal.MIDAS).toBeCloseTo(2000, 6)
+    expect(bal.TOPLU).toBeCloseTo(48000, 6)
+    // Toplam nakit havuzu değişmeden korunur: (-50k + 100k) == (2k + 48k)
+    expect(bal.MIDAS + bal.TOPLU).toBeCloseTo(50000, 6)
+  })
 })
 
 describe('cashSplitByHesap', () => {
