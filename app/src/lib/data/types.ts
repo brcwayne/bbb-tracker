@@ -23,7 +23,7 @@ export interface Cashflow {
   tarih: string
   hesap: string
   portfoy: string | null
-  tur: 'YATIRMA' | 'CEKME' | 'TEMETTU' | 'TRANSFER'
+  tur: 'YATIRMA' | 'CEKME' | 'TEMETTU' | 'TRANSFER' | 'DUZELTME'
   enstruman: string | null
   tutar_tl: number | null
   tutar_usd: number

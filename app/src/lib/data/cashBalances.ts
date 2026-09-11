@@ -18,6 +18,11 @@ export function cashBalanceByHesap(ds: Dataset): Record<string, number> {
       bump(c.hesap, -c.tutar_usd)
       bump(c.hedefHesap, c.tutar_usd)
     }
+    // DUZELTME stores the signed delta directly (positive or negative),
+    // unlike YATIRMA/CEKME's always-positive tutar_usd with sign implied by
+    // tur — same "row stores the delta, not the target" convention as the
+    // personal ledger's balance correction.
+    else if (c.tur === 'DUZELTME') bump(c.hesap, c.tutar_usd)
   }
   return bal
 }

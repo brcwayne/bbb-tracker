@@ -1,6 +1,8 @@
 <script lang="ts">
+  import type { Writable } from 'svelte/store'
   import type { Dataset, Broker } from '../lib/data/types'
-  import type { DerivedBundle } from '../lib/data/store'
+  import type { AppState, DerivedBundle } from '../lib/data/store'
+  import type { DataSource } from '../lib/data/source'
   import { holdingsByBroker, type HoldingGroup } from '../lib/data/breakdowns'
   import { prices } from '../lib/prices.svelte'
   import { money } from '../lib/settings.svelte'
@@ -8,12 +10,21 @@
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
+  import KurumNakitDuzelt from './KurumNakitDuzelt.svelte'
 
-  let { dataset, view }: { dataset?: Dataset; view?: DerivedBundle } = $props()
+  let {
+    dataset,
+    view,
+    source,
+    store,
+  }: { dataset?: Dataset; view?: DerivedBundle; source?: DataSource; store?: Writable<AppState> } = $props()
 
   function findBrokerKod(ad: string, brokers: Broker[]): string {
     return brokers.find((b) => b.ad === ad)?.kod ?? ad
   }
+
+  let duzeltHesap = $state<string | null>(null)
+  const isDrive = $derived(Boolean(source?.save))
 
   const groups = $derived.by<HoldingGroup[]>(() => {
     if (!dataset || !view) return []
@@ -62,11 +73,34 @@
     <SectionHeader title="Kurumlar" />
     <DataTable columns={summaryCols} rows={summaryRows} initialSort={{ key: 'maliyet', dir: 'desc' }} />
     {#each groups as g}
+      {@const kod = findBrokerKod(g.key, dataset.brokers)}
+      {@const nakit = view.cashByHesap[kod] ?? 0}
       <div class="panel">
-        <SectionHeader
-          title={g.key}
-          note={`${g.sahip} · Nakit: ${money(view.cashByHesap[findBrokerKod(g.key, dataset.brokers)] ?? 0)}`}
-        />
+        <div class="panel-head">
+          <SectionHeader title={g.key} note={`${g.sahip} · Nakit: ${money(nakit)}`} />
+          <button
+            type="button"
+            class="btn-duzelt"
+            disabled={!isDrive}
+            title={isDrive ? undefined : 'Sadece Google Drive kaynağında düzenlenebilir'}
+            onclick={() => (duzeltHesap = kod)}
+          >
+            ⚖ Nakit Düzelt
+          </button>
+        </div>
+        {#if duzeltHesap === kod}
+          <div class="form-modal">
+            <KurumNakitDuzelt
+              {source}
+              {store}
+              hesap={kod}
+              hesapAdi={g.key}
+              hesaplananUsd={nakit}
+              onSaved={() => (duzeltHesap = null)}
+              onCancel={() => (duzeltHesap = null)}
+            />
+          </div>
+        {/if}
         {#if g.rows.length}
           <DataTable columns={cols} rows={g.rows} initialSort={{ key: 'toplamMaliyetUsd', dir: 'desc' }} />
         {:else}
@@ -92,6 +126,36 @@
     border-radius: 6px;
     padding: 0.25rem 1rem 1rem;
     margin-bottom: 1.25rem;
+  }
+  .panel-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .btn-duzelt {
+    appearance: none;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 0.78rem;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-duzelt:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--gold);
+  }
+  .btn-duzelt:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .form-modal {
+    margin: 0.5rem 0 0.85rem;
   }
   .muted {
     color: var(--ink-soft);

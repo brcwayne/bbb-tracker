@@ -25,7 +25,10 @@
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
-  let tur = $state<'YATIRMA' | 'CEKME' | 'TEMETTU' | 'TRANSFER'>(editing?.tur ?? 'YATIRMA')
+  // This form never offers DUZELTME (that's KurumNakitDuzelt's job — a
+  // computed delta, not a freely typed amount), but `editing` is a full
+  // Cashflow, so the local state type has to admit it too.
+  let tur = $state<Cashflow['tur']>(editing?.tur ?? 'YATIRMA')
   let hesap = $state(editing?.hesap ?? '')
   let hedefHesap = $state(editing?.hedefHesap ?? '')
   let enstruman = $state(editing?.enstruman ?? '')

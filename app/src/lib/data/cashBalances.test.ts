@@ -54,4 +54,15 @@ describe('cashBalanceByHesap', () => {
     expect(bal.MIDAS).toBeCloseTo(1000 - 400, 6)
     expect(bal.GARAN).toBeCloseTo(500 + 400, 6)
   })
+
+  it('DUZELTME işaretli farkı doğrudan uygular — pozitif de negatif de', () => {
+    const bal = cashBalanceByHesap(ds({
+      cashflows: [
+        cf({ tur: 'DUZELTME', hesap: 'MIDAS', tutar_usd: 62991.17 }),
+        cf({ tur: 'DUZELTME', hesap: 'GARAN', tutar_usd: -250 }),
+      ],
+    }))
+    expect(bal.MIDAS).toBeCloseTo(1000 + 62991.17, 6)
+    expect(bal.GARAN).toBeCloseTo(500 - 250, 6)
+  })
 })

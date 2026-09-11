@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/svelte'
+import { render, fireEvent } from '@testing-library/svelte'
 import Kurumlar from './Kurumlar.svelte'
 import { fixture } from '../fixtures/dataset'
 import { createAppStore, load } from '../lib/data/store'
-import { get } from 'svelte/store'
+import { get, writable } from 'svelte/store'
+import type { AppState } from '../lib/data/store'
 
 async function v() {
   const s = createAppStore()
@@ -26,5 +27,31 @@ describe('Kurumlar', () => {
     const d = await v()
     const { container } = render(Kurumlar, { props: { dataset: d.dataset, view: d.derived } })
     expect(container.textContent).toContain('Nakit')
+  })
+
+  it('disables the Nakit Düzelt button on a non-Drive source', async () => {
+    const d = await v()
+    const { getAllByText } = render(Kurumlar, {
+      props: { dataset: d.dataset, view: d.derived, source: { id: 'local', load: async () => fixture } },
+    })
+    const btn = getAllByText('⚖ Nakit Düzelt')[0] as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+  })
+
+  it('opens the correction form for a broker on a Drive source', async () => {
+    const d = await v()
+    const store = writable<AppState>(d)
+    const { getAllByText, getByText } = render(Kurumlar, {
+      props: {
+        dataset: d.dataset,
+        view: d.derived,
+        store,
+        source: { id: 'drive', load: async () => fixture, save: async () => {} },
+      },
+    })
+    const btn = getAllByText('⚖ Nakit Düzelt')[0] as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+    await fireEvent.click(btn)
+    expect(getByText(/Nakit Düzeltmesi/)).toBeInTheDocument()
   })
 })
