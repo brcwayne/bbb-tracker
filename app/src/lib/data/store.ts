@@ -104,6 +104,7 @@ export type Kind =
   | 'cashflows'
   | 'assetTransfers'
   | 'brokers'
+  | 'portfolios'
   | 'personal_tx'
   | 'payment_plans'
   | 'personal_accounts'

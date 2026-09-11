@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Dataset, Transaction, Cashflow, AssetTransfer, Broker } from '../lib/data/types'
+  import type { Dataset, Transaction, Cashflow, AssetTransfer, Broker, Portfolio } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
   import type { Writable } from 'svelte/store'
@@ -14,6 +14,7 @@
   import NakitHareketiFormu from './forms/NakitHareketiFormu.svelte'
   import VarlikTransferiFormu from './forms/VarlikTransferiFormu.svelte'
   import KurumFormu from './forms/KurumFormu.svelte'
+  import PortfoyFormu from './forms/PortfoyFormu.svelte'
 
   let {
     dataset,
@@ -22,10 +23,10 @@
     store,
   }: { dataset?: Dataset; view?: DerivedBundle; source?: DataSource; store?: Writable<AppState> } = $props()
 
-  type Kind = 'islem' | 'nakit' | 'transfer' | 'kurum'
+  type Kind = 'islem' | 'nakit' | 'transfer' | 'kurum' | 'portfoy'
   let kind = $state<Kind | null>(null)
   let manageKind = $state<Kind | null>(null)
-  let editingRecord = $state<{ kind: Kind; record: Transaction | Cashflow | AssetTransfer | Broker } | null>(null)
+  let editingRecord = $state<{ kind: Kind; record: Transaction | Cashflow | AssetTransfer | Broker | Portfolio } | null>(null)
   let deleteTarget = $state<{ kind: Kind; key: string; label: string } | null>(null)
   let deleteError = $state<string | null>(null)
   let deleting = $state(false)
@@ -36,12 +37,14 @@
     nakit: 'Nakit Hareketi',
     transfer: 'Varlık Transferi',
     kurum: 'Kurum Ekle',
+    portfoy: 'Portföy Ekle',
   }
   const manageLabels: Record<Kind, string> = {
     islem: 'İşlemlerim',
     nakit: 'Nakit Hareketlerim',
     transfer: 'Transferlerim',
     kurum: 'Kurumlarım',
+    portfoy: 'Portföylerim',
   }
 
   function resetPanels() {
@@ -94,13 +97,17 @@
   const brokerRows = $derived(
     manualBrokers.map((b) => ({ key: b.kod, tarih: '—', summary: `${b.kod} — ${b.ad} (${b.tur})` })),
   )
+  const portfolioRows = $derived(
+    (dataset?.portfolios ?? []).map((p) => ({ key: p.kod, tarih: '—', summary: `${p.kod} — ${p.ad}${p.aktif ? '' : ' (Pasif)'}` })),
+  )
 
   function requestEdit(k: Kind, key: string) {
     const record =
       k === 'islem' ? manualTxns.find((t) => t.id === key)
       : k === 'nakit' ? manualFlows.find((c) => c.id === key)
       : k === 'transfer' ? manualTransfers.find((a) => a.id === key)
-      : manualBrokers.find((b) => b.kod === key)
+      : k === 'kurum' ? manualBrokers.find((b) => b.kod === key)
+      : dataset?.portfolios.find((p) => p.kod === key)
     if (!record) return
     deleteTarget = null
     successMessage = null
@@ -132,7 +139,7 @@
         await deleteRecord<Transaction>(store, source, 'transactions', (t) => t.id === key)
       } else if (k === 'nakit') await deleteRecord<Cashflow>(store, source, 'cashflows', (c) => c.id === key)
       else if (k === 'transfer') await deleteRecord<AssetTransfer>(store, source, 'assetTransfers', (a) => a.id === key)
-      else {
+      else if (k === 'kurum') {
         const referenced =
           dataset.transactions.some((t) => t.hesap === key) ||
           dataset.cashflows.some((c) => c.hesap === key || c.hedefHesap === key) ||
@@ -143,6 +150,14 @@
           return
         }
         await deleteRecord<Broker>(store, source, 'brokers', (b) => b.kod === key)
+      } else {
+        const referenced = dataset.transactions.some((t) => t.portfoy === key)
+        if (referenced) {
+          deleteError = 'Bu portföy işlem kayıtlarında kullanılıyor — önce onları düzenleyin veya silin.'
+          deleting = false
+          return
+        }
+        await deleteRecord<Portfolio>(store, source, 'portfolios', (p) => p.kod === key, { allowImported: true })
       }
       deleteTarget = null
       successMessage = 'Kayıt silindi.'
@@ -178,8 +193,10 @@
             <NakitHareketiFormu {dataset} {source} {store} editing={editingRecord.record as Cashflow} onSaved={editSaved} />
           {:else if editingRecord.kind === 'transfer'}
             <VarlikTransferiFormu {dataset} {view} {source} {store} editing={editingRecord.record as AssetTransfer} onSaved={editSaved} />
-          {:else}
+          {:else if editingRecord.kind === 'kurum'}
             <KurumFormu {dataset} {source} {store} editing={editingRecord.record as Broker} onSaved={editSaved} />
+          {:else}
+            <PortfoyFormu {dataset} {source} {store} editing={editingRecord.record as Portfolio} onSaved={editSaved} />
           {/if}
         </div>
       {/key}
@@ -200,6 +217,10 @@
       <div class="form-area">
         <KurumFormu {dataset} {source} {store} onSaved={saved} />
       </div>
+    {:else if kind === 'portfoy'}
+      <div class="form-area">
+        <PortfoyFormu {dataset} {source} {store} onSaved={saved} />
+      </div>
     {:else if manageKind}
       <div class="form-area">
         {#if manageKind === 'islem'}
@@ -208,8 +229,10 @@
           <ManualRecordList title="Nakit Hareketlerim" rows={flowRows} onEdit={(key) => requestEdit('nakit', key)} onDelete={(row) => requestDelete('nakit', row)} />
         {:else if manageKind === 'transfer'}
           <ManualRecordList title="Transferlerim" rows={transferRows} onEdit={(key) => requestEdit('transfer', key)} onDelete={(row) => requestDelete('transfer', row)} />
-        {:else}
+        {:else if manageKind === 'kurum'}
           <ManualRecordList title="Kurumlarım" rows={brokerRows} onEdit={(key) => requestEdit('kurum', key)} onDelete={(row) => requestDelete('kurum', row)} />
+        {:else}
+          <ManualRecordList title="Portföylerim" rows={portfolioRows} onEdit={(key) => requestEdit('portfoy', key)} onDelete={(row) => requestDelete('portfoy', row)} />
         {/if}
         {#if deleteTarget}
           <div class="confirm-delete">

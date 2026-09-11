@@ -124,14 +124,18 @@
       Kaynak Portföy
       <select bind:value={kaynakPortfoy} aria-label="Kaynak Portföy">
         <option value="">—</option>
-        {#each dataset.portfolios as p}<option value={p.kod}>{p.ad}</option>{/each}
+        {#each dataset.portfolios as p}
+          <option value={p.kod}>{p.kod}{p.ad && p.ad !== p.kod ? ` — ${p.ad}` : ''}</option>
+        {/each}
       </select>
     </label>
     <label>
       Hedef Portföy
       <select bind:value={hedefPortfoy} aria-label="Hedef Portföy">
         <option value="">—</option>
-        {#each dataset.portfolios as p}<option value={p.kod}>{p.ad}</option>{/each}
+        {#each dataset.portfolios as p}
+          <option value={p.kod}>{p.kod}{p.ad && p.ad !== p.kod ? ` — ${p.ad}` : ''}</option>
+        {/each}
       </select>
     </label>
     <label>

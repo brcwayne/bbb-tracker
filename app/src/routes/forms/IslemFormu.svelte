@@ -205,7 +205,9 @@
       Portföy
       <select bind:value={portfoy} aria-label="Portföy">
         <option value="">—</option>
-        {#each dataset.portfolios as p}<option value={p.kod}>{p.ad}</option>{/each}
+        {#each dataset.portfolios as p}
+          <option value={p.kod}>{p.kod}{p.ad && p.ad !== p.kod ? ` — ${p.ad}` : ''}</option>
+        {/each}
       </select>
     </label>
     <label>

@@ -93,6 +93,7 @@ export interface Portfolio {
   kod: string
   ad: string
   aktif: boolean
+  kaynak?: string
 }
 
 export interface Meta {
