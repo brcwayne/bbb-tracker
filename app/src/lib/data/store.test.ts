@@ -16,7 +16,7 @@ describe('app store', () => {
     const v = get(s)
     expect(v.status).toBe('ready')
     expect(v.derived!.positions.realizedTotalUsd).toBeCloseTo(475, 6) // 175 + 300
-    expect(v.sourceText).toContain('local')
+    expect(v.sourceText).toContain('Yerel dosya')
   })
   it('captures load errors', async () => {
     const s = createAppStore()

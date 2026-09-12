@@ -76,6 +76,7 @@ function writeStoredToken(t: string | null, expiresInS = DEFAULT_TOKEN_TTL_S): v
  */
 export class DriveSource implements DataSource {
   readonly id = 'drive' as const
+  lastModified: string | null = null
   private token: string | null = readStoredToken()
   private tokenClient: any = null
   folderId: string | null = null
@@ -208,7 +209,9 @@ export class DriveSource implements DataSource {
     // application/octet-stream. Selection is by filename below.
     const q = `'${folderId}' in parents and trashed = false`
     const listRes = await fetch(
-      'https://www.googleapis.com/drive/v3/files?q=' + encodeURIComponent(q) + '&fields=files(id,name,md5Checksum)',
+      'https://www.googleapis.com/drive/v3/files?q=' +
+        encodeURIComponent(q) +
+        '&fields=files(id,name,md5Checksum,modifiedTime)',
       { headers, cache: 'no-store' },
     )
     if (listRes.status === 401 || listRes.status === 403) {
@@ -216,10 +219,19 @@ export class DriveSource implements DataSource {
       throw new NeedsAuthError('oturum süresi doldu')
     }
     if (!listRes.ok) throw new Error(`Drive: dosya listesi alınamadı (${listRes.status})`)
-    const { files } = (await listRes.json()) as { files: { id: string; name: string; md5Checksum?: string }[] }
+    const { files } = (await listRes.json()) as {
+      files: { id: string; name: string; md5Checksum?: string; modifiedTime?: string }[]
+    }
+    let latestTime: number | null = null
     for (const f of files) {
       const base = f.name.replace(/\.json$/, '')
       if (f.md5Checksum) this.fileIds[base] = { id: f.id, md5Checksum: f.md5Checksum }
+      if (f.modifiedTime) {
+        const t = Date.parse(f.modifiedTime)
+        if (!Number.isNaN(t) && (latestTime == null || t > latestTime)) {
+          latestTime = t
+        }
+      }
     }
 
     const parts = await Promise.all(
@@ -279,6 +291,8 @@ export class DriveSource implements DataSource {
       }),
     )
 
+    this.lastModified =
+      latestTime != null ? new Date(latestTime).toISOString() : (dataset.meta?.olusturulma ?? null)
     return dataset
   }
 
@@ -327,6 +341,7 @@ export class DriveSource implements DataSource {
       if (!res.ok) throw new Error(`Drive: ${name}.json oluşturulamadı (${res.status})`)
       const created = (await res.json()) as { id: string; md5Checksum: string }
       this.fileIds[name] = { id: created.id, md5Checksum: created.md5Checksum }
+      this.lastModified = new Date().toISOString()
       return
     }
 
@@ -354,5 +369,6 @@ export class DriveSource implements DataSource {
     if (!updateRes.ok) throw new Error(`Drive: ${name}.json yazılamadı (${updateRes.status})`)
     const updated = (await updateRes.json()) as { md5Checksum: string }
     this.fileIds[name] = { id: cached.id, md5Checksum: updated.md5Checksum }
+    this.lastModified = new Date().toISOString()
   }
 }

@@ -41,7 +41,7 @@ export function deriveAll(ds: Dataset, range?: { from: string; to: string }) {
     closedInRange,
     snapshots: snaps,
     byClass: allocationByClass(positions.open, ds.instruments),
-    byPortfolio: allocationByPortfolio(positions.open, ds.transactions),
+    byPortfolio: allocationByPortfolio(positions.open, ds.transactions, ds.assetTransfers ?? []),
     buckets: gainBuckets(closedInRange),
     periods: periodPerformance(ds.snapshots),
     movers: topMovers(closedInRange),
@@ -70,7 +70,12 @@ export async function load(store: Writable<AppState>, source: DataSource): Promi
       status: 'ready',
       dataset,
       derived: deriveAll(dataset),
-      sourceText: describeSource(source, dataset.meta),
+      sourceText: describeSource(
+        source,
+        dataset.meta,
+        source.lastModified,
+        dataset.transactions?.length,
+      ),
     })
   } catch (e) {
     store.set({
@@ -147,7 +152,12 @@ async function writeAndCommit(
     status: 'ready',
     dataset: newDataset,
     derived: deriveAll(newDataset),
-    sourceText: state.sourceText,
+    sourceText: describeSource(
+      source,
+      newDataset.meta,
+      source.lastModified,
+      newDataset.transactions?.length,
+    ),
   })
 }
 

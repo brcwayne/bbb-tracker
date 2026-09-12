@@ -142,6 +142,12 @@ describe('DriveSource', () => {
     const s = await makeDriveSourceWithFiles(without(ALL_FILES, 'transactions.json'))
     await expect(s.load()).rejects.toThrow(/bulunamadı/)
   })
+
+  it('tracks lastModified from Drive files listing', async () => {
+    const s = await makeDriveSourceWithFiles(ALL_FILES)
+    await s.load()
+    expect(s.lastModified).toBe(new Date('2026-09-12T14:20:00Z').toISOString())
+  })
 })
 
 const INVESTMENT_FILES_ONLY: Record<string, unknown> = {
@@ -180,6 +186,7 @@ async function makeDriveSourceWithFiles(fileContentMap: Record<string, any>): Pr
       const fileList = Object.keys(fileContentMap).map((fileName) => ({
         id: fileName.replace('.json', ''),
         name: fileName.endsWith('.json') ? fileName : `${fileName}.json`,
+        modifiedTime: '2026-09-12T14:20:00Z',
       }))
       return Promise.resolve({
         ok: true,
@@ -212,7 +219,7 @@ describe('DriveSource.save', () => {
       'fetch',
       vi.fn((url: string, options?: { method?: string }) => {
         const method = options?.method
-        if (url.includes('fields=files(id,name,md5Checksum)')) {
+        if (url.includes('fields=files(id,name,md5Checksum')) {
           // load() file listing — every file carries a checksum.
           return Promise.resolve({
             ok: true,
@@ -263,7 +270,7 @@ describe('DriveSource.save', () => {
       'fetch',
       vi.fn((url: string, options?: { method?: string }) => {
         const method = options?.method
-        if (url.includes('fields=files(id,name,md5Checksum)')) {
+        if (url.includes('fields=files(id,name,md5Checksum')) {
           // load() listing — assetTransfers.json is absent, same as the default beforeEach mock.
           return Promise.resolve({
             ok: true,
@@ -298,7 +305,7 @@ describe('DriveSource.save', () => {
       'fetch',
       vi.fn((url: string, options?: { method?: string }) => {
         const method = options?.method
-        if (url.includes('fields=files(id,name,md5Checksum)')) {
+        if (url.includes('fields=files(id,name,md5Checksum')) {
           return Promise.resolve({
             ok: true,
             json: () =>
@@ -334,7 +341,7 @@ describe('DriveSource.save', () => {
       'fetch',
       vi.fn((url: string, options?: { method?: string }) => {
         const method = options?.method
-        if (url.includes('fields=files(id,name,md5Checksum)')) {
+        if (url.includes('fields=files(id,name,md5Checksum')) {
           return Promise.resolve({
             ok: true,
             json: () =>

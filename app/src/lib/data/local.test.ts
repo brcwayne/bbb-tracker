@@ -91,4 +91,21 @@ describe('LocalFileSource', () => {
     expect(ds.personalTx).toEqual([])
     expect(ds.categories!.length).toBeGreaterThan(0)
   })
+
+  it('extracts lastModified from Response headers', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      const map = {
+        transactions: fixture.transactions, cashflows: fixture.cashflows, snapshots: fixture.snapshots,
+        instruments: fixture.instruments, brokers: fixture.brokers, portfolios: fixture.portfolios,
+        meta: fixture.meta, fxrates: fixture.fxrates,
+      }
+      const name = url.split('/').pop()!.replace('.json', '')
+      if (name === 'assetTransfers' || PERSONAL_NAMES.includes(name as any)) return Promise.resolve({ ok: false, status: 404, headers: new Headers() })
+      const headers = new Headers({ 'last-modified': 'Sat, 12 Sep 2026 11:20:00 GMT' })
+      return Promise.resolve({ ok: true, status: 200, headers, json: () => Promise.resolve(map[name as keyof typeof map]) })
+    }))
+    const source = new LocalFileSource('./data')
+    await source.load()
+    expect(source.lastModified).toBe(new Date('Sat, 12 Sep 2026 11:20:00 GMT').toISOString())
+  })
 })

@@ -84,4 +84,69 @@ describe('Log', () => {
     await fireEvent.click(getAllByLabelText('Düzenle')[0])
     expect((getByLabelText('Lot') as HTMLInputElement).value).toBe('42')
   })
+
+  it('shows realized K/Z on SAT rows and — on AL rows', async () => {
+    const { state, store } = await v()
+    const { getAllByRole } = render(Log, {
+      props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(fixture) }, store },
+    })
+    const rows = getAllByRole('row')
+    // Find ASTOR SAT row (t_c: realized +$175.00, +233.3%)
+    const satAstor = rows.find(
+      (r) => r.textContent?.includes('ASTOR') && r.querySelector('td:nth-child(2)')?.textContent === 'SAT',
+    )
+    expect(satAstor).toBeDefined()
+    expect(satAstor?.textContent).toContain('+$175.00')
+    expect(satAstor?.textContent).toContain('233.3%')
+
+    // Find ASTOR AL row (t_a / t_b: AL rows have — in K/Z cell)
+    const alAstor = rows.find(
+      (r) => r.textContent?.includes('ASTOR') && r.querySelector('td:nth-child(2)')?.textContent === 'AL',
+    )
+    expect(alAstor).toBeDefined()
+    expect(alAstor?.querySelector('.kz-cell')?.textContent).toContain('—')
+  })
+
+  it('filters table to only sales when Sadece satışlar is checked', async () => {
+    const { state, store } = await v()
+    const { getByLabelText, getAllByRole } = render(Log, {
+      props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(fixture) }, store },
+    })
+    // Initially 1 header + 7 rows
+    expect(getAllByRole('row')).toHaveLength(8)
+
+    const checkbox = getByLabelText('Sadece satışlar')
+    await fireEvent.click(checkbox)
+
+    // In fixture, there are 2 SAT transactions (t_c, t_e)
+    const salesRows = getAllByRole('row')
+    expect(salesRows).toHaveLength(1 + 2)
+    expect(salesRows.slice(1).every((r) => r.querySelector('td:nth-child(2)')?.textContent === 'SAT')).toBe(true)
+    expect(salesRows.slice(1).some((r) => r.querySelector('td:nth-child(2)')?.textContent === 'AL')).toBe(false)
+  })
+
+  it('displays K/Z even when a sale is cropped due to oversell', async () => {
+    // In fixture, ASTOR has 200 lot bought. t_c sells 50 -> 150 open.
+    // Add an oversell transaction of 200 lot ASTOR (only 150 available).
+    const oversellTx: (typeof fixture.transactions)[0] = {
+      ...fixture.transactions[2],
+      id: 't_oversell',
+      tarih: '2026-06-01',
+      lot: 200,
+      fiyat_usd: 10,
+      brut_usd: 2000,
+      net_usd: 2000,
+      komisyon_usd: 0,
+    }
+    const ds = { ...fixture, transactions: [...fixture.transactions, oversellTx] }
+    const { state, store } = await v(ds)
+    const { getAllByRole } = render(Log, {
+      props: { dataset: state.dataset, view: state.derived, source: { id: 'local', load: () => Promise.resolve(ds) }, store },
+    })
+    const rows = getAllByRole('row')
+    const overRow = rows.find((r) => r.textContent?.includes('2026') && r.textContent?.includes('ASTOR'))
+    expect(overRow).toBeDefined()
+    // Cropped lot = 150 lot sold @ avg cost 1.5 -> cost $225, revenue 150 * 10 = $1500 -> K/Z +$1,275.00
+    expect(overRow?.querySelector('.kz-cell')?.textContent).toContain('+$1,275.00')
+  })
 })

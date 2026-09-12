@@ -5,7 +5,7 @@
   import type { Writable } from 'svelte/store'
   import { deleteRecord } from '../lib/data/store'
   import { derivePositions } from '../lib/data/derive'
-  import { lot, dateShort, DASH, usd, tryFmt } from '../lib/format'
+  import { lot, dateShort, DASH, usd, tryFmt, pct } from '../lib/format'
   import { money } from '../lib/settings.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
@@ -27,6 +27,7 @@
   let fVarlik = $state('')
   let fKurum = $state('')
   let fPortfoy = $state('')
+  let fOnlySales = $state(false)
 
   const instName = (kod: string) => dataset?.instruments.find((i) => i.kod === kod)?.ad ?? kod
   const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort()
@@ -36,6 +37,10 @@
   const kurumOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.hesap)))
   const portfoyOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.portfoy)))
 
+  const salesByTxId = $derived(
+    new Map((view?.positions.sales ?? []).map((s) => [s.txId, s])),
+  )
+
   // Newest → oldest, by trade date then id for a stable order; then apply the filters.
   const rows = $derived(
     [...(dataset?.transactions ?? [])]
@@ -44,6 +49,7 @@
       )
       .filter(
         (t) =>
+          (!fOnlySales || t.yon === 'SAT') &&
           (!fVarlik || t.enstruman === fVarlik) &&
           (!fKurum || t.hesap === fKurum) &&
           (!fPortfoy || t.portfoy === fPortfoy),
@@ -140,6 +146,12 @@
           {#each portfoyOptions as o}<option value={o}>{o}</option>{/each}
         </select>
       </div>
+      <div class="flt flt-toggle">
+        <label class="toggle-label" for="flt-only-sales">
+          <input id="flt-only-sales" type="checkbox" bind:checked={fOnlySales} />
+          <span>Sadece satışlar</span>
+        </label>
+      </div>
     </div>
 
     <div class="tbl-wrap">
@@ -155,11 +167,13 @@
             <th class="r">Fiyat</th>
             <th class="r">Tutar ₺</th>
             <th class="r">Tutar $</th>
+            <th class="r">K/Z</th>
             <th aria-label="işlemler"></th>
           </tr>
         </thead>
         <tbody>
           {#each rows as t (t.id)}
+            {@const sale = salesByTxId.get(t.id)}
             <tr class:editing={editing?.id === t.id} class:deleting={deleteTarget?.id === t.id}>
               <td class="nowrap">{dateShort(t.tarih)}</td>
               <td class:pos={t.yon === 'AL'} class:neg={t.yon === 'SAT'}>{t.yon}</td>
@@ -176,6 +190,20 @@
                 {#if kurStr(t)}<span class="kur">kur {kurStr(t)}</span>{/if}
               </td>
               <td class="r num">{tutarUsdStr(t)}</td>
+              <td class="r num kz-cell">
+                {#if t.yon === 'SAT' && sale}
+                  <span class:gain={sale.kzUsd > 0} class:loss={sale.kzUsd < 0}>
+                    {money(sale.kzUsd, { sign: true })}
+                  </span>
+                  {#if sale.kzPct != null}
+                    <span class="kz-pct" class:gain={sale.kzPct > 0} class:loss={sale.kzPct < 0}>
+                      {pct(sale.kzPct, 1)}
+                    </span>
+                  {/if}
+                {:else}
+                  <span class="muted">{DASH}</span>
+                {/if}
+              </td>
               <td class="act">
                 {#if t.kaynak !== 'manual'}
                   <span class="lock" title="Excel'den gelen kayıt — düzenlerken dikkat">🔒</span>
@@ -194,7 +222,7 @@
             </tr>
             {#if editing?.id === t.id}
               <tr class="inline-row inline-edit-row">
-                <td colspan="10">
+                <td colspan="11">
                   <div class="inline-edit-box">
                     <div class="inline-box-header">
                       <span class="inline-box-title">
@@ -222,7 +250,7 @@
             {/if}
             {#if deleteTarget?.id === t.id}
               <tr class="inline-row inline-delete-row">
-                <td colspan="10">
+                <td colspan="11">
                   <div class="confirm-delete">
                     <p>
                       <strong>{dateShort(deleteTarget.tarih)} · {deleteTarget.yon} {instName(deleteTarget.enstruman)} · {lot(deleteTarget.lot)} lot</strong>
@@ -276,7 +304,20 @@
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
-    font-size: 0.85em;
+    font-size: 0.8125rem;
+  }
+  .flt-toggle {
+    justify-content: flex-end;
+    padding-bottom: 0.35rem;
+  }
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.8125rem;
+    color: var(--ink);
   }
   .flt label {
     color: var(--ink-soft);
@@ -413,7 +454,7 @@
   thead th {
     color: var(--ink-soft);
     font-weight: 600;
-    font-size: 0.82em;
+    font-size: 0.8125rem;
     letter-spacing: 0.02em;
     border-bottom-color: var(--ink-soft);
   }
@@ -438,16 +479,35 @@
     color: var(--loss);
     font-weight: 600;
   }
+  td .gain {
+    color: var(--gain);
+    font-weight: 600;
+  }
+  td .loss {
+    color: var(--loss);
+    font-weight: 600;
+  }
+  td .muted {
+    color: var(--ink-soft);
+  }
   td .sub {
     color: var(--ink-soft);
-    font-size: 0.82em;
+    font-size: 0.8125rem;
     margin-left: 0.35rem;
   }
   td .kur {
     display: block;
     color: var(--ink-soft);
-    font-size: 0.78em;
+    font-size: 0.8125rem;
     font-weight: 400;
+  }
+  .kz-cell {
+    white-space: nowrap;
+  }
+  .kz-pct {
+    font-size: 0.8125rem;
+    margin-left: 0.25rem;
+    opacity: 0.85;
   }
   tbody tr.editing {
     background: var(--surface);
