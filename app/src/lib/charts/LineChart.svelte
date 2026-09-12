@@ -9,6 +9,8 @@
     height = 200,
     pad = 24,
     fmtY = (y: number) => String(y),
+    onPointClick,
+    selectedPoint = null,
   }: {
     series?: { x: number; y: number }[]
     labels?: string[]
@@ -16,6 +18,8 @@
     height?: number
     pad?: number
     fmtY?: (y: number) => string
+    onPointClick?: (index: number, point: { x: number; y: number }, label?: string) => void
+    selectedPoint?: number | null
   } = $props()
 
   const xs = $derived(series.map((d) => d.x))
@@ -39,11 +43,7 @@
 
   let hoverI = $state<number | null>(null)
 
-  // Client px → viewBox px, then snap to the nearest plotted point.
-  function onMove(e: MouseEvent) {
-    const r = (e.currentTarget as SVGElement).getBoundingClientRect()
-    if (!r.width || pts.length === 0) return
-    const localX = ((e.clientX - r.left) / r.width) * width
+  function findNearestPoint(localX: number): number {
     let best = 0
     let bestD = Infinity
     for (let i = 0; i < pts.length; i++) {
@@ -53,7 +53,24 @@
         best = i
       }
     }
-    hoverI = best
+    return best
+  }
+
+  // Client px → viewBox px, then snap to the nearest plotted point.
+  function onMove(e: MouseEvent) {
+    const r = (e.currentTarget as SVGElement).getBoundingClientRect()
+    if (!r.width || pts.length === 0) return
+    const localX = ((e.clientX - r.left) / r.width) * width
+    hoverI = findNearestPoint(localX)
+  }
+
+  function onClick(e: MouseEvent) {
+    if (!onPointClick || pts.length === 0) return
+    const r = (e.currentTarget as SVGElement).getBoundingClientRect()
+    if (!r.width) return
+    const localX = ((e.clientX - r.left) / r.width) * width
+    const best = findNearestPoint(localX)
+    onPointClick(best, series[best], labels[best])
   }
 
   const tipX = $derived(
@@ -61,11 +78,22 @@
   )
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
 <svg
   viewBox={`0 0 ${width} ${height}`}
-  role="img"
+  role={onPointClick ? 'button' : 'img'}
+  tabindex={onPointClick ? 0 : undefined}
   aria-label="çizgi grafik"
+  class:clickable={!!onPointClick}
+  style:cursor={onPointClick ? 'pointer' : undefined}
   onmousemove={onMove}
+  onclick={onClick}
+  onkeydown={(e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && hoverI != null && onPointClick) {
+      e.preventDefault()
+      onPointClick(hoverI, series[hoverI], labels[hoverI])
+    }
+  }}
   onmouseleave={() => (hoverI = null)}
 >
   <rect x="0" y="0" {width} {height} fill="transparent" />
@@ -98,6 +126,13 @@
     stroke="var(--gain)"
     stroke-width="1.25"
   />
+
+  {#if selectedPoint != null && pts[selectedPoint]}
+    {@const sp = pts[selectedPoint]}
+    <circle cx={sp[0]} cy={sp[1]} r="6" fill="none" stroke="var(--gold)" stroke-width="2" />
+    <circle cx={sp[0]} cy={sp[1]} r="3.5" fill="var(--gold)" />
+  {/if}
+
   {#if hoverI != null}
     {@const p = pts[hoverI]}
     <line x1={p[0]} x2={p[0]} y1={pad} y2={height - pad} stroke="var(--hairline)" stroke-width="1" />

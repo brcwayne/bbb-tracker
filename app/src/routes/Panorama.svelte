@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Dataset } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
-  import { pct, dateShort, DASH } from '../lib/format'
+  import type { DataSource } from '../lib/data/source'
+  import { pct, dateShort, dateTimeShort, DASH, monthLabel } from '../lib/format'
   import { money as formatMoney, settings, PERIODS } from '../lib/settings.svelte'
   import KpiBand from '../lib/ui/KpiBand.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
@@ -12,7 +13,13 @@
   import Histogram from '../lib/charts/Histogram.svelte'
   import BarChart from '../lib/charts/BarChart.svelte'
   import { prices } from '../lib/prices.svelte'
-  import { unrealizedTotalUsd } from '../lib/data/unrealized'
+  import { unrealizedTotalUsd, type PriceLookup } from '../lib/data/unrealized'
+  import { CATEGORICAL } from '../lib/charts/palette'
+  import { allocationByClassWithCash, cashRatios } from '../lib/data/allocation'
+  import { liveEquity, type LiveEquity } from '../lib/data/dashboard'
+  import { buildLedger } from '../lib/data/ledger'
+  import { buildWaterfall, type WaterfallBreakdown } from '../lib/data/waterfall'
+  import { holdingsByPortfolio } from '../lib/data/breakdowns'
 
   // Panorama displays high-level macro overview numbers, so strip cents/kuruş (whole: true)
   // to avoid visual clutter and excessively long numbers.
@@ -21,38 +28,91 @@
     opts: { sign?: boolean; whole?: boolean } = {},
   ) => formatMoney(nUsd, { whole: true, ...opts })
 
-  // RULING P1-3 annotation form; props optional, guarded in the template.
-  // The prop name `derived` collides with the `$derived` rune, so the view
-  // model is assembled by a plain function under a template guard.
-  let { dataset, derived, view }: { dataset?: Dataset; derived?: DerivedBundle; view?: DerivedBundle } = $props()
-
-  const PALETTE = ['var(--gain)', 'var(--gold)', 'var(--loss)', 'var(--ink-soft)']
+  let {
+    dataset,
+    derived,
+    view,
+    source,
+  }: {
+    dataset?: Dataset
+    derived?: DerivedBundle
+    view?: DerivedBundle
+    source?: DataSource
+  } = $props()
 
   const toneOf = (n: number): 'gain' | 'loss' | 'neutral' =>
     n > 0 ? 'gain' : n < 0 ? 'loss' : 'neutral'
 
   function buildView(ds: Dataset, d: DerivedBundle) {
     void settings.currency // re-run buildView when the display currency flips
+    void settings.basis // re-run buildView when valuation basis flips (H8)
     void prices.status // re-run buildView when live prices land
-    const openRaw = d.positions.open.filter((pp) => pp.lot > 1e-9)
-    const unrealTotal = unrealizedTotalUsd(openRaw, ds.instruments, {
+
+    const p: PriceLookup = {
       bySymbol: prices.bySymbol,
       usdPerGram: prices.usdPerGram,
-    })
+    }
+
+    const openRaw = d.positions.open.filter((pp) => pp.lot > 1e-9)
+    const unrealTotal = unrealizedTotalUsd(openRaw, ds.instruments, p)
     const snaps = d.snapshots
     const lastSnap = snaps.at(-1)
     const equityUsd = lastSnap ? lastSnap.toplamOzkaynak_usd : NaN
     const realizedUsd = d.positions.realizedTotalUsd
-    // Live total: meta.nakitHesapBazli is the migration-day baseline only —
-    // summing it directly (as this used to) freezes "Nakit" at that date.
-    // d.cashByHesap starts from that same baseline and adds every non-
-    // migration transaction/cashflow since, so its sum stays current.
+
     const nakitUsd = Object.values(d.cashByHesap).reduce((s, v) => s + v, 0)
-    const ytd = d.periods.find((p) => p.period === 'YTD')
+    const ytd = d.periods.find((pp) => pp.period === 'YTD')
     const ytdUsd = ytd ? ytd.netKzUsd : NaN
-    const periodLabel = PERIODS.find((p) => p.key === settings.period)?.label ?? ''
+    const periodLabel = PERIODS.find((pp) => pp.key === settings.period)?.label ?? ''
+
+    // G3, G4 & H8 allocation and cash ratios
+    const alloc = allocationByClassWithCash(d.positions.open, ds.instruments, nakitUsd, p, settings.basis)
+
+    const portLedger = buildLedger(ds.transactions, ds.assetTransfers ?? [], 'portfoy')
+    const xauOpen = portLedger.byScope.get('XAU')?.open ?? []
+    const cashRatio = cashRatios(d.positions.open, ds.instruments, nakitUsd, p, xauOpen)
+
+    // H8 Portfolio breakdown respecting settings.basis
+    const pfGroups = holdingsByPortfolio(
+      d.positions.open,
+      ds.transactions,
+      ds.instruments,
+      ds.assetTransfers ?? [],
+      p,
+    )
+    const isDeger = settings.basis === 'deger'
+    const pfItems = pfGroups.map((g) => {
+      const val = isDeger ? (g.totalValueUsd ?? g.totalCostUsd) : g.totalCostUsd
+      const hasFallback = isDeger && g.rows.some((r) => r.guncelFiyatUsd == null)
+      return { key: g.key, tutarUsd: val, hasFallback }
+    })
+    const pfTotal = pfItems.reduce((s, r) => s + r.tutarUsd, 0) || 1
+    const pfSorted = pfItems.sort((a, b) => b.tutarUsd - a.tutarUsd)
+    const hasUnpricedPortfolio = isDeger && pfItems.some((r) => r.hasFallback)
+
+    // G10 live equity
+    const live = liveEquity(ds, d.positions, p, nakitUsd)
+
+    // Month note
+    const todayIso = new Date().toISOString().slice(0, 10)
+    const thisMonthIso = todayIso.slice(0, 7)
+    const snapMonthIso = lastSnap ? lastSnap.tarih.slice(0, 7) : ''
+    const isPastMonth = snapMonthIso !== '' && snapMonthIso < thisMonthIso
+    const monthNote = isPastMonth ? `son kapanan ay · ${monthLabel(todayIso)} verisi henüz girilmedi` : undefined
+
+    const monthAy = d.monthPerf ? d.monthPerf.ay : (lastSnap ? monthLabel(lastSnap.tarih) : 'Ağustos 2026')
+
+    const isDrive = source?.id === 'drive'
+    const kaynakLabel = isDrive ? 'Google Drive' : 'Yerel dosya'
+    const sonYazmaRaw = source?.lastModified ?? ds.meta.olusturulma
+    const sonYazma = sonYazmaRaw ? dateTimeShort(sonYazmaRaw) : '—'
 
     return {
+      alloc,
+      cashRatio,
+      live,
+      monthAy,
+      monthNote,
       kpiItems: [
         { label: 'Toplam Özkaynak', value: money(equityUsd), num: equityUsd, fmt: (n: number) => money(n) },
         {
@@ -79,24 +139,31 @@
         },
         { label: 'İşlem', value: String(ds.transactions.length) },
       ],
-      headerNote:
-        `son bilinen — ${dateShort(ds.meta.olusturulma.slice(0, 10))}` +
-        (settings.period === 'all' ? '' : ` · ${periodLabel}`),
-      // Panorama's equity curve is a "recent shape" view — last ~12 months. The full
-      // all-time curve lives on the Aylık Rapor page.
+      metaStrip: {
+        kaynak: kaynakLabel,
+        sonYazma,
+        islemSayisi: ds.transactions.length,
+        isDrive,
+        fiyatZamani: prices.asOf ? dateShort(prices.asOf.slice(0, 10)) : 'alınamadı',
+        kur: settings.rate ? settings.rate.toFixed(2) : '—',
+        periodLabel: settings.period === 'all' ? '' : periodLabel,
+      },
+      equitySnaps: snaps.slice(-13),
       equitySeries: snaps.slice(-13).map((s, i) => ({ x: i, y: s.toplamOzkaynak_usd })),
       equityLabels: snaps.slice(-13).map((s) => dateShort(s.tarih.slice(0, 10))),
-      classSlices: d.byClass.map((r) => ({ label: r.key, value: r.tutarUsd })),
-      classTotal: d.byClass.reduce((s, r) => s + r.tutarUsd, 0),
-      classLegend: d.byClass.map((r) => ({
-        label: r.key,
+      classSlices: alloc.slices.map((r) => ({ label: r.etiket, value: r.tutarUsd })),
+      classTotal: alloc.toplamUsd,
+      classUnpriced: alloc.unpricedFallback,
+      classLegend: alloc.slices.map((r) => ({
+        label: r.etiket,
         value: `${money(r.tutarUsd)} · ${pct(r.pay)}`,
       })),
-      portfolioSlices: d.byPortfolio.map((r) => ({ label: r.key, value: r.tutarUsd })),
-      portfolioTotal: d.byPortfolio.reduce((s, r) => s + r.tutarUsd, 0),
-      portfolioLegend: d.byPortfolio.map((r) => ({
+      portfolioSlices: pfSorted.map((r) => ({ label: r.key, value: r.tutarUsd })),
+      portfolioTotal: pfTotal,
+      portfolioUnpriced: hasUnpricedPortfolio,
+      portfolioLegend: pfSorted.map((r) => ({
         label: r.key,
-        value: `${money(r.tutarUsd)} · ${pct(r.pay)}`,
+        value: `${money(r.tutarUsd)} · ${pct(r.tutarUsd / pfTotal)}`,
       })),
       histBuckets: d.buckets.map((b) => ({
         label: b.label,
@@ -127,19 +194,18 @@
         value: c.gerceklesmisKzUsd,
       })),
       periods: d.periods,
-      // One reconciled summary instead of the old hero band + two overlapping mini panels
-      // (which showed the same concepts under 5 different TR/EN labels and two different
-      // "total equity" numbers). "Güncel Özkaynak" is the actual latest monthly snapshot;
-      // everything else is a supporting figure around it.
       ozet:
         view == null
           ? null
           : (() => {
               const b = view.dashboard
+              const toplamGetiri = equityUsd - b.toplamSermaye
+              const toplamGetiriPct = b.toplamSermaye > 0 ? toplamGetiri / b.toplamSermaye : null
               return {
                 guncelOzkaynak: equityUsd,
                 yatirilanSermaye: b.toplamSermaye,
-                ozkaynakGetiri: equityUsd - b.toplamSermaye,
+                toplamGetiri,
+                toplamGetiriPct,
                 gerceklesmisKz: b.realized,
                 gerceklesmemisKz: unrealTotal,
                 temettu: b.temettu,
@@ -169,13 +235,31 @@
       fmt: (v: number | null) => (v == null ? DASH : pct(v)),
     },
   ]
+
+  let selectedSnapIdx = $state<number | null>(null)
+
+  function getWaterfall(
+    ds: Dataset,
+    d: DerivedBundle,
+    equitySnaps: typeof d.snapshots,
+    idx: number | null,
+  ): WaterfallBreakdown | null {
+    if (idx == null) return null
+    const snap = equitySnaps[idx]
+    if (!snap) return null
+    const allSnaps = d.snapshots
+    const fullIdx = allSnaps.indexOf(snap)
+    const prevSnap = fullIdx > 0 ? allSnaps[fullIdx - 1] : undefined
+    const ay = snap.tarih.slice(0, 7)
+    return buildWaterfall(ay, snap, prevSnap, d.positions.sales, ds.transactions)
+  }
 </script>
 
 {#snippet legend(rows: { label: string; value: string }[])}
   <ul class="legend">
     {#each rows as r, i}
       <li>
-        <span class="swatch" style:background={PALETTE[i % PALETTE.length]}></span>
+        <span class="swatch" style:background={CATEGORICAL[i % CATEGORICAL.length]}></span>
         <span class="lg-label">{r.label}</span>
         <span class="lg-value num">{r.value}</span>
       </li>
@@ -185,29 +269,109 @@
 
 {#if dataset && derived}
   {@const vm = buildView(dataset, derived)}
+  {@const waterfall = getWaterfall(dataset, derived, vm.equitySnaps, selectedSnapIdx)}
   <section class="panorama">
-    {#if vm.ozet}
-      <SectionHeader title="Özet" />
-      <dl class="mini">
+    <!-- Künye Şeridi (K7 / H2) -->
+    <div class="meta-strip">
+      <span>Kaynak: {vm.metaStrip.kaynak}</span>
+      <span class="sep">·</span>
+      <span>son yazma: {vm.metaStrip.sonYazma}</span>
+      <span class="sep">·</span>
+      <span>{vm.metaStrip.islemSayisi} işlem</span>
+      {#if !vm.metaStrip.isDrive}
+        <span class="badge local-warn" data-testid="local-badge" title="Yerel dosya kopyası — canlı veri olmayabilir">
+          ⚠ yerel kopya — canlı veri olmayabilir
+        </span>
+      {/if}
+      <span class="sep">·</span>
+      <span>Fiyatlar: {vm.metaStrip.fiyatZamani}</span>
+      <span class="sep">·</span>
+      <span>Kur: {vm.metaStrip.kur} ₺/$</span>
+      {#if vm.metaStrip.periodLabel}
+        <span class="sep">·</span>
+        <span>{vm.metaStrip.periodLabel}</span>
+      {/if}
+    </div>
+
+    <!-- Blok 1: BU AY — <Ay Adı> (K5) -->
+    {#if vm.month}
+      <SectionHeader title={`Bu Ay — ${vm.monthAy}`} note={vm.monthNote} />
+      <dl class="mini month">
         <div>
-          <dt>Güncel Özkaynak <span class="hint">son ay</span></dt>
-          <dd class="num strong">{money(vm.ozet.guncelOzkaynak)}</dd>
+          <dt>Başlangıç Sermaye <span class="scope">{vm.monthAy}</span></dt>
+          <dd class="num">{money(vm.month.begCapital as number)}</dd>
         </div>
-        <div><dt>Yatırılan Sermaye</dt><dd class="num">{money(vm.ozet.yatirilanSermaye)}</dd></div>
         <div>
-          <dt>Özkaynak Getirisi <span class="hint">güncel − yatırılan</span></dt>
-          <dd class="num" class:pos={vm.ozet.ozkaynakGetiri > 0} class:neg={vm.ozet.ozkaynakGetiri < 0}>
-            {money(vm.ozet.ozkaynakGetiri, { sign: true })}
+          <dt>Eklenen Mevduat <span class="scope">{vm.monthAy}</span></dt>
+          <dd class="num">{money(vm.month.addDeposit)}</dd>
+        </div>
+        <div>
+          <dt>Alınan Temettü <span class="scope">{vm.monthAy}</span></dt>
+          <dd class="num">{money(vm.month.divReceived)}</dd>
+        </div>
+        <div>
+          <dt>
+            Net K/Z <span class="scope">{vm.monthAy}</span>
+            {#if vm.month.begCapital && vm.month.begCapital > 0}
+              <span class="hint">{pct(vm.month.netKz / vm.month.begCapital)}</span>
+            {/if}
+          </dt>
+          <dd class="num" class:pos={vm.month.netKz > 0} class:neg={vm.month.netKz < 0}>
+            {money(vm.month.netKz, { sign: true })}
           </dd>
         </div>
         <div>
-          <dt>Gerçekleşmiş K/Z</dt>
+          <dt>Çekim <span class="scope">{vm.monthAy}</span></dt>
+          <dd class="num">{money(vm.month.withdrawal)}</dd>
+        </div>
+        <div>
+          <dt>Dönem Sonu <span class="scope">{vm.monthAy}</span></dt>
+          <dd class="num strong">{money(vm.month.endCapital)}</dd>
+        </div>
+      </dl>
+    {/if}
+
+    <!-- Blok 2: Özkaynak (K5) -->
+    {#if vm.ozet}
+      <SectionHeader title="Özkaynak" />
+      <dl class="mini">
+        <div>
+          <dt>Güncel Özkaynak <span class="scope">{vm.monthAy}</span><span class="hint">aylık rapordaki son kapanış</span></dt>
+          <dd class="num strong">{money(vm.ozet.guncelOzkaynak)}</dd>
+        </div>
+        <div>
+          <dt>Canlı Özkaynak <span class="scope">bugün</span><span class="hint">açık pozisyon değeri + nakit</span></dt>
+          <dd class="num strong">{money(vm.live.canliOzkaynakUsd)}</dd>
+        </div>
+        <div>
+          <dt>Yatırılan Sermaye <span class="scope">tüm zamanlar</span><span class="hint">bugüne dek yatırdığın para</span></dt>
+          <dd class="num">{money(vm.ozet.yatirilanSermaye)}</dd>
+        </div>
+        <div>
+          <dt>
+            Toplam Getiri <span class="scope">tüm zamanlar</span>
+            <span class="hint">bugünkü değerin, yatırdığın toplam paranın ne kadar üstünde</span>
+          </dt>
+          <dd class="num" class:pos={vm.ozet.toplamGetiri > 0} class:neg={vm.ozet.toplamGetiri < 0}>
+            {money(vm.ozet.toplamGetiri, { sign: true })}
+            {#if vm.ozet.toplamGetiriPct != null}
+              <span class="hint inline">{pct(vm.ozet.toplamGetiriPct)}</span>
+            {/if}
+          </dd>
+        </div>
+      </dl>
+
+      <!-- Blok 3: Kâr / Zarar — tüm zamanlar (K5) -->
+      <SectionHeader title="Kâr / Zarar" note="tüm zamanlar" />
+      <dl class="mini">
+        <div>
+          <dt>Gerçekleşmiş K/Z <span class="scope">tüm zamanlar</span></dt>
           <dd class="num" class:pos={vm.ozet.gerceklesmisKz > 0} class:neg={vm.ozet.gerceklesmisKz < 0}>
             {money(vm.ozet.gerceklesmisKz, { sign: true })}
           </dd>
         </div>
         <div>
-          <dt>Gerçekleşmemiş K/Z</dt>
+          <dt>Gerçekleşmemiş K/Z <span class="scope">tüm zamanlar</span></dt>
           <dd
             class="num"
             class:pos={(vm.ozet.gerceklesmemisKz ?? 0) > 0}
@@ -216,57 +380,204 @@
             {vm.ozet.gerceklesmemisKz == null ? DASH : money(vm.ozet.gerceklesmemisKz, { sign: true })}
           </dd>
         </div>
-        <div><dt>Alınan Temettü</dt><dd class="num">{money(vm.ozet.temettu)}</dd></div>
-        <div><dt>Çekimler</dt><dd class="num">{vm.ozet.cekimler === 0 ? DASH : money(vm.ozet.cekimler)}</dd></div>
-        <div><dt>Nakit</dt><dd class="num">{money(vm.ozet.nakit)}</dd></div>
+        <div>
+          <dt>Alınan Temettü <span class="scope">tüm zamanlar</span></dt>
+          <dd class="num">{money(vm.ozet.temettu)}</dd>
+        </div>
+        <div>
+          <dt>Çekimler <span class="scope">tüm zamanlar</span></dt>
+          <dd class="num">{vm.ozet.cekimler === 0 ? DASH : money(vm.ozet.cekimler)}</dd>
+        </div>
       </dl>
 
+      <!-- Blok 4: Nakit (G3 / G4) -->
+      <SectionHeader title="Nakit" />
+      <dl class="mini">
+        <div>
+          <dt>Nakit & Para Piyasası <span class="scope">bugün</span><span class="hint">kurum bakiyeleri + para piyasası fonları</span></dt>
+          <dd class="num">{money(vm.cashRatio.nakitVeFonParaUsd)}</dd>
+        </div>
+        <div>
+          <dt>Nakit Oranı (XAU hariç) <span class="scope">bugün</span><span class="hint">altın hariç portföyün likit kısmı</span></dt>
+          <dd class="num strong">{vm.cashRatio.nakitOrani == null ? DASH : pct(vm.cashRatio.nakitOrani)}</dd>
+        </div>
+        <div>
+          <dt>— sadece nakit <span class="scope">bugün</span><span class="hint">para piyasası fonları hariç</span></dt>
+          <dd class="num">{vm.cashRatio.sadeceNakitOrani == null ? DASH : pct(vm.cashRatio.sadeceNakitOrani)}</dd>
+        </div>
+      </dl>
+
+      <!-- Blok 5: Kapanan İşlemler — tüm zamanlar (K5) -->
       <SectionHeader title="Kapanan İşlemler" note="tüm zamanlar" />
       <dl class="mini">
-        <div><dt>Toplam Kazanç</dt><dd class="num pos">{money(vm.ozet.kapananKazanc)}</dd></div>
-        <div><dt>Toplam Kayıp</dt><dd class="num neg">{money(vm.ozet.kapananKayip)}</dd></div>
         <div>
-          <dt>Net</dt>
-          <dd class="num" class:pos={vm.ozet.kapananNet > 0} class:neg={vm.ozet.kapananNet < 0}>
+          <dt>Toplam Kazanç <span class="scope">tüm zamanlar</span></dt>
+          <dd class="num pos">{money(vm.ozet.kapananKazanc)}</dd>
+        </div>
+        <div>
+          <dt>Toplam Kayıp <span class="scope">tüm zamanlar</span></dt>
+          <dd class="num neg">{money(vm.ozet.kapananKayip)}</dd>
+        </div>
+        <div>
+          <dt>Net <span class="scope">tüm zamanlar</span></dt>
+          <dd class="num strong" class:pos={vm.ozet.kapananNet > 0} class:neg={vm.ozet.kapananNet < 0}>
             {money(vm.ozet.kapananNet, { sign: true })}
           </dd>
         </div>
       </dl>
-
-      {#if vm.month}
-        <SectionHeader title="Bu Ay" />
-        <dl class="mini month">
-          <div><dt>Ay</dt><dd>{vm.month.ay}</dd></div>
-          <div><dt>Başlangıç Sermaye</dt><dd class="num">{money(vm.month.begCapital as number)}</dd></div>
-          <div><dt>Eklenen Mevduat</dt><dd class="num">{money(vm.month.addDeposit)}</dd></div>
-          <div><dt>Alınan Temettü</dt><dd class="num">{money(vm.month.divReceived)}</dd></div>
-          <div><dt>Net K/Z</dt><dd class="num" class:pos={vm.month.netKz > 0} class:neg={vm.month.netKz < 0}>{money(vm.month.netKz, { sign: true })}</dd></div>
-          <div><dt>Çekim</dt><dd class="num">{money(vm.month.withdrawal)}</dd></div>
-          <div><dt>Dönem Sonu</dt><dd class="num">{money(vm.month.endCapital)}</dd></div>
-        </dl>
-      {/if}
     {/if}
+
+    <!-- Blok 6: KpiBand -->
     <KpiBand items={vm.kpiItems} />
 
-    <SectionHeader title="Panorama" note={vm.headerNote} />
+    <!-- Blok 7: Grafikler -->
+    <SectionHeader title="Özkaynak eğrisi" note="son 12 ay · aya tıklayarak ayrıştırmayı gör" />
+    <LineChart
+      series={vm.equitySeries}
+      labels={vm.equityLabels}
+      fmtY={(v) => money(v)}
+      selectedPoint={selectedSnapIdx}
+      onPointClick={(idx) => (selectedSnapIdx = selectedSnapIdx === idx ? null : idx)}
+    />
 
-    <SectionHeader title="Özkaynak eğrisi" note="son 12 ay" />
-    <LineChart series={vm.equitySeries} labels={vm.equityLabels} fmtY={(v) => money(v)} />
+    {#if selectedSnapIdx != null}
+      <div class="waterfall-card" data-testid="waterfall-breakdown">
+        {#if waterfall}
+          <div class="wf-header">
+            <div>
+              <div class="wf-title">
+                <h3>Neden değişti? · {waterfall.ayLabel}</h3>
+                <span class="wf-tag">Şelale Dökümü</span>
+              </div>
+              <p class="wf-subtitle">Aylık özkaynak hareketinin kalem kalem ayrıştırması</p>
+            </div>
+            <button class="wf-close" onclick={() => (selectedSnapIdx = null)} aria-label="Kapat">✕</button>
+          </div>
+
+          <div class="wf-steps">
+            {#each waterfall.steps as step}
+              <div
+                class="wf-row"
+                class:wf-end={step.sign === '='}
+                class:wf-start={step.label === 'Başlangıç'}
+                class:wf-info={step.isInfo}
+              >
+                <div class="wf-row-label">
+                  <div class="wf-label-line">
+                    <span class="wf-sign">{step.sign}</span>
+                    <span class="wf-name">{step.label}</span>
+                  </div>
+                  {#if step.hint}
+                    <span class="hint">{step.hint}</span>
+                  {/if}
+                  {#if step.altLabel && step.altTutarUsd != null}
+                    <div class="wf-alt-note">
+                      <span>Defter (SaleEvent): <strong>{formatMoney(waterfall.gerceklesenKar)}</strong></span>
+                      <span>·</span>
+                      <span>{step.altLabel}: <strong>{formatMoney(step.altTutarUsd)}</strong></span>
+                      {#if step.farkUsd != null}
+                        <span class="hint inline">({step.farkLabel}: {formatMoney(step.farkUsd, { sign: true })})</span>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+                <div
+                  class="wf-row-val num"
+                  class:pos={!step.isInfo && step.sign === '+' && step.tutarUsd > 0}
+                  class:neg={!step.isInfo && step.sign === '−' && step.tutarUsd > 0}
+                  class:strong={step.sign === '='}
+                  class:info={step.isInfo}
+                >
+                  {!step.isInfo && step.sign === '−' ? '−' : !step.isInfo && step.sign === '+' ? '+' : ''}{formatMoney(step.tutarUsd)}
+                </div>
+              </div>
+            {/each}
+          </div>
+
+          <!-- Ayın işlemleri -->
+          <details class="wf-txns">
+            <summary>
+              O ayın işlemleri ({waterfall.monthTransactions.length})
+            </summary>
+            {#if waterfall.monthTransactions.length === 0}
+              <p class="wf-empty">Bu ayda işlem bulunmuyor.</p>
+            {:else}
+              <div class="wf-txns-table-wrap">
+                <table class="wf-table">
+                  <thead>
+                    <tr>
+                      <th>Tarih</th>
+                      <th>Yön</th>
+                      <th>Enstrüman</th>
+                      <th>Portföy</th>
+                      <th class="num">Lot</th>
+                      <th class="num">Fiyat (USD)</th>
+                      <th class="num">Net (USD)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each waterfall.monthTransactions as tx}
+                      <tr>
+                        <td>{dateShort(tx.tarih)}</td>
+                        <td>
+                          <span class="badge" class:buy={tx.yon === 'AL'} class:sell={tx.yon === 'SAT'}>
+                            {tx.yon}
+                          </span>
+                        </td>
+                        <td class="strong">{tx.enstruman}</td>
+                        <td>{tx.portfoy}</td>
+                        <td class="num">{tx.lot.toLocaleString('tr-TR')}</td>
+                        <td class="num">{tx.fiyat_usd ? formatMoney(tx.fiyat_usd) : '—'}</td>
+                        <td class="num">{formatMoney(tx.net_usd)}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
+          </details>
+        {:else}
+          <div class="wf-header">
+            <div>
+              <h3>Neden değişti?</h3>
+              <p class="wf-subtitle">Seçilen ay için detaylı rapor kaydı (snapshot) bulunamadı.</p>
+            </div>
+            <button class="wf-close" onclick={() => (selectedSnapIdx = null)} aria-label="Kapat">✕</button>
+          </div>
+        {/if}
+      </div>
+    {/if}
 
     <div class="grid-2">
       <div class="panel">
-        <SectionHeader title="Varlık sınıfı dağılımı" note="maliyet bazlı" />
+        <SectionHeader
+          title="Varlık sınıfı dağılımı"
+          note={settings.basis === 'deger' ? 'güncel değer · nakit dahil' : 'maliyet · nakit dahil'}
+        />
         <div class="donut-row">
           <Donut slices={vm.classSlices} total={vm.classTotal} fmt={(v) => money(v)} />
           {@render legend(vm.classLegend)}
         </div>
+        {#if settings.basis === 'deger' && vm.classUnpriced}
+          <p class="hint unpriced-hint">
+            * Fiyatı gelmemiş satırlar maliyetine dahil edilmiştir.
+          </p>
+        {/if}
       </div>
       <div class="panel">
-        <SectionHeader title="Portföy dağılımı" note="maliyet bazlı" />
+        <SectionHeader
+          title="Portföy dağılımı"
+          note={settings.basis === 'deger' ? 'güncel değer' : 'maliyet bazlı'}
+        />
         <div class="donut-row">
           <Donut slices={vm.portfolioSlices} total={vm.portfolioTotal} fmt={(v) => money(v)} />
           {@render legend(vm.portfolioLegend)}
         </div>
+        {#if settings.basis === 'deger' && vm.portfolioUnpriced}
+          <p class="hint unpriced-hint">
+            * Fiyatı gelmemiş satırlar maliyetine dahil edilmiştir.
+          </p>
+        {/if}
       </div>
     </div>
 
@@ -306,6 +617,20 @@
     max-width: 900px;
     margin: 0 auto;
   }
+  .meta-strip {
+    font-size: 0.8125rem;
+    color: var(--ink-soft);
+    margin-bottom: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .meta-strip .sep {
+    color: var(--hairline);
+  }
   .grid-2 {
     display: grid;
     grid-template-columns: 1fr;
@@ -331,7 +656,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    font-size: 0.85em;
+    font-size: 0.875rem;
   }
   .legend li {
     display: flex;
@@ -349,9 +674,11 @@
   .lg-label {
     color: var(--ink-soft);
     min-width: 4.5rem;
+    font-size: 0.875rem;
   }
   .lg-value {
     color: var(--ink);
+    font-size: 0.9375rem;
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum' 1;
   }
@@ -366,28 +693,56 @@
     grid-template-columns: 1fr;
     gap: 0.25rem 1.5rem;
   }
+  @media (min-width: 720px) {
+    .mini {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .mini dt {
+    color: var(--ink-soft);
+    font-size: 0.875rem;
+  }
   .mini dt .hint {
-    font-size: 0.78em;
+    display: block;
+    font-size: 0.8125rem;
     color: var(--ink-soft);
     font-weight: 400;
+    margin-top: 0.15rem;
+  }
+  .mini dt .scope {
+    display: inline-block;
+    font-size: 0.8125rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    padding: 0 0.3rem;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+  }
+  .mini dd {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .mini dd .hint.inline {
+    display: inline;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--ink-soft);
+    margin-left: 0.35rem;
   }
   .mini dd.strong {
-    font-size: 1.15em;
+    font-size: 1.5rem;
+    border-top: 2px solid var(--hairline);
+    padding-top: 0.2rem;
   }
   .mini div {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
     border-bottom: 1px solid var(--hairline);
-    padding: 0.3rem 0;
-  }
-  .mini dt {
-    color: var(--ink-soft);
-    font-size: 0.82em;
-  }
-  .mini dd {
-    margin: 0;
-    font-weight: 600;
+    padding: 0.45rem 0;
   }
   .mini dd.pos {
     color: var(--gain);
@@ -396,6 +751,199 @@
     color: var(--loss);
   }
   .mini.month {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 720px) {
+    .mini.month {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .waterfall-card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin: 1rem 0 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+  .wf-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .wf-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .wf-title h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+  }
+  .wf-tag {
+    font-size: 0.8125rem;
+    background: var(--hairline);
+    color: var(--ink-soft);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+  .wf-subtitle {
+    margin: 0.25rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--ink-soft);
+  }
+  .wf-close {
+    background: transparent;
+    border: none;
+    font-size: 1.25rem;
+    line-height: 1;
+    color: var(--ink-soft);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+  }
+  .wf-close:hover {
+    color: var(--ink);
+    background: var(--hairline);
+  }
+  .wf-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .wf-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 0.4rem 0;
+    border-bottom: 1px dashed var(--hairline);
+  }
+  .wf-row.wf-start {
+    font-weight: 500;
+  }
+  .wf-row.wf-info {
+    opacity: 0.9;
+    background: var(--surface-subtle, rgba(0, 0, 0, 0.02));
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+  }
+  .wf-row.wf-end {
+    border-top: 1px solid var(--ink);
+    border-bottom: 2px solid var(--ink);
+    padding: 0.6rem 0;
+    margin-top: 0.25rem;
+    font-weight: 600;
+  }
+  .wf-row-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .wf-label-line {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  .wf-sign {
+    display: inline-block;
+    width: 1.2rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .wf-name {
+    font-size: 0.875rem;
+  }
+  .wf-row-label .hint {
+    font-size: 0.8125rem;
+    color: var(--ink-soft);
+    margin-left: 1.7rem;
+  }
+  .wf-alt-note {
+    margin-left: 1.7rem;
+    font-size: 0.8125rem;
+    color: var(--ink-soft);
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    background: var(--bg);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    margin-top: 0.25rem;
+  }
+  .wf-row-val {
+    font-size: 0.9375rem;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+    white-space: nowrap;
+  }
+  .wf-row-val.strong {
+    font-size: 1.0625rem;
+    font-weight: 700;
+  }
+  .wf-row-val.pos {
+    color: var(--gain);
+  }
+  .wf-row-val.neg {
+    color: var(--loss);
+  }
+  .wf-txns {
+    margin-top: 1.25rem;
+    border-top: 1px solid var(--hairline);
+    padding-top: 0.75rem;
+  }
+  .wf-txns summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--ink);
+    padding: 0.25rem 0;
+  }
+  .wf-txns summary:hover {
+    color: var(--gold);
+  }
+  .wf-txns-table-wrap {
+    overflow-x: auto;
+    margin-top: 0.75rem;
+  }
+  .wf-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+  .wf-table th, .wf-table td {
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .wf-table th {
+    color: var(--ink-soft);
+    font-weight: 500;
+    background: var(--bg);
+  }
+  .wf-empty {
+    font-size: 0.8125rem;
+    color: var(--ink-soft);
+    margin: 0.5rem 0 0;
+  }
+  .badge.buy {
+    background: rgba(46, 160, 67, 0.15);
+    color: #2ea043;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  .badge.sell {
+    background: rgba(218, 54, 51, 0.15);
+    color: #da3633;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.8125rem;
+    font-weight: 600;
   }
 </style>

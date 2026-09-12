@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/svelte'
+import { describe, it, expect, vi } from 'vitest'
+import { render, fireEvent } from '@testing-library/svelte'
 import LineChart from './LineChart.svelte'
 
 describe('LineChart', () => {
@@ -10,5 +10,33 @@ describe('LineChart', () => {
     const d = getByTestId('line').getAttribute('d')!
     expect(d.split('L').length + (d.match(/^M/) ? 0 : 0)).toBe(3) // M + 2×L
     expect(d).toMatch(/^M10,/)                                    // sol kenar = pad
+  })
+
+  it('triggers onPointClick when clicked', async () => {
+    const onClick = vi.fn()
+    const series = [{ x: 0, y: 100 }, { x: 1, y: 200 }, { x: 2, y: 150 }]
+    const labels = ['Haz 2026', 'Tem 2026', 'Ağu 2026']
+    const { container } = render(LineChart, {
+      props: { series, labels, width: 300, height: 150, onPointClick: onClick, selectedPoint: 1 },
+    })
+    const svg = container.querySelector('svg')!
+    expect(svg).toHaveClass('clickable')
+
+    // Mock bounding rect
+    svg.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 150,
+      right: 300,
+      bottom: 150,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    })
+
+    // Click near index 2 (x = 290)
+    await fireEvent.click(svg, { clientX: 290, clientY: 75 })
+    expect(onClick).toHaveBeenCalledWith(2, series[2], labels[2])
   })
 })
