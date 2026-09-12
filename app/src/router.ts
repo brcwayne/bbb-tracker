@@ -8,6 +8,7 @@ export type Route =
   | 'aylik'
   | 'banka'
   | 'temettu'
+  | 'vergi'
   | 'ekle'
   | 'log'
 
@@ -27,6 +28,7 @@ export const ROUTES: RouteEntry<Route>[] = [
   { id: 'aylik', path: '#/aylik', label: 'Aylık' },
   { id: 'banka', path: '#/banka', label: 'Banka' },
   { id: 'temettu', path: '#/temettu', label: 'Temettü' },
+  { id: 'vergi', path: '#/vergi', label: 'Vergi' },
   { id: 'ekle', path: '#/ekle', label: 'Ekle' },
   { id: 'log', path: '#/log', label: 'Log' },
 ]
@@ -96,7 +98,7 @@ export function currentRoute(): CurrentRouteResult {
       : { volume: 'hesaplar', route: matched }
   }
 
-  const ids = ['portfoyler', 'kurumlar', 'pozisyonlar', 'aylik', 'banka', 'temettu', 'ekle', 'log'] as const
+  const ids = ['portfoyler', 'kurumlar', 'pozisyonlar', 'aylik', 'banka', 'temettu', 'vergi', 'ekle', 'log'] as const
   const matched = ids.find((r) => r === h)
   return { volume: 'yatirim', route: matched ?? 'panorama' }
 }

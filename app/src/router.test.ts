@@ -32,7 +32,7 @@ describe('router with volumes', () => {
   })
 
   it('sekme şeridi cilde göre değişir', () => {
-    expect(routesFor('yatirim')).toHaveLength(9)
+    expect(routesFor('yatirim')).toHaveLength(10)
     expect(routesFor('hesaplar')).toHaveLength(5)
     expect(HESAP_ROUTES.map((r) => r.label)).toEqual(['Hesaplar', 'Özet', 'Harcamalar', 'Taksitler', 'Borçlar'])
   })

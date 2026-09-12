@@ -39,6 +39,7 @@
   import AylikRapor from './routes/AylikRapor.svelte'
   import Banka from './routes/Banka.svelte'
   import Temettu from './routes/Temettu.svelte'
+  import Vergi from './routes/Vergi.svelte'
   import EkleKaydi from './routes/EkleKaydi.svelte'
   import Log from './routes/Log.svelte'
   import Ozet from './routes/hesaplar/Ozet.svelte'
@@ -69,6 +70,7 @@
     aylik: AylikRapor,
     banka: Banka,
     temettu: Temettu,
+    vergi: Vergi,
     ekle: EkleKaydi,
     log: Log,
     'h-hesaplar': Hesaplar,
