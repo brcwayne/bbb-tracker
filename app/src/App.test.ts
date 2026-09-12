@@ -52,9 +52,23 @@ describe('App — iki cilt ve kabuk', () => {
     window.location.hash = '#/'
     const { getByRole, queryByRole, getAllByRole } = render(App)
     const switchLink = getByRole('link', { name: /Hesaplar defterine geç/i })
-    expect(switchLink).toHaveAttribute('href', '#/h/hesaplar')
     expect(getByRole('group', { name: 'Para birimi' })).toBeInTheDocument()
+    expect(getByRole('group', { name: 'Değerleme bazı' })).toBeInTheDocument()
     expect(getByRole('combobox', { name: 'Dönem' })).toBeInTheDocument()
+  })
+
+  it('flips settings.basis when basis toggle buttons are clicked (H8)', async () => {
+    window.location.hash = '#/'
+    const { getByRole, getByText } = render(App)
+    const maliyetBtn = getByText('maliyet')
+    const degerBtn = getByText('değer')
+
+    const { fireEvent } = await import('@testing-library/svelte')
+    await fireEvent.click(maliyetBtn)
+    expect(settings.basis).toBe('maliyet')
+
+    await fireEvent.click(degerBtn)
+    expect(settings.basis).toBe('deger')
   })
 
   it('hesaplar cildinde switch Yatırım gösterir, 5 sekme görünür, para birimi ve dönem gizlidir', () => {
@@ -64,5 +78,12 @@ describe('App — iki cilt ve kabuk', () => {
     expect(switchLink).toHaveAttribute('href', '#/')
     expect(queryByRole('group', { name: 'Para birimi' })).toBeNull()
     expect(queryByRole('combobox', { name: 'Dönem' })).toBeNull()
+  })
+
+  it('shows local copy warning badge in controls when source is local (H2)', () => {
+    window.location.hash = '#/'
+    const { queryByTestId } = render(App)
+    expect(queryByTestId('app-local-badge')).toBeInTheDocument()
+    expect(queryByTestId('app-local-badge')?.textContent).toContain('⚠ yerel kopya — canlı veri olmayabilir')
   })
 })

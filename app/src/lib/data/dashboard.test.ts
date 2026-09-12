@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dashboardTotals, thisMonthPerf } from './dashboard'
+import { dashboardTotals, thisMonthPerf, liveEquity } from './dashboard'
 import { fixture } from '../../fixtures/dataset'
 import { derivePositions } from './derive'
 
@@ -61,3 +61,64 @@ describe('thisMonthPerf', () => {
     expect(thisMonthPerf([])).toBeNull()
   })
 })
+
+describe('liveEquity', () => {
+  const nakit = 1000
+
+  it('computes live equity with prices and diff against snapshot', () => {
+    // ASTOR open: 150 lot. THYAO open: 25 lot. XAU open: 5 lot.
+    const p = {
+      bySymbol: {
+        'ASTOR.IS': { price: 100, currency: 'TRY', priceUsd: 3 },
+        'THYAO.IS': { price: 300, currency: 'TRY', priceUsd: 50 },
+      },
+      usdPerGram: 100, // XAU has altinKatsayi: 1 -> 100 USD/lot
+    }
+
+    const eq = liveEquity(fixture, pos, p, nakit)
+    // 150 * 3 = 450 (ASTOR)
+    // 25 * 50 = 1250 (THYAO)
+    // 5 * 100 = 500 (XAU)
+    // total pos value = 2200
+    expect(eq.pozisyonDegeriUsd).toBeCloseTo(2200, 4)
+    expect(eq.nakitUsd).toBe(1000)
+    expect(eq.canliOzkaynakUsd).toBeCloseTo(3200, 4)
+    expect(eq.snapshotOzkaynakUsd).toBe(5475)
+    expect(eq.snapshotTarih).toBe('2024-01-31')
+    expect(eq.farkUsd).toBeCloseTo(3200 - 5475, 4)
+    expect(eq.fiyatsizPozisyon).toBe(0)
+  })
+
+  it('falls back to position cost when prices are missing', () => {
+    const emptyPrices = { bySymbol: {}, usdPerGram: null }
+    const eq = liveEquity(fixture, pos, emptyPrices, nakit)
+
+    const expectedCost = pos.open.reduce((s, x) => s + x.toplamMaliyetUsd, 0)
+    expect(eq.pozisyonDegeriUsd).toBeCloseTo(expectedCost, 4)
+    expect(eq.fiyatsizPozisyon).toBe(pos.open.length)
+    expect(eq.canliOzkaynakUsd).toBeCloseTo(expectedCost + nakit, 4)
+  })
+
+  it('handles empty snapshots without exploding', () => {
+    const ds = structuredClone(fixture)
+    ds.snapshots = []
+    const eq = liveEquity(ds, pos, { bySymbol: {}, usdPerGram: null }, nakit)
+
+    expect(eq.snapshotOzkaynakUsd).toBeNull()
+    expect(eq.snapshotTarih).toBeNull()
+    expect(eq.farkUsd).toBeNull()
+  })
+
+  it('detects threshold divergence (> 5%)', () => {
+    const emptyPrices = { bySymbol: {}, usdPerGram: null }
+    const eq = liveEquity(fixture, pos, emptyPrices, nakit)
+    // eq.canliOzkaynakUsd = 1676.5 + 1000 = 2676.5
+    // snapshot = 5475
+    // |2676.5 - 5475| / 5475 = 2798.5 / 5475 = 51.1% > 5%
+    expect(eq.snapshotOzkaynakUsd).toBe(5475)
+    expect(eq.farkUsd).not.toBeNull()
+    const relDiff = Math.abs(eq.farkUsd!) / eq.snapshotOzkaynakUsd!
+    expect(relDiff).toBeGreaterThan(0.05)
+  })
+})
+

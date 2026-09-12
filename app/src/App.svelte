@@ -17,6 +17,7 @@
   import {
     settings,
     setCurrency,
+    setBasis,
     setPeriod,
     PERIODS,
     periodRange,
@@ -46,6 +47,8 @@
   import Borclar from './routes/hesaplar/Borclar.svelte'
   import Hesaplar from './routes/hesaplar/Hesaplar.svelte'
   import HesapDetay from './routes/hesaplar/HesapDetay.svelte'
+  import UyariSeridi from './lib/ui/UyariSeridi.svelte'
+  import { collectWarnings } from './lib/data/uyarilar'
 
   let cur = $state<CurrentRouteResult>(currentRoute())
   let route = $derived(cur.route)
@@ -90,6 +93,15 @@
         ? $store.derived
         : deriveAll($store.dataset, periodRange(settings.period))
       : undefined,
+  )
+
+  const warnings = $derived(
+    $store.dataset && activeDerived
+      ? collectWarnings($store.dataset, activeDerived, {
+          bySymbol: prices.bySymbol,
+          usdPerGram: prices.usdPerGram,
+        })
+      : [],
   )
 
   // `isLiveRate()` isn't reactive on its own — read `prices.asOf` here so the
@@ -151,6 +163,10 @@
         <button class:on={settings.currency === 'USD'} onclick={() => setCurrency('USD')}>USD</button>
         <button class:on={settings.currency === 'TRY'} onclick={() => setCurrency('TRY')}>₺ TL</button>
       </div>
+      <div class="seg" role="group" aria-label="Değerleme bazı" data-testid="basis-toggle">
+        <button class:on={settings.basis === 'maliyet'} onclick={() => setBasis('maliyet')}>maliyet</button>
+        <button class:on={settings.basis === 'deger'} onclick={() => setBasis('deger')}>değer</button>
+      </div>
       <select
         class="period"
         aria-label="Dönem"
@@ -159,6 +175,11 @@
       >
         {#each PERIODS as p}<option value={p.key}>{p.label}</option>{/each}
       </select>
+    {/if}
+    {#if source.id === 'local'}
+      <span class="badge local-warn" data-testid="app-local-badge" title="Yerel dosya kopyası — canlı veri olmayabilir">
+        ⚠ yerel kopya — canlı veri olmayabilir
+      </span>
     {/if}
     <span class="stamp num" data-testid="source-stamp">{$store.sourceText ?? '—'}</span>
     <select class="src num" aria-label="Veri kaynağı" value={source.id} onchange={onSrcChange}>
@@ -204,6 +225,7 @@
 {:else if $store.status === 'error'}
   <EmptyState title="Veri yüklenemedi" detail={$store.error} />
 {:else}
+  <UyariSeridi {warnings} />
   <Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} source={source} store={store} {param} />
 {/if}
 

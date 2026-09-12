@@ -54,3 +54,20 @@ export function monthLabel(iso: string): string {
   const [y, m] = iso.split('-').map(Number)
   return `${AY[m - 1]} ${y}`
 }
+
+/** Formats ISO timestamp to "12 Eyl 2026 14:20". Falls back to dateShort if no time. */
+export function dateTimeShort(iso: string): string {
+  if (!iso) return DASH
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return dateShort(iso.slice(0, 10))
+    const day = d.getDate()
+    const m = AY[d.getMonth()]
+    const y = d.getFullYear()
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    return `${day} ${m} ${y} ${hh}:${mm}`
+  } catch {
+    return dateShort(iso.slice(0, 10))
+  }
+}

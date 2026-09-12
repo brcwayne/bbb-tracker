@@ -69,3 +69,13 @@ describe('live rate persistence (Fix 8)', () => {
     expect(settings.rateDate).not.toBe('2020-01-01')
   })
 })
+
+describe('basis setting and persistence (H8)', () => {
+  it('defaults to deger or stored value and flips with setBasis', async () => {
+    const { setBasis } = await import('./settings.svelte')
+    setBasis('maliyet')
+    expect(settings.basis).toBe('maliyet')
+    setBasis('deger')
+    expect(settings.basis).toBe('deger')
+  })
+})

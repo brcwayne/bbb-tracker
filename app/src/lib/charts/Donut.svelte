@@ -1,5 +1,6 @@
 <script lang="ts">
   import { arcs } from './scales'
+  import { CATEGORICAL } from './palette'
 
   let {
     slices = [],
@@ -9,6 +10,7 @@
     total = undefined,
     totalLabel = 'Toplam',
     captionBelow = false,
+    maxSlices = 8,
   }: {
     slices?: { label: string; value: number }[]
     size?: number
@@ -18,12 +20,19 @@
     totalLabel?: string
     /** Show the hovered slice's name in the ring and its value + share on a line below. */
     captionBelow?: boolean
+    maxSlices?: number
   } = $props()
 
+  const effectiveSlices = $derived.by(() => {
+    if (slices.length <= maxSlices) return slices
+    const visible = slices.slice(0, maxSlices - 1)
+    const otherVal = slices.slice(maxSlices - 1).reduce((s, x) => s + x.value, 0)
+    return otherVal > 0 ? [...visible, { label: 'Diğer', value: otherVal }] : visible
+  })
+
   const r = $derived(size / 2)
-  const parts = $derived(arcs(slices.map((s) => s.value), r, r - thickness))
-  const palette = ['var(--gain)', 'var(--gold)', 'var(--loss)', 'var(--ink-soft)']
-  const sum = $derived(total ?? slices.reduce((s, x) => s + x.value, 0))
+  const parts = $derived(arcs(effectiveSlices.map((s) => s.value), r, r - thickness))
+  const sum = $derived(total ?? effectiveSlices.reduce((s, x) => s + x.value, 0))
   let hoverI = $state<number | null>(null)
 
   const share = (v: number) => (sum ? ((v / sum) * 100).toFixed(1) + '%' : '—')
@@ -41,11 +50,11 @@
   >
     {#each parts as p, i}
       <path
-        data-slice={slices[i].label}
+        data-slice={effectiveSlices[i].label}
         role="img"
-        aria-label={`${slices[i].label}: ${fmt(slices[i].value)}`}
+        aria-label={`${effectiveSlices[i].label}: ${fmt(effectiveSlices[i].value)}`}
         d={p.d}
-        fill={palette[i % palette.length]}
+        fill={CATEGORICAL[i % CATEGORICAL.length]}
         style:cursor="pointer"
         style:opacity={hoverI == null || hoverI === i ? 1 : 0.35}
         style:transition="opacity .12s ease"
@@ -53,35 +62,35 @@
       />
     {/each}
     {#if hoverI != null}
-      <text x="0" y={captionBelow ? 4 : -3} text-anchor="middle" style="font-size:10px; fill:var(--ink-soft);"
-        >{slices[hoverI].label}</text
+      <text x="0" y={captionBelow ? 4 : -3} text-anchor="middle" style="font-size:0.8125rem; fill:var(--ink-soft);"
+        >{effectiveSlices[hoverI].label}</text
       >
       {#if !captionBelow}
         <text
           x="0"
           y="12"
           text-anchor="middle"
-          style="font-size:12px; fill:var(--ink); font-variant-numeric:tabular-nums;"
-          >{fmt(slices[hoverI].value)}</text
+          style="font-size:1rem; fill:var(--ink); font-variant-numeric:tabular-nums;"
+          >{fmt(effectiveSlices[hoverI].value)}</text
         >
       {/if}
     {:else}
-      <text x="0" y="-3" text-anchor="middle" style="font-size:9px; fill:var(--ink-soft); letter-spacing:.04em;"
+      <text x="0" y="-3" text-anchor="middle" style="font-size:0.8125rem; fill:var(--ink-soft); letter-spacing:.04em;"
         >{totalLabel}</text
       >
       <text
         x="0"
         y="12"
         text-anchor="middle"
-        style="font-size:12px; fill:var(--ink); font-variant-numeric:tabular-nums;">{fmt(sum)}</text
+        style="font-size:1rem; fill:var(--ink); font-variant-numeric:tabular-nums;">{fmt(sum)}</text
       >
     {/if}
   </svg>
   {#if captionBelow}
     <div class="cap" aria-live="polite">
       {#if hoverI != null}
-        <span class="cap-val">{fmt(slices[hoverI].value)}</span>
-        <span class="cap-pct">{share(slices[hoverI].value)}</span>
+        <span class="cap-val">{fmt(effectiveSlices[hoverI].value)}</span>
+        <span class="cap-pct">{share(effectiveSlices[hoverI].value)}</span>
       {/if}
     </div>
   {/if}

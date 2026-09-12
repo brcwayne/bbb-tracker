@@ -1,5 +1,6 @@
 import type { Positions } from './derive'
 import type { Dataset, Snapshot } from './types'
+import type { PriceLookup } from './unrealized'
 import { monthLabel } from '../format'
 
 export interface DashboardTotals {
@@ -71,5 +72,65 @@ export function thisMonthPerf(snapshots: Snapshot[]): MonthPerf | null {
     netKz: s.netKZ_usd,
     withdrawal: s.cekim_usd,
     endCapital: s.toplamOzkaynak_usd,
+  }
+}
+
+export interface LiveEquity {
+  pozisyonDegeriUsd: number
+  nakitUsd: number
+  canliOzkaynakUsd: number
+  snapshotOzkaynakUsd: number | null
+  snapshotTarih: string | null
+  farkUsd: number | null
+  fiyatsizPozisyon: number
+}
+
+export function liveEquity(
+  ds: Dataset,
+  positions: Positions,
+  p: PriceLookup,
+  nakitUsd: number,
+): LiveEquity {
+  const byKod = new Map(ds.instruments.map((i) => [i.kod, i]))
+  let pozisyonDegeriUsd = 0
+  let fiyatsizPozisyon = 0
+
+  for (const pos of positions.open) {
+    const inst = byKod.get(pos.kod)
+    let cur: number | null = null
+    if (inst) {
+      if (inst.fiyatKaynagi === 'altin-turev') {
+        if (p.usdPerGram != null && inst.altinKatsayi != null) {
+          cur = p.usdPerGram * inst.altinKatsayi
+        }
+      } else if (inst.fiyatSembolu && p.bySymbol[inst.fiyatSembolu]?.priceUsd != null) {
+        cur = p.bySymbol[inst.fiyatSembolu].priceUsd
+      }
+    }
+
+    if (cur != null) {
+      pozisyonDegeriUsd += cur * pos.lot
+    } else {
+      pozisyonDegeriUsd += pos.toplamMaliyetUsd
+      fiyatsizPozisyon++
+    }
+  }
+
+  const canliOzkaynakUsd = pozisyonDegeriUsd + nakitUsd
+  const lastSnap = ds.snapshots.length > 0
+    ? [...ds.snapshots].sort((a, b) => (a.tarih < b.tarih ? -1 : 1)).at(-1)
+    : undefined
+  const snapshotOzkaynakUsd = lastSnap ? lastSnap.toplamOzkaynak_usd : null
+  const snapshotTarih = lastSnap ? lastSnap.tarih : null
+  const farkUsd = snapshotOzkaynakUsd != null ? canliOzkaynakUsd - snapshotOzkaynakUsd : null
+
+  return {
+    pozisyonDegeriUsd,
+    nakitUsd,
+    canliOzkaynakUsd,
+    snapshotOzkaynakUsd,
+    snapshotTarih,
+    farkUsd,
+    fiyatsizPozisyon,
   }
 }

@@ -796,13 +796,69 @@ Bu çapa değerler gerçek `data/*.json`'dan hesaplandı. Tek seferlik bir betik
 
 **Çapraz kontroller:**
 
-- Σ(portföy bazlı gerçekleşmiş K/Z) == global gerçekleşmiş K/Z
-- Σ(kurum bazlı gerçekleşmiş K/Z) == global gerçekleşmiş K/Z
 - Σ(`allSales.kzUsd`) == global gerçekleşmiş K/Z
 - Σ(sınıf dilimleri) == açık pozisyon değeri + nakit
-- Σ(portföy açık maliyetleri) == $264.826,36
 
-Herhangi biri 0,01'den fazla sapıyorsa **görev başarısız sayılır.**
+Bu ikisi 0,01'den fazla sapıyorsa **görev başarısız sayılır.**
+
+> ### ⚠️ DÜZELTME (2026-09-11, Opus) — silinen üç kriter
+>
+> İlk sürümde şu üç kriter vardı ve **üçü de yanlıştı**:
+> ~~Σ(portföy bazlı gerçekleşmiş) == global~~ · ~~Σ(kurum bazlı gerçekleşmiş) == global~~ ·
+> ~~Σ(portföy açık maliyetleri) == $264.826,36~~
+>
+> **Neden yanlış:** Bunlar ortalama maliyet defterinin nasıl çalıştığına dair bir yanılgıdan
+> doğdu. Aynı sembol farklı kurumlarda/portföylerde **farklı fiyatlardan** alınmışsa, kapsam
+> bazlı ortalama maliyet ile global ortalama maliyet **zorunlu olarak farklıdır** — dolayısıyla
+> gerçekleşmiş K/Z de farklı çıkar. Bu bir hata değil, matematiğin gereği.
+>
+> **Ölçülen gerçek değerler** (2026-09-11, gerçek veriyle):
+>
+> | Kapsam | Gerçekleşmiş K/Z | Açık maliyet |
+> |---|---|---|
+> | global | $113.704,47 | $264.826,36 |
+> | portfoy | $113.784,64 | $264.906,53 |
+> | hesap | $113.433,60 | $264.555,49 |
+>
+> Bağımsız bir Python simülasyonu `hesap` için **birebir** $113.433,60 üretti → uygulama doğru,
+> kriter yanlıştı.
+>
+> **Yerine geçen doğru kriter:** her kapsam, kendi içinde tutarlı olmalı —
+> `Σ(scope.sales.kzUsd) == scope.realizedUsd` (her kapsam için ayrı ayrı) ve
+> `Σ(scope.open maliyeti) == o kapsamın toplam açık maliyeti`.
+> Kapsamlar **arası** eşitlik beklenmez.
+>
+> **Yan bulgu:** Bu kriteri kovalarken `ledger.ts`'te plana girmemiş bir davranış ortaya çıktı —
+> portföyler arası sessiz lot "ödünç alma". G11 görevi bundan doğdu (bkz. aşağısı).
+
+---
+
+## G11 — Portföyler arası "ödünç alma"yı görünür kıl  *(D2 denetiminden doğdu, TAMAMLANDI)*
+
+**Dosya:** `app/src/lib/data/ledger.ts` (+ `derive.ts`, `Portfoyler.svelte`, `Pozisyonlar.svelte`)
+
+**Sorun:** `kind === 'portfoy'` iken bir satış o portföyün pozisyonunu aşarsa, kod diğer
+portföylerden sessizce lot ödünç alıyordu — `Map` sırasına göre, `errors` boş kalarak.
+Sonuç: `HDFGS` ALFA'da alınıp DELTA etiketiyle satıldığı için **ALFA'nın işlem sonucu DELTA'nın
+karnesine** yazılıyordu (ALFA realized $0,00 · DELTA realized −$227,93).
+
+**Yapılanlar:**
+1. Ödünç alınan her lot için `errors`'a uyarı:
+   `<txId>: <KOD> <satanPortfoy> portföyünde yok, <verenPortfoy> portföyünden <lot> lot alındı — portföy etiketi hatalı olabilir`
+2. Veren portföy `Map` sırasına göre değil, **o sembolü en çok lotla tutan** portföye göre seçilir
+   (eşitlikte ada göre alfabetik → deterministik).
+3. `SaleEvent.oduncAlindi: boolean`; Portföyler ve Pozisyonlar'da `⚠ ödünç` rozeti.
+4. `kind === 'hesap'` için ödünç alma **uygulanmaz** — kurumlar fiziksel/hukuki saklama
+   kuruluşlarıdır, virmansız satış olmaz; yetersiz lot `aşırı satış` hatası olarak raporlanır.
+5. `derive.ts` global + portföy defterlerinin hatalarını birleştirir ki uyarılar Pozisyonlar
+   sayfasındaki şeride düşsün.
+
+**Doğrulandı (Opus, bağımsız):** 443/443 test · check 0 hata · build temiz · gerçek veride 3 uyarı
+doğru portföyleri adlandırıyor (HDFGS: DELTA←ALFA, FSK: ENIS←FON ×2) · determinizm testi PORT_B'yi
+seçti · kurum kapsamında ödünç alma yok · global çapa bozulmadı.
+
+**Kalan tek iş (kod değil, veri):** 3 işlemin portföy etiketi düzeltilmeli ya da eksik
+`assetTransfers` kaydı girilmeli. Düzeltilince uyarılar kendiliğinden kaybolur.
 
 ## D3 — Kod incelemesi
 

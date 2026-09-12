@@ -3,6 +3,7 @@ import { DASH, usd, tryFmt } from './format'
 
 export type Currency = 'USD' | 'TRY'
 export type PeriodKey = 'all' | 'ytd' | '1y' | '6m' | '3m' | '1m'
+export type Basis = 'maliyet' | 'deger'
 
 export const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: 'all', label: 'Tümü' },
@@ -34,6 +35,7 @@ let liveRateApplied = false
 
 export const settings = $state({
   currency: (pref('bbb-currency') === 'TRY' ? 'TRY' : 'USD') as Currency,
+  basis: (pref('bbb-basis') === 'maliyet' ? 'maliyet' : 'deger') as Basis,
   period: ((): PeriodKey => {
     const p = pref('bbb-period')
     return (PERIODS.find((x) => x.key === p)?.key ?? 'all') as PeriodKey
@@ -45,6 +47,10 @@ export const settings = $state({
 export function setCurrency(c: Currency) {
   settings.currency = c
   save('bbb-currency', c)
+}
+export function setBasis(b: Basis) {
+  settings.basis = b
+  save('bbb-basis', b)
 }
 export function setPeriod(p: PeriodKey) {
   settings.period = p

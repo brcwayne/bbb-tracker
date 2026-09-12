@@ -1,6 +1,7 @@
 import type { OpenPosition } from './derive'
 import type { Transaction, Instrument, Broker, AssetTransfer } from './types'
 import { unrealizedByKod, type PriceLookup } from './unrealized'
+import { buildLedger } from './ledger'
 
 export interface HoldingRow {
   kod: string
@@ -21,75 +22,6 @@ export interface HoldingGroup {
   totalCostUsd: number
   totalValueUsd: number | null
   unrealUsd: number | null
-}
-
-interface AttrEvent {
-  kod: string
-  tarih: string
-  id: string
-  /** Which record kind this event came from — used to break same-date ties (a transfer
-   *  always "happens after" a transaction dated the same day, since the id prefix (`t_`
-   *  vs `at_`) is not a reliable chronological tie-break). */
-  kind: 'txn' | 'transfer'
-  hesap: string
-  /** `null` for a transfer whose `hedefPortfoy` was left unset — meaning "portfolio
-   *  unchanged by this transfer". Such an event must not participate in the `'portfoy'`
-   *  attribution stream at all (see `latestFieldByKod`). */
-  portfoy: string | null
-}
-
-function attributionEvents(txns: Transaction[], transfers: AssetTransfer[]): AttrEvent[] {
-  return [
-    ...txns.map((t) => ({
-      kod: t.enstruman,
-      tarih: t.tarih,
-      id: t.id,
-      kind: 'txn' as const,
-      hesap: t.hesap,
-      portfoy: t.portfoy,
-    })),
-    ...transfers.map((tr) => ({
-      kod: tr.enstruman,
-      tarih: tr.tarih,
-      id: tr.id,
-      kind: 'transfer' as const,
-      hesap: tr.hedefHesap,
-      portfoy: tr.hedefPortfoy,
-    })),
-  ]
-}
-
-function latestFieldByKod<K extends 'portfoy' | 'hesap'>(
-  events: AttrEvent[],
-  field: K,
-): Map<string, string> {
-  const latest = new Map<string, AttrEvent>()
-  for (const e of events) {
-    // A transfer that left this field untouched (only meaningful for 'portfoy': a transfer
-    // always carries a `hedefHesap`) must never override an earlier attribution.
-    if (field === 'portfoy' && e.portfoy == null) continue
-    const prev = latest.get(e.kod)
-    let replace: boolean
-    if (!prev) {
-      replace = true
-    } else if (e.tarih !== prev.tarih) {
-      replace = e.tarih > prev.tarih
-    } else if (e.kind !== prev.kind) {
-      // Same-date tie between a transaction and a transfer: the transfer wins, since all
-      // record-entry forms stamp "today" as `tarih`, and a same-day buy-then-transfer is a
-      // plausible real workflow whose transfer must not be silently shadowed by id ordering.
-      replace = e.kind === 'transfer'
-    } else {
-      replace = e.id > prev.id
-    }
-    if (replace) latest.set(e.kod, e)
-  }
-  const out = new Map<string, string>()
-  for (const [kod, e] of latest) {
-    const v = field === 'portfoy' ? e.portfoy : e.hesap
-    if (v != null) out.set(kod, v)
-  }
-  return out
 }
 
 function rowsFor(
@@ -139,109 +71,16 @@ export function holdingsByPortfolio(
   transfers: AssetTransfer[],
   p: PriceLookup,
 ): HoldingGroup[] {
-  const byKod = latestFieldByKod(attributionEvents(txns, transfers), 'portfoy')
-  const groups = new Map<string, OpenPosition[]>()
-  for (const pos of open) {
-    const key = byKod.get(pos.kod) ?? '?'
-    ;(groups.get(key) ?? groups.set(key, []).get(key)!).push(pos)
-  }
-  return [...groups.entries()]
-    .map(([key, positions]) => summarise(key, rowsFor(positions, instruments, p)))
-    .sort((a, b) => b.totalCostUsd - a.totalCostUsd)
-}
-
-export function derivePositionsByBroker(
-  txns: Transaction[],
-  transfers: AssetTransfer[],
-): Map<string, OpenPosition[]> {
-  const EPS = 1e-9
-  type Event =
-    | { kind: 'txn'; tarih: string; id: string; hesap: string; sym: string; yon: 'AL' | 'SAT'; lot: number; net_usd: number }
-    | { kind: 'transfer'; tarih: string; id: string; kaynakHesap: string; hedefHesap: string; sym: string; lot: number }
-
-  const events: Event[] = [
-    ...txns.map((t) => ({
-      kind: 'txn' as const,
-      tarih: t.tarih,
-      id: t.id,
-      hesap: t.hesap,
-      sym: t.enstruman,
-      yon: t.yon,
-      lot: t.lot,
-      net_usd: t.net_usd,
-    })),
-    ...transfers.map((tr) => ({
-      kind: 'transfer' as const,
-      tarih: tr.tarih,
-      id: tr.id,
-      kaynakHesap: tr.kaynakHesap,
-      hedefHesap: tr.hedefHesap,
-      sym: tr.enstruman,
-      lot: tr.lot,
-    })),
-  ]
-
-  events.sort((a, b) => {
-    if (a.tarih !== b.tarih) return a.tarih < b.tarih ? -1 : 1
-    if (a.kind !== b.kind) return a.kind === 'transfer' ? 1 : -1
-    return a.id < b.id ? -1 : 1
-  })
-
-  const store = new Map<string, Map<string, OpenPosition>>()
-  const getPos = (hesap: string, sym: string): OpenPosition => {
-    let brokerMap = store.get(hesap)
-    if (!brokerMap) {
-      brokerMap = new Map()
-      store.set(hesap, brokerMap)
-    }
-    let pos = brokerMap.get(sym)
-    if (!pos) {
-      pos = { kod: sym, lot: 0, ortMaliyetUsd: 0, toplamMaliyetUsd: 0 }
-      brokerMap.set(sym, pos)
-    }
-    return pos
-  }
-
-  for (const e of events) {
-    if (e.kind === 'txn') {
-      const pos = getPos(e.hesap, e.sym)
-      if (e.yon === 'AL') {
-        pos.toplamMaliyetUsd += e.net_usd
-        pos.lot += e.lot
-        pos.ortMaliyetUsd = pos.lot > EPS ? pos.toplamMaliyetUsd / pos.lot : 0
-      } else {
-        const sell = Math.min(e.lot, pos.lot)
-        if (sell > EPS) {
-          const ort = pos.ortMaliyetUsd
-          pos.lot -= sell
-          pos.toplamMaliyetUsd -= ort * sell
-          if (pos.lot <= EPS) {
-            store.get(e.hesap)?.delete(e.sym)
-          }
-        }
-      }
-    } else {
-      const src = getPos(e.kaynakHesap, e.sym)
-      const dst = getPos(e.hedefHesap, e.sym)
-      const moveLot = Math.min(e.lot, src.lot > EPS ? src.lot : e.lot)
-      const moveCost = src.lot > EPS ? src.ortMaliyetUsd * moveLot : 0
-      if (src.lot > EPS) {
-        src.lot -= moveLot
-        src.toplamMaliyetUsd -= moveCost
-        if (src.lot <= EPS) store.get(e.kaynakHesap)?.delete(e.sym)
-      }
-      dst.lot += moveLot
-      dst.toplamMaliyetUsd += moveCost
-      dst.ortMaliyetUsd = dst.lot > EPS ? dst.toplamMaliyetUsd / dst.lot : 0
+  const ledger = buildLedger(txns, transfers, 'portfoy')
+  const groups: HoldingGroup[] = []
+  for (const [scopeName, scope] of ledger.byScope) {
+    if (!scopeName) continue
+    const positions = scope.open.filter((pos) => pos.lot > 1e-9)
+    if (positions.length > 0) {
+      groups.push(summarise(scopeName, rowsFor(positions, instruments, p)))
     }
   }
-
-  const result = new Map<string, OpenPosition[]>()
-  for (const [hesap, map] of store) {
-    const list = [...map.values()].filter((p) => p.lot > EPS).sort((a, b) => a.kod.localeCompare(b.kod))
-    result.set(hesap, list)
-  }
-  return result
+  return groups.sort((a, b) => b.totalCostUsd - a.totalCostUsd)
 }
 
 export function holdingsByBroker(
@@ -252,8 +91,10 @@ export function holdingsByBroker(
   transfers: AssetTransfer[],
   p: PriceLookup,
 ): HoldingGroup[] {
-  const byBroker = derivePositionsByBroker(txns, transfers)
-  return brokers.map((b) =>
-    summarise(b.ad, rowsFor(byBroker.get(b.kod) ?? [], instruments, p), b.sahip),
-  )
+  const ledger = buildLedger(txns, transfers, 'hesap')
+  return brokers.map((b) => {
+    const scope = ledger.byScope.get(b.kod)
+    const positions = (scope?.open ?? []).filter((pos) => pos.lot > 1e-9)
+    return summarise(b.ad, rowsFor(positions, instruments, p), b.sahip)
+  })
 }

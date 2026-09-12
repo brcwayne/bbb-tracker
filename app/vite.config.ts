@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
@@ -26,7 +26,9 @@ const serveRepoData = {
         res.statusCode = 404
         return res.end('not found')
       }
+      const stat = statSync(f)
       res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Last-Modified', stat.mtime.toUTCString())
       res.end(readFileSync(f))
     })
   },

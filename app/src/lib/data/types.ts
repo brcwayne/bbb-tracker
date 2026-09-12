@@ -63,7 +63,7 @@ export interface Snapshot {
 export interface Instrument {
   kod: string
   ad: string
-  sinif: 'BIST' | 'ALTIN' | 'FON_PARA' | 'FON_HISSE' | 'USA'
+  sinif: 'BIST' | 'ALTIN' | 'FON_PARA' | 'FON_HISSE' | 'FON_FON' | 'USA'
   girisParaBirimi: string
   fiyatKaynagi: string
   fiyatSembolu: string
