@@ -371,7 +371,7 @@
       <SectionHeader title="Kâr / Zarar" note="tüm zamanlar" />
       <dl class="mini">
         <div>
-          <dt>Gerçekleşmiş K/Z <span class="scope">tüm zamanlar</span></dt>
+          <dt>Gerçekleşmiş K/Z <span class="scope">2026-02'den bu yana</span></dt>
           <dd class="num" class:pos={vm.ozet.gerceklesmisKz > 0} class:neg={vm.ozet.gerceklesmisKz < 0}>
             {money(vm.ozet.gerceklesmisKz, { sign: true })}
           </dd>
@@ -414,18 +414,18 @@
       </dl>
 
       <!-- Blok 5: Kapanan İşlemler — tüm zamanlar (K5) -->
-      <SectionHeader title="Kapanan İşlemler" note="tüm zamanlar" />
+      <SectionHeader title="Kapanan İşlemler" note="2026-02'den bu yana" />
       <dl class="mini">
         <div>
-          <dt>Toplam Kazanç <span class="scope">tüm zamanlar</span></dt>
+          <dt>Toplam Kazanç <span class="scope">2026-02'den bu yana</span></dt>
           <dd class="num pos">{money(vm.ozet.kapananKazanc)}</dd>
         </div>
         <div>
-          <dt>Toplam Kayıp <span class="scope">tüm zamanlar</span></dt>
+          <dt>Toplam Kayıp <span class="scope">2026-02'den bu yana</span></dt>
           <dd class="num neg">{money(vm.ozet.kapananKayip)}</dd>
         </div>
         <div>
-          <dt>Net <span class="scope">tüm zamanlar</span></dt>
+          <dt>Net <span class="scope">2026-02'den bu yana</span></dt>
           <dd class="num strong" class:pos={vm.ozet.kapananNet > 0} class:neg={vm.ozet.kapananNet < 0}>
             {money(vm.ozet.kapananNet, { sign: true })}
           </dd>

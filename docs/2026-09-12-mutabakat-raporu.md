@@ -35,7 +35,7 @@ G10 geliştirmesinde tespit edilen **$92.234,48** tutarındaki farkın **%100'ü
 |---|---|---|---|---|---|
 | **—** | **Excel Snapshot (2026-08-31)** | **$191.386,89** | — | **Baz** | `snapshots.json` son kayıt (Excel Monthly Report R22) |
 | **K1** | **Excel Aylık Tablosunda Eksik Tarihsel Mevduatlar** | **+$113.209,43** | **%122,74** | Kanıtlandı | 2016-01-01 ($109.699,10) ve 2018-05-21 ($3.510,33) mevduatları Excel aylık tablosuna girmemişti. Excel Dashboard'u ile Monthly Report arasındaki iç farktır ($304.596,32 − $191.386,89). |
-| **K2** | **Tarihsel Gerçekleşmiş K/Z Hesaplama Ayrışması** | **-$5.985,16** | **-%6,49** | Kanıtlandı | Excel Trade Log manuel kâr toplamı ($119.689,63) ile BBB'nin 10 yıllık katı defter (FIFO/ort. maliyet) gerçekleşmiş kârı ($113.704,47) arasındaki P0'da tespit edilen fark. |
+| **K2** | **2026 Gerçekleşmiş K/Z Hesaplama Ayrışması** | **-$5.985,16** | **-%6,49** | Kanıtlandı | I3 bulgusu: Excel Trade Log'da 2026 öncesi satış ve kâr yoktur ($0.00). Hem Excel'in el ile girilen kârı ($119.689,63) hem de defter kârı ($113.704,47) yalnızca 2026 satışlarını ölçmektedir. Fark 10 yıllık bir kapsam farkı değil, Excel'in satır bazlı manuel kâr girişi ile defterin katı FIFO/ort. maliyet kuralı arasındaki metodoloji farkıdır. |
 | **K3** | **Göç Sınırı Nakit Çapası Farkı (`meta.gocNakitDuzeltmesi`)** | **-$14.989,79** | **-%16,25** | Kanıtlandı | Excel'in göç anı nakit bakiyesi ($49.403,89) ile defterin kendi işlem ve nakit akışlarından türetilen nakit arasındaki göç sınırı çapa farkı. |
 | **K4** | **Ağustos 2026 Sonrası İşlemler (Zaman Farkı)** | **+$1.412,51** | **+%1,53** | Kanıtlandı | 2026-08-31 sonrasında girilen 10 işlemin net gerçekleşmiş kârı (Alımlar +$2.460 açık maliyet ekledi, Nakit -$1.048 azaldı, Net = +$1.412,51). |
 | **=** | **Defter Canlı Toplamı (Maliyet + Nakit)** | **$283.621,37** | **%100,00** | **Hedef** | Açık Maliyet: $264.826,36 + Nakit: $18.795,01 |
@@ -83,9 +83,9 @@ G10 geliştirmesinde tespit edilen **$92.234,48** tutarındaki farkın **%100'ü
   2. **$1.412,51 (Zaman Farkı - K4):** 2026-08-31 sonrası 10 işlemin net gerçekleşmiş kârıdır.
 - **TP2 Notu:** Excel `Stock Position` ile `transactions.json` arasındaki 584.140 lotluk TP2 fonu ayrışması artık bir nakit gizemi değildir; açık pozisyon lot mutabakatı olarak I3 görevi kapsamında incelenecektir.
 
-### Hipotez 5: Döviz Kuru ve Gerçekleşmiş K/Z Farkı (Kanıtlandı)
-- **Bulgu:** Excel Trade Log'daki kârlar satır bazında anlık kurlarla elle girilmiştir (Toplam: $119.689,63). BBB defteri ise `fxrates.json` üzerinden tarihsel TCMB kurları ve ağırlıklı ortalama maliyetle hesaplamıştır ($113.704,47).
-- **Sayısal Kanıt:** Aradaki kümülatif fark **-$5.985,16**'dır. P0 mutabakatında bu fark "beklenen defter düzeltmesi" olarak kayda geçirilmiştir.
+### Hipotez 5: Döviz Kuru ve Gerçekleşmiş K/Z Farkı (I3 ile Netleştirildi — Kanıtlandı)
+- **Bulgu:** I3 araştırmasıyla kanıtlandı ki, Excel Trade Log'da 2026 öncesine ait hiçbir satış veya kâr satırı ($0.00) bulunmamaktadır. Excel'deki $119.689,63 tutarındaki kârın tamamı 2026 yılındaki 110 satıra aittir ve her satırda anlık kurlarla elle hesaplanmıştır. BBB defteri ise `fxrates.json` üzerinden tarihsel TCMB kurları ve katı FIFO/ağırlıklı ortalama maliyetle hesaplamıştır ($113.704,47).
+- **Sayısal Kanıt:** Her iki sistem de yalnızca 2026 realize kârını ölçmektedir. Aradaki kümülatif fark **-$5.985,16**'dır ve bu bir zaman/kapsam farkı değil, Excel el hesabı ile defterin katı muhasebe kuralı arasındaki farktır.
 
 ---
 

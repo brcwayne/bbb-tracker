@@ -248,5 +248,15 @@ describe('Panorama', () => {
     })
     expect(c2.textContent).toContain('güncel değer · nakit dahil')
   })
+
+  it('shows scope badge as "2026-02\'den bu yana" for realized P/L and closed trades (I3)', async () => {
+    const v = await derived()
+    const { container } = render(Panorama, {
+      props: { dataset: v.dataset, derived: v.derived, view: v.derived },
+    })
+
+    const text = container.textContent ?? ''
+    expect(text).toContain("2026-02'den bu yana")
+  })
 })
 
