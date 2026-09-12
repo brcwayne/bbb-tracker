@@ -39,4 +39,18 @@ describe('LineChart', () => {
     await fireEvent.click(svg, { clientX: 290, clientY: 75 })
     expect(onClick).toHaveBeenCalledWith(2, series[2], labels[2])
   })
+
+  it('renders compareSeries with dashed line and handles null values gracefully', () => {
+    const series = [{ x: 0, y: 100 }, { x: 1, y: 120 }, { x: 2, y: 140 }]
+    const compareSeries = [{ x: 0, y: null }, { x: 1, y: 90 }, { x: 2, y: 110 }]
+    const { getByTestId } = render(LineChart, {
+      props: { series, compareSeries, width: 200, height: 100 },
+    })
+
+    const compareLine = getByTestId('line-compare')
+    expect(compareLine).toBeInTheDocument()
+    expect(compareLine).toHaveAttribute('stroke-dasharray', '3 3')
+    const d = compareLine.getAttribute('d')
+    expect(d).toBeTruthy()
+  })
 })

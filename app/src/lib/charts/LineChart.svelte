@@ -4,6 +4,7 @@
 
   let {
     series = [],
+    compareSeries,
     labels = [],
     width = 640,
     height = 200,
@@ -13,6 +14,7 @@
     selectedPoint = null,
   }: {
     series?: { x: number; y: number }[]
+    compareSeries?: { x: number; y: number | null }[]
     labels?: string[]
     width?: number
     height?: number
@@ -23,10 +25,16 @@
   } = $props()
 
   const xs = $derived(series.map((d) => d.x))
-  const ys = $derived(series.map((d) => d.y))
+  const ys = $derived([
+    ...series.map((d) => d.y),
+    ...(compareSeries ?? []).map((d) => d.y).filter((y): y is number => y != null),
+  ])
   const sx = $derived(scaleLinear().domain([Math.min(...xs), Math.max(...xs)]).range([pad, width - pad]))
   const sy = $derived(scaleLinear().domain([Math.min(...ys, 0), Math.max(...ys)]).range([height - pad, pad]))
   const pts = $derived(series.map((d) => [sx(d.x), sy(d.y)] as [number, number]))
+  const comparePts = $derived(
+    (compareSeries ?? []).map((d) => (d.y == null ? null : ([sx(d.x), sy(d.y)] as [number, number]))),
+  )
   // Thin horizontal reference lines at nice round values.
   const grid = $derived(series.length ? sy.ticks(4).map((v) => ({ v, y: sy(v) })) : [])
   // A handful of evenly spaced date ticks along the bottom, so the covered period is legible
@@ -118,6 +126,18 @@
     >
   {/each}
   <path class="area" d={areaPath(pts, height - pad)} fill="var(--gain)" fill-opacity="0.08" />
+  {#if compareSeries && compareSeries.length > 0}
+    <path
+      class="line-compare"
+      data-testid="line-compare"
+      d={linePath(comparePts)}
+      fill="none"
+      stroke="var(--ink-soft)"
+      stroke-width="1.2"
+      stroke-dasharray="3 3"
+      opacity="0.6"
+    />
+  {/if}
   <path
     class="line"
     data-testid="line"

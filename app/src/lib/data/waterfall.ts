@@ -1,5 +1,6 @@
 import type { Snapshot, Transaction } from './types'
 import type { SaleEvent } from './ledger'
+import type { AylikSermaye } from './equityCurve'
 import { monthLabel } from '../format'
 
 export interface WaterfallStep {
@@ -34,49 +35,86 @@ export interface WaterfallBreakdown {
   monthTransactions: Transaction[]
 }
 
+function isAylikSermaye(obj: unknown): obj is AylikSermaye {
+  return obj != null && typeof (obj as AylikSermaye).sermaye === 'number'
+}
+
 /**
- * Calculates monthly equity waterfall breakdown:
- * Başlangıç
- * + Yeni mevduat (netMevduatCekim_usd)
- * [− Çekim (cekim_usd) if > 0]
- * + Gerçekleşen kâr (from SaleEvents, compared to snapshot.netKZ_usd)
- * + Temettü (nakitTemettu_usd)
- * [ℹ] Vergi & komisyon (vergiKomisyon_usd — bilgi amaçlı gösterilir, net K/Z'ye dahil olduğundan ayrıca düşülmez)
- * + Değerleme (bakiye) (STRICT RESIDUAL: donemSonu - araToplam)
- * = Dönem sonu (toplamOzkaynak_usd)
+ * Calculates monthly equity waterfall breakdown rewired onto the ledger equity curve.
+ *
+ * In a ledger-derived equity curve series (AylikSermaye), the waterfall items:
+ * Başlangıç + Yeni mevduat − Çekim + Gerçekleşen kâr + Temettü
+ * sum EXACTLY to the period end (Dönem sonu).
+ * Consequently, Değerleme (bakiye) is strictly ZERO; any non-zero residual indicates a bug.
  */
 export function buildWaterfall(
   ay: string,
-  snap: Snapshot | undefined,
-  prevSnap: Snapshot | undefined,
-  sales: SaleEvent[] = [],
-  transactions: Transaction[] = [],
+  cur: AylikSermaye | Snapshot | undefined,
+  prev: AylikSermaye | Snapshot | undefined,
+  snapOrSales?: Snapshot | SaleEvent[],
+  salesOrTxns?: SaleEvent[] | Transaction[],
+  txns?: Transaction[],
 ): WaterfallBreakdown | null {
-  if (!snap) {
+  if (!cur) {
     return null
   }
 
-  const baslangic = snap.baslangicSermayesi_usd ?? (prevSnap ? prevSnap.toplamOzkaynak_usd : 0)
-  const yeniMevduat = snap.netMevduatCekim_usd ?? 0
-  const cekim = snap.cekim_usd ?? 0
+  let snap: Snapshot | undefined
+  let sales: SaleEvent[] = []
+  let transactions: Transaction[] = []
+
+  if (Array.isArray(snapOrSales)) {
+    sales = snapOrSales
+    transactions = (salesOrTxns as Transaction[]) ?? []
+    snap = isAylikSermaye(cur) ? undefined : (cur as Snapshot)
+  } else {
+    snap = snapOrSales
+    sales = (salesOrTxns as SaleEvent[]) ?? []
+    transactions = txns ?? []
+    if (!snap && !isAylikSermaye(cur)) {
+      snap = cur as Snapshot
+    }
+  }
+
+  let baslangic = 0
+  let yeniMevduat = 0
+  let cekim = 0
+  let gerceklesenKar = 0
+  let temettu = 0
+  let donemSonu = 0
+
+  if (isAylikSermaye(cur)) {
+    const prevSermaye = prev && isAylikSermaye(prev) ? prev : undefined
+    baslangic = prevSermaye ? prevSermaye.sermaye : 0
+    yeniMevduat = Math.round((cur.mevduatKumulatif - (prevSermaye ? prevSermaye.mevduatKumulatif : 0)) * 100) / 100
+    cekim = Math.round((cur.cekimKumulatif - (prevSermaye ? prevSermaye.cekimKumulatif : 0)) * 100) / 100
+    gerceklesenKar = Math.round((cur.gerceklesenKzKumulatif - (prevSermaye ? prevSermaye.gerceklesenKzKumulatif : 0)) * 100) / 100
+    temettu = Math.round((cur.temettuKumulatif - (prevSermaye ? prevSermaye.temettuKumulatif : 0)) * 100) / 100
+    donemSonu = cur.sermaye
+  } else {
+    // Legacy Snapshot fallback
+    const snapCur = cur as Snapshot
+    const snapPrev = prev as Snapshot | undefined
+    baslangic = snapCur.baslangicSermayesi_usd ?? (snapPrev ? snapPrev.toplamOzkaynak_usd : 0)
+    yeniMevduat = snapCur.netMevduatCekim_usd ?? 0
+    cekim = snapCur.cekim_usd ?? 0
+    const mSales = sales.filter((s) => s.tarih.slice(0, 7) === ay)
+    gerceklesenKar = mSales.reduce((acc, s) => acc + s.kzUsd, 0)
+    temettu = snapCur.nakitTemettu_usd ?? 0
+    donemSonu = snapCur.toplamOzkaynak_usd
+    if (!snap) snap = snapCur
+  }
+
+  // Değerleme (bakiye) = donemSonu - araToplam
+  const araToplam = Math.round((baslangic + yeniMevduat - cekim + gerceklesenKar + temettu) * 100) / 100
+  const degerlemeBakiye = Math.round((donemSonu - araToplam) * 100) / 100
+
+  const snapNetKz = snap?.netKZ_usd ?? 0
+  const kzFarki = snap != null ? gerceklesenKar - snapNetKz : 0
+  const kzFarkiVar = snap != null && Math.abs(kzFarki) > 0.005
+  const vergiKomisyon = snap?.vergiKomisyon_usd ?? 0
 
   const monthSales = sales.filter((s) => s.tarih.slice(0, 7) === ay)
-  const gerceklesenKar = monthSales.reduce((acc, s) => acc + s.kzUsd, 0)
-  const snapNetKz = snap.netKZ_usd ?? 0
-  const kzFarki = gerceklesenKar - snapNetKz
-  const kzFarkiVar = Math.abs(kzFarki) > 0.005
-
-  const temettu = snap.nakitTemettu_usd ?? 0
-  const vergiKomisyon = snap.vergiKomisyon_usd ?? 0
-  const donemSonu = snap.toplamOzkaynak_usd
-
-  // Değerleme: STRICT RESIDUAL
-  // donemSonu = baslangic + yeniMevduat - cekim + gerceklesenKar + temettu + degerlemeBakiye
-  // Note: vergiKomisyon is NOT subtracted here because snapshot.netKZ_usd (and SaleEvents realized P/L)
-  // is already net of tax and commission (H4-fix).
-  const araToplam = baslangic + yeniMevduat - cekim + gerceklesenKar + temettu
-  const degerlemeBakiye = donemSonu - araToplam
-
   const monthTransactions = transactions
     .filter((t) => t.tarih.slice(0, 7) === ay)
     .sort((a, b) => (b.tarih > a.tarih ? 1 : b.tarih < a.tarih ? -1 : 0))
@@ -130,7 +168,9 @@ export function buildWaterfall(
     label: 'Değerleme (bakiye)',
     sign: degerlemeBakiye >= 0 ? '+' : '−',
     tutarUsd: Math.abs(degerlemeBakiye),
-    hint: 'aylık rapordan doğrudan gelmeyen, kapanış farkından hesaplanan kalan',
+    hint: isAylikSermaye(cur)
+      ? 'defter bazlı seride kalemler toplamı dönem sonuna tam eşittir'
+      : 'aylık rapordan doğrudan gelmeyen, kapanış farkından hesaplanan kalan',
   })
 
   steps.push({
@@ -141,7 +181,7 @@ export function buildWaterfall(
 
   return {
     ay,
-    ayLabel: monthLabel(snap.tarih.slice(0, 7)),
+    ayLabel: monthLabel(ay),
     hasSnapshot: true,
     baslangic,
     yeniMevduat,

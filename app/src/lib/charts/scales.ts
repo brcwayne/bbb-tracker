@@ -1,7 +1,12 @@
 import { line, area, pie, arc } from 'd3-shape'
 
-export function linePath(pts: [number, number][]): string {
-  return line<[number, number]>().x((p) => p[0]).y((p) => p[1])(pts) ?? ''
+export function linePath(pts: ([number, number] | null)[]): string {
+  return (
+    line<[number, number] | null>()
+      .defined((p): p is [number, number] => p !== null && !isNaN(p[0]) && !isNaN(p[1]))
+      .x((p) => (p ? p[0] : 0))
+      .y((p) => (p ? p[1] : 0))(pts) ?? ''
+  )
 }
 
 export function areaPath(pts: [number, number][], y0: number): string {

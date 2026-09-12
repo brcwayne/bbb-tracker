@@ -19,6 +19,7 @@
   import { liveEquity, type LiveEquity } from '../lib/data/dashboard'
   import { buildLedger } from '../lib/data/ledger'
   import { buildWaterfall, type WaterfallBreakdown } from '../lib/data/waterfall'
+  import { buildEquityCurve, type AylikSermaye } from '../lib/data/equityCurve'
   import { holdingsByPortfolio } from '../lib/data/breakdowns'
 
   // Panorama displays high-level macro overview numbers, so strip cents/kuruş (whole: true)
@@ -59,6 +60,9 @@
     const lastSnap = snaps.at(-1)
     const equityUsd = lastSnap ? lastSnap.toplamOzkaynak_usd : NaN
     const realizedUsd = d.positions.realizedTotalUsd
+
+    const fullEquityCurve = buildEquityCurve(ds, d.positions.sales)
+    const equityCurveSlice = fullEquityCurve.slice(-13)
 
     const nakitUsd = Object.values(d.cashByHesap).reduce((s, v) => s + v, 0)
     const ytd = d.periods.find((pp) => pp.period === 'YTD')
@@ -148,9 +152,11 @@
         kur: settings.rate ? settings.rate.toFixed(2) : '—',
         periodLabel: settings.period === 'all' ? '' : periodLabel,
       },
-      equitySnaps: snaps.slice(-13),
-      equitySeries: snaps.slice(-13).map((s, i) => ({ x: i, y: s.toplamOzkaynak_usd })),
-      equityLabels: snaps.slice(-13).map((s) => dateShort(s.tarih.slice(0, 10))),
+      equityCurveSlice,
+      fullEquityCurve,
+      equitySeries: equityCurveSlice.map((c, i) => ({ x: i, y: c.sermaye })),
+      compareSeries: equityCurveSlice.map((c, i) => ({ x: i, y: c.excelSermaye })),
+      equityLabels: equityCurveSlice.map((c) => monthLabel(c.ay)),
       classSlices: alloc.slices.map((r) => ({ label: r.etiket, value: r.tutarUsd })),
       classTotal: alloc.toplamUsd,
       classUnpriced: alloc.unpricedFallback,
@@ -241,17 +247,17 @@
   function getWaterfall(
     ds: Dataset,
     d: DerivedBundle,
-    equitySnaps: typeof d.snapshots,
+    equityCurveSlice: AylikSermaye[],
+    fullEquityCurve: AylikSermaye[],
     idx: number | null,
   ): WaterfallBreakdown | null {
     if (idx == null) return null
-    const snap = equitySnaps[idx]
-    if (!snap) return null
-    const allSnaps = d.snapshots
-    const fullIdx = allSnaps.indexOf(snap)
-    const prevSnap = fullIdx > 0 ? allSnaps[fullIdx - 1] : undefined
-    const ay = snap.tarih.slice(0, 7)
-    return buildWaterfall(ay, snap, prevSnap, d.positions.sales, ds.transactions)
+    const cur = equityCurveSlice[idx]
+    if (!cur) return null
+    const fullIdx = fullEquityCurve.indexOf(cur)
+    const prev = fullIdx > 0 ? fullEquityCurve[fullIdx - 1] : undefined
+    const snap = ds.snapshots.find((s) => s.tarih.slice(0, 7) === cur.ay)
+    return buildWaterfall(cur.ay, cur, prev, snap, d.positions.sales, ds.transactions)
   }
 </script>
 
@@ -269,7 +275,7 @@
 
 {#if dataset && derived}
   {@const vm = buildView(dataset, derived)}
-  {@const waterfall = getWaterfall(dataset, derived, vm.equitySnaps, selectedSnapIdx)}
+  {@const waterfall = getWaterfall(dataset, derived, vm.equityCurveSlice, vm.fullEquityCurve, selectedSnapIdx)}
   <section class="panorama">
     <!-- Künye Şeridi (K7 / H2) -->
     <div class="meta-strip">
@@ -431,14 +437,21 @@
     <KpiBand items={vm.kpiItems} />
 
     <!-- Blok 7: Grafikler -->
-    <SectionHeader title="Özkaynak eğrisi" note="son 12 ay · aya tıklayarak ayrıştırmayı gör" />
+    <div class="equity-header">
+      <SectionHeader title="Realize Sermaye" note="son 12 ay · aya tıklayarak ayrıştırmayı gör" />
+      <span class="hint">yatırılan para + gerçekleşen kâr + temettü; açık pozisyonların güncel değeri bu eğride yok</span>
+    </div>
     <LineChart
       series={vm.equitySeries}
+      compareSeries={vm.compareSeries}
       labels={vm.equityLabels}
       fmtY={(v) => money(v)}
       selectedPoint={selectedSnapIdx}
       onPointClick={(idx) => (selectedSnapIdx = selectedSnapIdx === idx ? null : idx)}
     />
+    <p class="chart-reconcile-note">
+      Excel aylık raporu kurucu sermayenin $113.209'unu içermiyor (bkz. mutabakat raporu).
+    </p>
 
     {#if selectedSnapIdx != null}
       <div class="waterfall-card" data-testid="waterfall-breakdown">
@@ -945,5 +958,22 @@
     border-radius: 3px;
     font-size: 0.8125rem;
     font-weight: 600;
+  }
+  .equity-header {
+    margin-bottom: 0.2rem;
+  }
+  .equity-header .hint {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    margin-top: -0.4rem;
+    margin-bottom: 0.5rem;
+  }
+  .chart-reconcile-note {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    margin-top: 0.35rem;
+    margin-bottom: 0.5rem;
+    font-style: italic;
   }
 </style>

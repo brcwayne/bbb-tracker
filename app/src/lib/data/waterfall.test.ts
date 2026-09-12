@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { buildWaterfall } from './waterfall'
-import type { Snapshot, Transaction } from './types'
+import type { Snapshot, Transaction, Cashflow } from './types'
 import type { SaleEvent } from './ledger'
+import type { AylikSermaye } from './equityCurve'
 
 function mockSnap(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
@@ -11,8 +12,7 @@ function mockSnap(overrides: Partial<Snapshot> = {}): Snapshot {
     netMevduatCekim_usd: 0,
     cekim_usd: 0,
     nakitTemettu_usd: 0,
-    nakit_usd: null,
-    gerceklesmemisKZ_usd: null,
+    nakit_usd: 0,
     netKZ_usd: 21717.65,
     vergiKomisyon_usd: 48.42,
     kaynak: 'excel-monthly-report',
@@ -116,7 +116,7 @@ describe('buildWaterfall (H4)', () => {
 
   it('drops Değerleme (bakiye) to zero in real snapshots data (2026-08, 2026-06, 2026-03) (H4-fix)', async () => {
     // Import real snapshots
-    const snapshots: Snapshot[] = (await import('../../../../data/snapshots.json')).default as Snapshot[]
+    const snapshots: Snapshot[] = (await import('../../../../data/snapshots.json')).default as unknown as Snapshot[]
 
     // 1) 2026-08: vergiKomisyon = 48.42, netKZ = 21717.66
     const snap08 = snapshots.find((s) => s.tarih === '2026-08-31')!
@@ -183,5 +183,78 @@ describe('buildWaterfall (H4)', () => {
     expect(res?.monthTransactions.length).toBe(2)
     expect(res?.monthTransactions[0].id).toBe('tx-aug2')
     expect(res?.monthTransactions[1].id).toBe('tx-aug1')
+  })
+
+  it('AylikSermaye serisine bağlandığında degerlemeBakiye TAM SIFIRDIR (I2)', () => {
+    const prevMonth: AylikSermaye = {
+      ay: '2026-07',
+      mevduatKumulatif: 180000,
+      cekimKumulatif: 0,
+      gerceklesenKzKumulatif: 90000,
+      temettuKumulatif: 200,
+      sermaye: 270200,
+      excelSermaye: null,
+      excelFarki: null,
+    }
+
+    const curMonth: AylikSermaye = {
+      ay: '2026-08',
+      mevduatKumulatif: 184608.62,
+      cekimKumulatif: 0,
+      gerceklesenKzKumulatif: 112291.96,
+      temettuKumulatif: 298.07,
+      sermaye: 297198.65,
+      excelSermaye: 191386.89,
+      excelFarki: 105811.76,
+    }
+
+    const snap = mockSnap({ netKZ_usd: 21717.65, vergiKomisyon_usd: 48.42 })
+    const res = buildWaterfall('2026-08', curMonth, prevMonth, snap, [], [])
+
+    expect(res).not.toBeNull()
+    expect(res!.baslangic).toBe(270200)
+    expect(res!.yeniMevduat).toBe(4608.62)
+    expect(res!.gerceklesenKar).toBe(22291.96)
+    expect(res!.temettu).toBe(98.07)
+    expect(res!.donemSonu).toBe(297198.65)
+
+    // Kabul kriteri: Değerleme (bakiye) TAM SIFIR olmalıdır
+    expect(res!.degerlemeBakiye).toBe(0)
+    const degStep = res!.steps.find((s) => s.label === 'Değerleme (bakiye)')
+    expect(degStep?.tutarUsd).toBe(0)
+  })
+
+  it('gerçek BBB defter serisinde her ay için degerlemeBakiye TAM SIFIRDIR', async () => {
+    const transactions = (await import('../../../../data/transactions.json')).default as unknown as Transaction[]
+    const cashflows = (await import('../../../../data/cashflows.json')).default as unknown as Cashflow[]
+    const snapshots = (await import('../../../../data/snapshots.json')).default as unknown as Snapshot[]
+
+    const { derivePositions } = await import('./derive')
+    const { buildEquityCurve } = await import('./equityCurve')
+
+    const ds = {
+      transactions,
+      cashflows,
+      snapshots,
+      instruments: [],
+      brokers: [],
+      portfolios: [],
+      meta: { semaVersiyonu: 1, olusturulma: '', kaynak: '', nakitHesapBazli: {}, p0Sinirlari: [] },
+      fxrates: {},
+      assetTransfers: [],
+    }
+
+    const pos = derivePositions(ds.transactions)
+    const curve = buildEquityCurve(ds, pos.sales)
+
+    for (let i = 1; i < curve.length; i++) {
+      const cur = curve[i]
+      const prev = curve[i - 1]
+      const snap = snapshots.find((s) => s.tarih.slice(0, 7) === cur.ay)
+      const res = buildWaterfall(cur.ay, cur, prev, snap, pos.sales, ds.transactions)
+      expect(res).not.toBeNull()
+      // Defter serisinde araToplam === donemSonu, bakiye her zaman 0
+      expect(res!.degerlemeBakiye).toBe(0)
+    }
   })
 })

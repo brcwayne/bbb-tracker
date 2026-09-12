@@ -208,7 +208,7 @@ describe('Panorama', () => {
     expect(wfCard?.textContent).toContain('Vergi & komisyon')
     expect(wfCard?.textContent).toContain('Değerleme (bakiye)')
     expect(wfCard?.textContent).toContain('Dönem sonu')
-    expect(wfCard?.textContent).toContain('aylık rapordan doğrudan gelmeyen, kapanış farkından hesaplanan kalan')
+    expect(wfCard?.textContent).toContain('defter bazlı seride kalemler toplamı dönem sonuna tam eşittir')
 
     // Transactions details
     expect(wfCard?.textContent).toContain('O ayın işlemleri')
@@ -218,6 +218,18 @@ describe('Panorama', () => {
     expect(closeBtn).toBeTruthy()
     await fireEvent.click(closeBtn)
     expect(container.querySelector('[data-testid="waterfall-breakdown"]')).toBeNull()
+  })
+
+  it('renders Realize Sermaye heading with hint and reconciliation note (I2)', async () => {
+    const v = await derived()
+    const { container, getByText } = render(Panorama, {
+      props: { dataset: v.dataset, derived: v.derived, view: v.derived },
+    })
+
+    expect(getByText('Realize Sermaye')).toBeInTheDocument()
+    expect(container.textContent).toContain('yatırılan para + gerçekleşen kâr + temettü; açık pozisyonların güncel değeri bu eğride yok')
+    expect(container.textContent).toContain('Excel aylık raporu kurucu sermayenin $113.209\'unu içermiyor (bkz. mutabakat raporu).')
+    expect(container.querySelector('[data-testid="line"]')).toBeTruthy()
   })
 
   it('connects class and portfolio donuts to settings.basis and reflects basis note (H8)', async () => {

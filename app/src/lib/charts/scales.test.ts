@@ -7,6 +7,12 @@ describe('linePath', () => {
     expect(d).toMatch(/^M0,0/)
     expect(d).toContain('10,10')
   })
+
+  it('skips null points creating disconnected subpaths', () => {
+    const d = linePath([[0, 0], [10, 10], null, [20, 20], [30, 10]])
+    expect(d).toContain('M0,0')
+    expect(d).toContain('M20,20')
+  })
 })
 
 describe('arcs', () => {

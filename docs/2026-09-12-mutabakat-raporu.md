@@ -79,7 +79,7 @@ G10 geliştirmesinde tespit edilen **$92.234,48** tutarındaki farkın **%100'ü
 
 ### Hipotez 4: Göç Sınırı Nakit Çapası ve TP2 Pozisyon Ayrışması (K3 Çözümü — Kanıtlandı)
 - **Bulgu:** K3 kalemi ($16.402,30), iki bağımsız alt bileşenden oluşmaktadır ve tam olarak çözülmüştür:
-  1. **$14.989,79 (Göç Nakit Çapası Farkı):** Excel göç anı nakdi ($49.403,89), defterin kendi kurucu mevduatları ve göç işlemleri nakde katılmadığı için defterden türetilen nakit ($33.784,39) ile tutarsızdı. Bu fark defterde `meta.gocNakitDuzeltmesi` kalemiyle adlandırılmış ve çift taraflı muhasebe kimliği tam olarak kapatılmıştır.
+  1. **$14.989,79 (Göç Nakit Çapası Farkı):** Excel göç anı nakdi ($49.403,89), defterin kendi kurucu mevduatları ve göç işlemleri nakde katılmadığı için defterden türetilen nakit ($33.784,80) ile tutarsızdı. Bu fark defterde `meta.gocNakitDuzeltmesi` kalemiyle adlandırılmış ve çift taraflı muhasebe kimliği tam olarak kapatılmıştır.
   2. **$1.412,51 (Zaman Farkı - K4):** 2026-08-31 sonrası 10 işlemin net gerçekleşmiş kârıdır.
 - **TP2 Notu:** Excel `Stock Position` ile `transactions.json` arasındaki 584.140 lotluk TP2 fonu ayrışması artık bir nakit gizemi değildir; açık pozisyon lot mutabakatı olarak I3 görevi kapsamında incelenecektir.
 
