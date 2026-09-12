@@ -49,6 +49,10 @@
     dataset ? cashSplitByHesap(dataset, settings.rate) : {},
   )
 
+  const totalNakitUsd = $derived(
+    Object.values(splits).reduce((sum, s) => sum + s.totalUsd, 0),
+  )
+
   const groups = $derived.by<HoldingGroup[]>(() => {
     if (!dataset || !view) return []
     void prices.status
@@ -67,6 +71,7 @@
       const kod = findBrokerKod(g.key, dataset?.brokers ?? [])
       const split = splits[kod] ?? { tl: 0, usd: 0, totalUsd: 0 }
       return {
+        kod,
         kurum: g.key,
         sahip: g.sahip ?? '',
         nakit: split.totalUsd,
@@ -108,10 +113,23 @@
 {#if dataset && view}
   <section class="kurumlar">
     <SectionHeader title="Kurumlar" />
+
+    <!-- H7: Sayfa üstünde bir kez toplam nakit ve uyarı notu -->
+    <div class="kurum-nakit-banner" data-testid="kurum-nakit-banner">
+      <div class="banner-line">
+        <span class="banner-title">Toplam Nakit: <strong>{money(totalNakitUsd)}</strong></span>
+        <span class="banner-warn-tag">⚠ kurum bazlı dağılım güvenilir değil</span>
+      </div>
+      <p class="hint">
+        göç kaynaklı: mevduatlar TOPLU altında toplu kaydedilmiş, alımlar kurum bazlı — kurum bazlı bakiye tek başına anlamlı değil
+      </p>
+    </div>
+
     <DataTable columns={summaryCols} rows={summaryRows} initialSort={{ key: 'maliyet', dir: 'desc' }} />
     {#each groups as g}
       {@const kod = findBrokerKod(g.key, dataset.brokers)}
       {@const split = splits[kod] ?? { tl: 0, usd: 0, totalUsd: 0 }}
+      {@const isNegatif = split.totalUsd < -0.005}
       <div class="panel">
         <div class="panel-head">
           <div class="panel-title-area">
@@ -119,13 +137,13 @@
             <div class="broker-cash-box" title="Kurum Nakit Bakiyesi">
               <span class="cash-label">Nakit:</span>
               {#if Math.abs(split.tl) >= 0.005}
-                <span class="cash-badge cash-tl">{tryFmt(split.tl)}</span>
+                <span class="cash-badge cash-tl" class:neg={split.tl < -0.005}>{tryFmt(split.tl)}</span>
               {/if}
               {#if Math.abs(split.tl) >= 0.005 && Math.abs(split.usd) >= 0.005}
                 <span class="cash-sep">·</span>
               {/if}
               {#if Math.abs(split.usd) >= 0.005}
-                <span class="cash-badge cash-usd">{usd(split.usd)}</span>
+                <span class="cash-badge cash-usd" class:neg={split.usd < -0.005}>{usd(split.usd)}</span>
               {/if}
               {#if Math.abs(split.tl) < 0.005 && Math.abs(split.usd) < 0.005}
                 <span class="cash-badge cash-zero">{settings.currency === 'TRY' ? tryFmt(0) : usd(0)}</span>
@@ -134,6 +152,17 @@
                 <span class="cash-total">(Toplam: {settings.currency === 'TRY' ? tryFmt(split.tl + split.usd * settings.rate) : usd(split.usd + (settings.rate > 0 ? split.tl / settings.rate : 0))})</span>
               {/if}
             </div>
+            {#if isNegatif}
+              <button
+                type="button"
+                class="badge-neg-nakit"
+                data-testid="badge-neg-nakit-{kod}"
+                onclick={() => (duzeltHesap = kod)}
+                title="Nakit düzeltmek için tıklayın"
+              >
+                ⚠ Negatif Bakiye
+              </button>
+            {/if}
           </div>
           <button
             type="button"
@@ -145,6 +174,11 @@
             ⚖ Nakit Düzelt
           </button>
         </div>
+        {#if isNegatif}
+          <p class="hint neg-nakit-hint" data-testid="neg-nakit-hint-{kod}">
+            göç kaynaklı: mevduatlar TOPLU altında toplu kaydedilmiş, alımlar kurum bazlı — kurum bazlı bakiye tek başına anlamlı değil
+          </p>
+        {/if}
         {#if duzeltHesap === kod}
           <div class="form-modal">
             <KurumNakitDuzelt
@@ -177,6 +211,58 @@
     padding: 1.25rem 1.25rem 2rem;
     max-width: min(1240px, 96vw);
     margin: 0 auto;
+  }
+  .kurum-nakit-banner {
+    background: rgba(239, 68, 68, 0.06);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .banner-line {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .banner-title {
+    font-size: 0.9375rem;
+    color: var(--ink);
+  }
+  .banner-warn-tag {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--loss);
+    background: rgba(239, 68, 68, 0.1);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+  }
+  .hint {
+    font-size: 0.8125rem;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+  .badge-neg-nakit {
+    appearance: none;
+    border: 1px solid var(--loss);
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--loss);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .badge-neg-nakit:hover {
+    background: rgba(239, 68, 68, 0.22);
+  }
+  .neg-nakit-hint {
+    margin: 0.4rem 0 0.25rem;
+    font-size: 0.8125rem;
   }
   .panel {
     background: var(--surface);
