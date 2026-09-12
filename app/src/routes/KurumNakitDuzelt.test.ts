@@ -5,6 +5,7 @@ import { fixture } from '../fixtures/dataset'
 import { writable } from 'svelte/store'
 import type { AppState } from '../lib/data/store'
 import { settings } from '../lib/settings.svelte'
+import { cashBalanceByHesap } from '../lib/data/cashBalances'
 
 const TODAY = '2026-09-11'
 const makeStore = () => writable<AppState>({ status: 'ready', dataset: structuredClone(fixture) })
@@ -79,7 +80,8 @@ describe('KurumNakitDuzelt', () => {
     await new Promise((r) => setTimeout(r, 0))
 
     expect(onSaved).toHaveBeenCalled()
-    const eklenenler = yazilan.slice(-2)
+    // 2 broker satırı + 2 TOPLU mahsup satırı = 4 satır
+    const eklenenler = yazilan.slice(-4)
     expect(eklenenler[0]).toMatchObject({
       tur: 'DUZELTME',
       hesap: 'QNB',
@@ -91,6 +93,16 @@ describe('KurumNakitDuzelt', () => {
     expect(eklenenler[0].tutar_usd).toBeCloseTo(26.79, 2)
     expect(eklenenler[1]).toMatchObject({
       tur: 'DUZELTME',
+      hesap: 'TOPLU',
+      tarih: TODAY,
+      kaynak: 'otomatik-mahsup',
+      tutar_tl: -1286,
+      kur: 48,
+      aciklama: 'QNB düzeltmesi mahsubu',
+    })
+    expect(eklenenler[1].tutar_usd).toBeCloseTo(-26.79, 2)
+    expect(eklenenler[2]).toMatchObject({
+      tur: 'DUZELTME',
       hesap: 'QNB',
       tarih: TODAY,
       kaynak: 'manual',
@@ -98,5 +110,65 @@ describe('KurumNakitDuzelt', () => {
       tutar_usd: 50,
       kur: 48,
     })
+    expect(eklenenler[3]).toMatchObject({
+      tur: 'DUZELTME',
+      hesap: 'TOPLU',
+      tarih: TODAY,
+      kaynak: 'otomatik-mahsup',
+      tutar_tl: null,
+      tutar_usd: -50,
+      kur: 48,
+      aciklama: 'QNB düzeltmesi mahsubu',
+    })
+  })
+
+  it('tek bir para birimi düzeltildiğinde tam 2 satır yazar ve toplam nakdi değiştirmez (I6)', async () => {
+    let yazilan: any = null
+    const save = vi.fn(async (_n: string, d: unknown) => {
+      yazilan = d
+    })
+    const store = makeStore()
+    let initBal = 0
+    store.subscribe((v) => {
+      if (v.dataset) {
+        initBal = Object.values(cashBalanceByHesap(v.dataset)).reduce((a, b) => a + b, 0)
+      }
+    })()
+
+    const { container, getByText } = render(KurumNakitDuzelt, {
+      hesap: 'MIDAS', hesapAdi: 'Midas', hesaplananTl: 0, hesaplananUsd: 100, today: TODAY,
+      store,
+      source: { id: 'drive', load: async () => ({}) as any, save },
+    })
+
+    // Sadece USD nakit 150 gir (fark +50 USD)
+    await setInput(container, 'USD nakit', '150')
+    ;(getByText(/kaydet/i) as HTMLButtonElement).click()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(save).toHaveBeenCalled()
+    // Eklenen son 2 satır: 1 MIDAS + 1 TOPLU
+    const eklenenler = yazilan.slice(-2)
+    expect(eklenenler).toHaveLength(2)
+    expect(eklenenler[0]).toMatchObject({
+      tur: 'DUZELTME',
+      hesap: 'MIDAS',
+      tutar_usd: 50,
+      kaynak: 'manual',
+    })
+    expect(eklenenler[1]).toMatchObject({
+      tur: 'DUZELTME',
+      hesap: 'TOPLU',
+      tutar_usd: -50,
+      kaynak: 'otomatik-mahsup',
+      aciklama: 'MIDAS düzeltmesi mahsubu',
+    })
+
+    // Toplam nakit değişmedi: +50 + (-50) = 0
+    const newDs = structuredClone(fixture)
+    newDs.cashflows = yazilan
+    const newBal = Object.values(cashBalanceByHesap(newDs)).reduce((a, b) => a + b, 0)
+    expect(newBal).toBeCloseTo(initBal, 5)
   })
 })
+

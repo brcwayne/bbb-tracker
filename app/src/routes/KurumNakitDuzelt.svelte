@@ -72,6 +72,7 @@
     try {
       const recordsToAppend: Cashflow[] = []
       if (farkTl !== 0) {
+        const tutarUsd = Math.round((farkTl / settings.rate) * 100) / 100
         recordsToAppend.push({
           id: newCashflowId(),
           tarih: today,
@@ -80,11 +81,26 @@
           tur: 'DUZELTME',
           enstruman: null,
           tutar_tl: farkTl,
-          tutar_usd: Math.round((farkTl / settings.rate) * 100) / 100,
+          tutar_usd: tutarUsd,
           kur: settings.rate,
           aciklama: `TL nakit düzeltmesi (${tryFmt(hesaplananTl)} → ${tryFmt(tl)})`,
           kaynak: 'manual',
         })
+        if (hesap !== 'TOPLU') {
+          recordsToAppend.push({
+            id: newCashflowId(),
+            tarih: today,
+            hesap: 'TOPLU',
+            portfoy: null,
+            tur: 'DUZELTME',
+            enstruman: null,
+            tutar_tl: -farkTl,
+            tutar_usd: -tutarUsd,
+            kur: settings.rate,
+            aciklama: `${hesap} düzeltmesi mahsubu`,
+            kaynak: 'otomatik-mahsup',
+          })
+        }
       }
       if (farkUsd !== 0) {
         recordsToAppend.push({
@@ -100,6 +116,21 @@
           aciklama: `USD nakit düzeltmesi (${usd(hesaplananUsd)} → ${usd(usdDirect)})`,
           kaynak: 'manual',
         })
+        if (hesap !== 'TOPLU') {
+          recordsToAppend.push({
+            id: newCashflowId(),
+            tarih: today,
+            hesap: 'TOPLU',
+            portfoy: null,
+            tur: 'DUZELTME',
+            enstruman: null,
+            tutar_tl: null,
+            tutar_usd: -farkUsd,
+            kur: settings.rate,
+            aciklama: `${hesap} düzeltmesi mahsubu`,
+            kaynak: 'otomatik-mahsup',
+          })
+        }
       }
       await appendRecords<Cashflow>(store, source, 'cashflows', recordsToAppend)
       onSaved()

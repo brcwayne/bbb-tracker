@@ -72,7 +72,7 @@ describe('cashBalanceByHesap', () => {
     expect(bal.GARAN).toBeCloseTo(500 - 250, 6)
   })
 
-  it('DUZELTME pozitif farkı TOPLU havuzundan düşer ve çift sayımı önler', () => {
+  it('DUZELTME yalnızca ilgili hesabı etkiler; TOPLU veya başka hesabı örtük mutasyona uğratmaz (I6)', () => {
     const bal = cashBalanceByHesap(ds({
       meta: { ...baseMeta, nakitHesapBazli: { MIDAS: -50000, TOPLU: 100000 } },
       cashflows: [
@@ -80,9 +80,33 @@ describe('cashBalanceByHesap', () => {
       ],
     }))
     expect(bal.MIDAS).toBeCloseTo(2000, 6)
+    // TOPLU örtük değişmez, olduğu gibi kalır
+    expect(bal.TOPLU).toBeCloseTo(100000, 6)
+  })
+
+  it('açık TOPLU mahsup satırı eklendiğinde TOPLU havuzu düşer ve toplam nakit korunur (I6)', () => {
+    const bal = cashBalanceByHesap(ds({
+      meta: { ...baseMeta, nakitHesapBazli: { MIDAS: -50000, TOPLU: 100000 } },
+      cashflows: [
+        cf({ tur: 'DUZELTME', hesap: 'MIDAS', tutar_usd: 52000, kaynak: 'manual' }),
+        cf({ tur: 'DUZELTME', hesap: 'TOPLU', tutar_usd: -52000, kaynak: 'otomatik-mahsup', aciklama: 'MIDAS düzeltmesi mahsubu' }),
+      ],
+    }))
+    expect(bal.MIDAS).toBeCloseTo(2000, 6)
     expect(bal.TOPLU).toBeCloseTo(48000, 6)
     // Toplam nakit havuzu değişmeden korunur: (-50k + 100k) == (2k + 48k)
     expect(bal.MIDAS + bal.TOPLU).toBeCloseTo(50000, 6)
+  })
+
+  it('Math.max kırpması kalktığı için TOPLU negatif bakiyeye inebilir (I6)', () => {
+    const bal = cashBalanceByHesap(ds({
+      meta: { ...baseMeta, nakitHesapBazli: { MIDAS: 0, TOPLU: 1000 } },
+      cashflows: [
+        cf({ tur: 'DUZELTME', hesap: 'TOPLU', tutar_usd: -2500, kaynak: 'otomatik-mahsup' }),
+      ],
+    }))
+    // 1000 - 2500 = -1500; 0'a kırpılmaz (clamp yok)
+    expect(bal.TOPLU).toBeCloseTo(-1500, 6)
   })
 })
 
