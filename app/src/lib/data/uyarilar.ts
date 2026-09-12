@@ -148,5 +148,27 @@ export function collectWarnings(
     }
   }
 
+  // 7. Oto-senkron gecikmesi veya hatası (I9)
+  if (ds.syncState) {
+    if (ds.syncState.hata || ds.syncState.sonucu === 'hata') {
+      warnings.push({
+        id: 'sync-hata',
+        seviye: 'uyari',
+        mesaj: `Oto-senkron hatası: ${ds.syncState.hata || 'başarısız'}`,
+        sayfa: 'panorama',
+      })
+    } else if (ds.syncState.sonKosu) {
+      const runTime = Date.parse(ds.syncState.sonKosu)
+      if (!Number.isNaN(runTime) && Date.now() - runTime > 2 * 60 * 60 * 1000) {
+        warnings.push({
+          id: 'sync-gecikti',
+          seviye: 'uyari',
+          mesaj: 'Oto-senkron 2 saatten uzun süredir çalışmadı',
+          sayfa: 'panorama',
+        })
+      }
+    }
+  }
+
   return warnings
 }

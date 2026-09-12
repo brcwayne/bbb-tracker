@@ -326,5 +326,31 @@ describe('Panorama', () => {
     // Does not crash
     expect(container.textContent).toContain('Özkaynak')
   })
+
+  it('renders Senkron in künye strip with timestamp or bilinmiyor (I9)', async () => {
+    const v = await derived()
+    // When syncState is absent
+    const { container: c1 } = render(Panorama, {
+      props: { dataset: v.dataset, derived: v.derived, view: v.derived },
+    })
+    expect(c1.querySelector('[data-testid="meta-sync"]')?.textContent).toBe('Senkron: bilinmiyor')
+
+    // When syncState is present
+    const dsWithSync = {
+      ...v.dataset!,
+      syncState: {
+        sonKosu: '2026-09-12T14:20:00Z',
+        sonucu: 'basarili',
+        degisenDosya: 3,
+        hata: null,
+      },
+    }
+    const { container: c2 } = render(Panorama, {
+      props: { dataset: dsWithSync, derived: v.derived, view: v.derived },
+    })
+    const syncText = c2.querySelector('[data-testid="meta-sync"]')?.textContent
+    expect(syncText).toContain('Senkron: 12 Eyl')
+    expect(syncText).toContain('başarılı')
+  })
 })
 

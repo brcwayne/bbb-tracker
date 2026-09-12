@@ -46,6 +46,14 @@ export class LocalFileSource implements DataSource {
       }),
     )
 
+    try {
+      const syncRes = await fetch(`${this.base}/sync-state.json`)
+      if (syncRes.ok) checkHeader(syncRes)
+      dataset.syncState = syncRes.ok ? await syncRes.json() : null
+    } catch {
+      dataset.syncState = null
+    }
+
     this.lastModified = latestMtime != null ? new Date(latestMtime).toISOString() : (dataset.meta?.olusturulma ?? null)
     return dataset
   }

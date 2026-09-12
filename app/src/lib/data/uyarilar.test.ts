@@ -161,4 +161,39 @@ describe('collectWarnings', () => {
     const w = warnings.find((x) => x.id === 'kimlik-farki')
     expect(w).toBeUndefined()
   })
+
+  it('7. triggers sync-hata when sync-state has error (I9)', () => {
+    const ds = JSON.parse(JSON.stringify(fixture))
+    ds.syncState = {
+      sonKosu: new Date().toISOString(),
+      sonucu: 'hata',
+      degisenDosya: 0,
+      hata: 'rclone connection timeout',
+    }
+    const derived = deriveAll(ds)
+    const warnings = collectWarnings(ds, derived, emptyPrices)
+    const w = warnings.find((x) => x.id === 'sync-hata')
+    expect(w).toBeDefined()
+    expect(w?.seviye).toBe('uyari')
+    expect(w?.sayfa).toBe('panorama')
+    expect(w?.mesaj).toContain('Oto-senkron hatası: rclone connection timeout')
+  })
+
+  it('7. triggers sync-gecikti when sync-state is older than 2 hours (I9)', () => {
+    const ds = JSON.parse(JSON.stringify(fixture))
+    const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000).toISOString()
+    ds.syncState = {
+      sonKosu: threeHoursAgo,
+      sonucu: 'basarili',
+      degisenDosya: 0,
+      hata: null,
+    }
+    const derived = deriveAll(ds)
+    const warnings = collectWarnings(ds, derived, emptyPrices)
+    const w = warnings.find((x) => x.id === 'sync-gecikti')
+    expect(w).toBeDefined()
+    expect(w?.seviye).toBe('uyari')
+    expect(w?.sayfa).toBe('panorama')
+    expect(w?.mesaj).toContain('Oto-senkron 2 saatten uzun süredir çalışmadı')
+  })
 })

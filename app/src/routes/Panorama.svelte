@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Dataset } from '../lib/data/types'
+  import type { Dataset, SyncState } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
   import { pct, dateShort, dateTimeShort, DASH, monthLabel } from '../lib/format'
@@ -37,6 +37,23 @@
     view?: DerivedBundle
     source?: DataSource
   } = $props()
+
+  function formatSync(sync: SyncState | null | undefined): string {
+    if (!sync?.sonKosu) return 'bilinmiyor'
+    try {
+      const d = new Date(sync.sonKosu)
+      if (Number.isNaN(d.getTime())) return 'bilinmiyor'
+      const day = d.getDate()
+      const AY = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+      const m = AY[d.getMonth()]
+      const hh = String(d.getHours()).padStart(2, '0')
+      const mm = String(d.getMinutes()).padStart(2, '0')
+      const statusText = sync.sonucu === 'basarili' ? 'başarılı' : sync.sonucu
+      return `${day} ${m} ${hh}:${mm} · ${statusText}`
+    } catch {
+      return 'bilinmiyor'
+    }
+  }
 
   function toneOf(n: number | null | undefined): 'gain' | 'loss' | 'neutral' | undefined {
     if (n == null || !Number.isFinite(n) || n === 0) return undefined
@@ -166,6 +183,7 @@
         fiyatZamani,
         kur: settings.rate ? settings.rate.toFixed(2) : '—',
         periodLabel: settings.period === 'all' ? '' : periodLabel,
+        senkron: formatSync(ds.syncState),
       },
       equityCurveSlice,
       fullEquityCurve,
@@ -312,6 +330,8 @@
         <span class="sep">·</span>
         <span>{vm.metaStrip.periodLabel}</span>
       {/if}
+      <span class="sep">·</span>
+      <span data-testid="meta-sync">Senkron: {vm.metaStrip.senkron}</span>
     </div>
 
     <!-- Blok 1: BU AY — <Ay Adı> (K5) -->

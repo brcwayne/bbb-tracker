@@ -291,6 +291,21 @@ export class DriveSource implements DataSource {
       }),
     )
 
+    const syncFile = files.find((f) => f.name === 'sync-state.json')
+    if (syncFile) {
+      try {
+        const syncRes = await fetch(`https://www.googleapis.com/drive/v3/files/${syncFile.id}?alt=media`, {
+          headers,
+          cache: 'no-store',
+        })
+        dataset.syncState = syncRes.ok ? await syncRes.json() : null
+      } catch {
+        dataset.syncState = null
+      }
+    } else {
+      dataset.syncState = null
+    }
+
     this.lastModified =
       latestTime != null ? new Date(latestTime).toISOString() : (dataset.meta?.olusturulma ?? null)
     return dataset
