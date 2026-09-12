@@ -115,4 +115,25 @@ describe('collectWarnings', () => {
     expect(w?.sayfa).toBe('pozisyonlar')
     expect(w?.mesaj).toContain('aşırı satış THYAO')
   })
+
+  it('6. triggers kimlik-farki with level hata when accounting identity drifts > 0.5%', () => {
+    const ds = JSON.parse(JSON.stringify(fixture))
+    ds.meta.gocNakitDuzeltmesi = undefined
+    const derived = deriveAll(ds)
+    const warnings = collectWarnings(ds, derived, emptyPrices)
+    const w = warnings.find((x) => x.id === 'kimlik-farki')
+    expect(w).toBeDefined()
+    expect(w?.seviye).toBe('hata')
+    expect(w?.sayfa).toBe('panorama')
+    expect(w?.mesaj).toContain('Muhasebe kimliği tutmuyor')
+  })
+
+  it('does not trigger kimlik-farki when identity is closed within 0.5%', () => {
+    const ds = JSON.parse(JSON.stringify(fixture))
+    // fixture has gocNakitDuzeltmesi: -450 which closes the identity
+    const derived = deriveAll(ds)
+    const warnings = collectWarnings(ds, derived, emptyPrices)
+    const w = warnings.find((x) => x.id === 'kimlik-farki')
+    expect(w).toBeUndefined()
+  })
 })

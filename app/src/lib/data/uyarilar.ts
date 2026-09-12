@@ -2,6 +2,7 @@ import type { Dataset } from './types'
 import type { DerivedBundle } from './store'
 import type { PriceLookup } from './unrealized'
 import { liveEquity } from './dashboard'
+import { kimlikKontrol } from './kimlik'
 
 export type WarningLevel = 'bilgi' | 'uyari' | 'hata'
 
@@ -73,6 +74,24 @@ export function collectWarnings(
         sayfa: 'pozisyonlar',
       })
     })
+  }
+
+  // 6. Muhasebe kimliği sapması (kimlik %0,5'ten fazla sapıyorsa 'hata')
+  if (derived.positions) {
+    const kimlik = kimlikKontrol(
+      ds,
+      derived.positions.sales ?? [],
+      derived.positions.open ?? [],
+      nakitUsd,
+    )
+    if (kimlik.farkOrani > 0.005) {
+      warnings.push({
+        id: 'kimlik-farki',
+        seviye: 'hata',
+        mesaj: `Muhasebe kimliği tutmuyor: fark ${fmtUsd(Math.abs(kimlik.fark))} (%${(kimlik.farkOrani * 100).toFixed(1)})`,
+        sayfa: 'panorama',
+      })
+    }
   }
 
   return warnings

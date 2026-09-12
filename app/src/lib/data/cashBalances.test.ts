@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   cashBalanceByHesap,
   cashSplitByHesap,
+  turetilmisNakit,
   formatBrokerCash,
   formatBrokerCashTable,
 } from './cashBalances'
@@ -122,5 +123,24 @@ describe('cashSplitByHesap', () => {
     const res = formatBrokerCashTable(s, 'TRY', 48)
     expect(res).toContain('₺5.000,00 · $200.00')
     expect(res).not.toContain('Toplam:')
+  })
+})
+
+describe('turetilmisNakit', () => {
+  it('tüm işlem ve nakit akışlarından (kaynak ayrımı yapmadan) toplam nakit türetir', () => {
+    const d = ds({
+      cashflows: [
+        cf({ tur: 'YATIRMA', tutar_usd: 1000, kaynak: 'migration' }),
+        cf({ tur: 'TEMETTU', tutar_usd: 50, kaynak: 'migration' }),
+        cf({ tur: 'CEKME', tutar_usd: 200, kaynak: 'manual' }),
+        cf({ tur: 'DUZELTME', tutar_usd: 10, kaynak: 'manual' }),
+      ],
+      transactions: [
+        tx({ yon: 'AL', net_usd: 500, kaynak: 'migration' }),
+        tx({ yon: 'SAT', net_usd: 300, kaynak: 'manual' }),
+      ],
+    })
+    // 1000 + 50 - 200 + 10 - 500 + 300 = 660
+    expect(turetilmisNakit(d)).toBe(660)
   })
 })

@@ -102,6 +102,7 @@ export interface Meta {
   kaynak: string
   nakitHesapBazli: Record<string, number>
   p0Sinirlari: string[]
+  gocNakitDuzeltmesi?: number
 }
 
 export type FxRates = Record<string, number>

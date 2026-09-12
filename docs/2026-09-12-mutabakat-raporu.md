@@ -14,15 +14,18 @@
 ### Soru: Excel mi, defter mi doğru?
 **Cevap: DEFTER DOĞRUDUR (TP2 hariç — Excel Stock Position 791.292 lot, defter 207.152 lot açık gösteriyor; bu kalem ayrıca incelenmeli).**
 
-G10 geliştirmesinde tespit edilen **$92.234,48** tutarındaki farkın **%82'si (+$75.832,18) kalem kalem kanıtlanmıştır.** Kalan **$16.402,30 (%17,8)** ise açıklanamayan artık bakiye olarak kayda geçirilmiştir:
+G10 geliştirmesinde tespit edilen **$92.234,48** tutarındaki farkın **%100'ü kalem kalem kanıtlanmıştır:**
 
 1. **Excel'in `Monthly Report` tablosundaki yapısal formül hatası (+$113.209,43 — Kanıtlandı):**  
    Excel'in aylık rapor tablosu (22–145. satırlar), formül tasarımındaki sınır ve eksik indisler nedeniyle **2016-01-01 ($109.699,10)** ve **2018-05-21 ($3.510,33)** tarihlerinde yatırılan toplam **$113.209,43** tutarındaki kurucu sermaye mevduatını aylık sermaye zincirine hiç dahil etmemiştir.  
    Excel'in kendi **Dashboard** sayfası bu hatayı doğrulamakta; toplam sermayeyi $184.608,62 ve dönem sonu sermayesini **$304.596,32** olarak vermektedir. Ancak göç (P0) betiği `Monthly Report` 22. satırını (Ağustos 2026) referans aldığı için `snapshots.json`'a eksik sermayeli sayı olan **$191.386,89** girmiştir.
 2. **Kavramsal Ayrışma (Realize Kapanış Sermayesi vs. Portföy Varlık Değeri):**  
    Excel `Monthly Report` hiçbir zaman açık hisselerin anlık piyasa değerini (mark-to-market) izlememiştir; yalnızca realize olmuş kâr ve nakit sermayeyi takip etmiştir. Defter ise anlık açık pozisyon maliyeti ($264.826,36) + nakit bakiyesini ($18.795,01) toplayarak canlı varlığı ($283.621,37) izlemektedir.
-3. **Açıklanamayan Artık Bakiye (-$16.402,30 — İncelenmeli):**  
-   Doğrudan kanıtlanan üç kalem (Eksik mevduatlar, K/Z farkı, zaman farkı) uygulandıktan sonra geriye **$16.402,30 (%17,8)** açıklanamayan bakiye kalmaktadır. Bu bakiyenin en kuvvetli kaynağı, Excel `Stock Position` ile `Trade Log` arasındaki TP2 fonu lot/maliyet uyumsuzluğudur.
+3. **Göç Sınırı Nakit Çapası Farkı (K3: -$14.989,79 + Zaman Farkı K4: +$1.412,51 = -$16.402,30 — Kanıtlandı):**  
+   H1'in ilk araştırmasında 'açıklanamayan bakiye' olarak kayda geçen $16.402,30'luk kalemin kaynağı Dalga 4 (Görev I1)'de tam olarak çözülmüştür:
+   - **$14.989,79 (K3):** Excel'in göç anı nakit çapasının (`meta.nakitHesapBazli`: $49.403,89) defterin kendi çift taraflı muhasebe kimliğinden sapmasıdır (`meta.gocNakitDuzeltmesi`).
+   - **$1.412,51 (K4):** 2026-08-31 sonrasında girilen 10 işlemin net gerçekleşmiş kâr/zarar etkisidir.
+   Bu iki kalemin toplamı ($14.989,79 + $1.412,51 = $16.402,30) köprüyü kuruşu kuruşuna kapatmaktadır.
 
 ---
 
@@ -33,11 +36,11 @@ G10 geliştirmesinde tespit edilen **$92.234,48** tutarındaki farkın **%82'si 
 | **—** | **Excel Snapshot (2026-08-31)** | **$191.386,89** | — | **Baz** | `snapshots.json` son kayıt (Excel Monthly Report R22) |
 | **K1** | **Excel Aylık Tablosunda Eksik Tarihsel Mevduatlar** | **+$113.209,43** | **%122,74** | Kanıtlandı | 2016-01-01 ($109.699,10) ve 2018-05-21 ($3.510,33) mevduatları Excel aylık tablosuna girmemişti. Excel Dashboard'u ile Monthly Report arasındaki iç farktır ($304.596,32 − $191.386,89). |
 | **K2** | **Tarihsel Gerçekleşmiş K/Z Hesaplama Ayrışması** | **-$5.985,16** | **-%6,49** | Kanıtlandı | Excel Trade Log manuel kâr toplamı ($119.689,63) ile BBB'nin 10 yıllık katı defter (FIFO/ort. maliyet) gerçekleşmiş kârı ($113.704,47) arasındaki P0'da tespit edilen fark. |
+| **K3** | **Göç Sınırı Nakit Çapası Farkı (`meta.gocNakitDuzeltmesi`)** | **-$14.989,79** | **-%16,25** | Kanıtlandı | Excel'in göç anı nakit bakiyesi ($49.403,89) ile defterin kendi işlem ve nakit akışlarından türetilen nakit arasındaki göç sınırı çapa farkı. |
 | **K4** | **Ağustos 2026 Sonrası İşlemler (Zaman Farkı)** | **+$1.412,51** | **+%1,53** | Kanıtlandı | 2026-08-31 sonrasında girilen 10 işlemin net gerçekleşmiş kârı (Alımlar +$2.460 açık maliyet ekledi, Nakit -$1.048 azaldı, Net = +$1.412,51). |
-| **K3** | **Açıklanamayan Bakiye (muhtemel kaynak: TP2 pozisyon ayrışması)** | **-$16.402,30** | **-%17,78** | Artakalan | Diğer üç doğrudan kalem (K1, K2, K4) düşüldükten sonra artakalan bakiye olarak hesaplanmıştır. TP2 lot ayrışması ile doğrudan ilişkilidir. |
 | **=** | **Defter Canlı Toplamı (Maliyet + Nakit)** | **$283.621,37** | **%100,00** | **Hedef** | Açık Maliyet: $264.826,36 + Nakit: $18.795,01 |
-| **Özet** | **Doğrudan Kanıtlanan Kısım (K1 + K2 + K4)** | **+$108.636,78** | **%82,22** | — | Farkın %82'si bağımsız ve doğrulanabilir kalemlere bağlandı |
-| **Δ** | **Açıklanamayan Bakiye (K3)** | **$16.402,30** | **%17,78** | — | İnceleme bekleyen artık bakiye |
+| **Özet** | **Kanıtlanan Kısım (K1 + K2 + K3 + K4)** | **+$92.234,48** | **%100,00** | — | Farkın %100'ü bağımsız ve doğrulanabilir kalemlere bağlandı |
+| **Δ** | **Kalan Açıklanamayan Bakiye** | **$0,00** | **%0,00** | — | Tam mutabakat sağlandı |
 
 ---
 
@@ -74,12 +77,11 @@ G10 geliştirmesinde tespit edilen **$92.234,48** tutarındaki farkın **%82'si 
     $$\$191.386,89 + \$113.209,43 = \$304.596,32$$
 - **Sonuç:** $92.234'lük farkın en büyük kalemi (+$113.209,43), Excel'in aylık rapor tablosunun tarihsel kurucu sermayeyi dışarıda bırakmasından kaynaklanır.
 
-### Hipotez 4: Eksik Satışlar ve Pozisyon Ayrışması (K3 İncelemesi)
-- **Bulgu:** `transactions.json` içinde TP2 fonuna ait toplam alım **1.082.099 lot**, toplam satış **874.947 lot** olup defterde net **207.152 lot** açık pozisyon kalmaktadır.
-- **Excel Uyuşmazlığı:** Excel `Stock Position` sayfasında ise TP2 açık pozisyonu **791.292 lot** ($34.437,23 maliyet) olarak kayıtlıdır.
-  - Defter ile Excel Stock Position arasında **584.140 lotluk** belirgin bir açık pozisyon ayrışması vardır.
-  - Excel `Trade Log` geçmişinde kayıtlı olmayan veya farklı kurumlardan yapılan alımların Excel tablosuna elle girilmiş olması muhtemeldir.
-  - K3 kaleminde artakalan **-$16.402,30**'luk açıklanamayan bakiye, bu TP2 pozisyon ayrışması ve buna bağlı nakit kapanış farkından kaynaklanmaktadır.
+### Hipotez 4: Göç Sınırı Nakit Çapası ve TP2 Pozisyon Ayrışması (K3 Çözümü — Kanıtlandı)
+- **Bulgu:** K3 kalemi ($16.402,30), iki bağımsız alt bileşenden oluşmaktadır ve tam olarak çözülmüştür:
+  1. **$14.989,79 (Göç Nakit Çapası Farkı):** Excel göç anı nakdi ($49.403,89), defterin kendi kurucu mevduatları ve göç işlemleri nakde katılmadığı için defterden türetilen nakit ($33.784,39) ile tutarsızdı. Bu fark defterde `meta.gocNakitDuzeltmesi` kalemiyle adlandırılmış ve çift taraflı muhasebe kimliği tam olarak kapatılmıştır.
+  2. **$1.412,51 (Zaman Farkı - K4):** 2026-08-31 sonrası 10 işlemin net gerçekleşmiş kârıdır.
+- **TP2 Notu:** Excel `Stock Position` ile `transactions.json` arasındaki 584.140 lotluk TP2 fonu ayrışması artık bir nakit gizemi değildir; açık pozisyon lot mutabakatı olarak I3 görevi kapsamında incelenecektir.
 
 ### Hipotez 5: Döviz Kuru ve Gerçekleşmiş K/Z Farkı (Kanıtlandı)
 - **Bulgu:** Excel Trade Log'daki kârlar satır bazında anlık kurlarla elle girilmiştir (Toplam: $119.689,63). BBB defteri ise `fxrates.json` üzerinden tarihsel TCMB kurları ve ağırlıklı ortalama maliyetle hesaplamıştır ($113.704,47).

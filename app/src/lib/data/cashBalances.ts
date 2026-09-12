@@ -43,6 +43,23 @@ export function cashBalanceByHesap(ds: Dataset): Record<string, number> {
   return bal
 }
 
+/**
+ * Defterdeki TÜM işlem ve nakit akışlarından (kaynak ayrımı yapmadan) türetilmiş toplam nakit.
+ * meta.p0Sinirlari gereği hesap bazlı kırılım iddia etmez, yalnızca genel toplam döndürür.
+ */
+export function turetilmisNakit(ds: Dataset): number {
+  let cash = 0
+  for (const c of ds.cashflows) {
+    if (c.tur === 'YATIRMA' || c.tur === 'TEMETTU') cash += c.tutar_usd
+    else if (c.tur === 'CEKME') cash -= c.tutar_usd
+    else if (c.tur === 'DUZELTME') cash += c.tutar_usd
+  }
+  for (const t of ds.transactions) {
+    cash += t.yon === 'AL' ? -t.net_usd : t.net_usd
+  }
+  return Math.round(cash * 100) / 100
+}
+
 export function cashSplitByHesap(
   ds: Dataset,
   rate: number,
