@@ -6,6 +6,7 @@
   import { appendRecord, updateRecord } from '../../lib/data/store'
   import { derivePositions } from '../../lib/data/derive'
   import { money, settings } from '../../lib/settings.svelte'
+  import { validateSaleScope, secButtonLabel, type ScopeWarning } from '../../lib/data/validation'
 
   let {
     dataset,
@@ -53,6 +54,7 @@
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
   let saving = $state(false)
+  let scopeWarnings = $state<ScopeWarning[]>([])
 
   const priceCurrency = $derived(instrumentOf(enstruman)?.girisParaBirimi === 'USD' ? 'USD' : 'TL')
   const fiyatUsd = $derived(
@@ -60,7 +62,7 @@
   )
   const netUsd = $derived(Number(lot || 0) * fiyatUsd)
 
-  function review() {
+  function review(ignoreWarnings = false) {
     error = null
     if (!enstruman || !hesap || !portfoy || !lot || !fiyatInput) {
       error = 'Tüm alanları doldurun.'
@@ -80,7 +82,27 @@
         error = `Bu enstrümanda açık pozisyondan fazla satamazsınız (açık: ${open}).`
         return
       }
+
+      if (!ignoreWarnings) {
+        const currentTxns = editing
+          ? dataset.transactions.filter((t) => t.id !== editing!.id)
+          : dataset.transactions
+        const check = validateSaleScope(
+          currentTxns,
+          dataset.assetTransfers ?? [],
+          enstruman,
+          lotNum,
+          portfoy,
+          hesap,
+        )
+        if (!check.valid) {
+          scopeWarnings = check.warnings
+          return
+        }
+      }
     }
+
+    scopeWarnings = []
     if (editing) {
       const draftPatch: Transaction = {
         ...editing,
@@ -107,6 +129,28 @@
       }
     }
     step = 'confirm'
+  }
+
+  function selectAlternative(w: ScopeWarning) {
+    if (!w.alternative) return
+    if (w.kind === 'portfoy') {
+      portfoy = w.alternative.scope
+    } else if (w.kind === 'hesap') {
+      hesap = w.alternative.scope
+    }
+    scopeWarnings = scopeWarnings.filter((item) => item !== w)
+    if (scopeWarnings.length === 0) {
+      review()
+    }
+  }
+
+  function proceedAnyway() {
+    scopeWarnings = []
+    review(true)
+  }
+
+  function cancelWarning() {
+    scopeWarnings = []
   }
 
   async function confirmSave() {
@@ -227,8 +271,42 @@
       <input type="date" bind:value={tarih} aria-label="Tarih" max={todayIso()} />
     </label>
   </div>
+  {#if scopeWarnings.length > 0}
+    <div class="scope-warning-card" data-testid="scope-warning-card">
+      {#each scopeWarnings as w}
+        <div class="scope-warning-item">
+          <p class="scope-warning-msg">{w.mesaj}</p>
+          <div class="scope-warning-actions">
+            {#if w.alternative}
+              <button
+                type="button"
+                class="btn-select-alt"
+                onclick={() => selectAlternative(w)}
+              >
+                {secButtonLabel(w.alternative.scope)}
+              </button>
+            {/if}
+            <button
+              type="button"
+              class="btn-proceed-anyway"
+              onclick={proceedAnyway}
+            >
+              Yine de {w.currentScope} ile kaydet
+            </button>
+            <button
+              type="button"
+              class="btn-cancel-warning"
+              onclick={cancelWarning}
+            >
+              İptal
+            </button>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
   {#if error}<p class="error">{error}</p>{/if}
-  <button onclick={review}>İncele</button>
+  <button onclick={() => review(false)}>İncele</button>
 {:else}
   <div class="summary">
     <p><strong>{yon}</strong> — {enstruman} · {lot} lot · {fiyatInput} {priceCurrency}/lot · toplam {money(netUsd)}</p>
@@ -242,6 +320,56 @@
 {/if}
 
 <style>
+  .scope-warning-card {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    background: rgba(234, 179, 8, 0.08);
+    border: 1px solid rgba(234, 179, 8, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .scope-warning-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .scope-warning-msg {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+  .scope-warning-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.2rem;
+  }
+  .scope-warning-actions button {
+    margin: 0;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.8125rem;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .btn-select-alt {
+    background: var(--ink);
+    color: var(--bg);
+    border: 1px solid var(--ink);
+    font-weight: 600;
+  }
+  .btn-proceed-anyway {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--hairline);
+  }
+  .btn-cancel-warning {
+    background: transparent;
+    color: var(--ink-soft);
+    border: 1px solid transparent;
+  }
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

@@ -196,4 +196,181 @@ describe('IslemFormu edit mode', () => {
     expect(record?.fiyat_tl).toBeNull()
     expect(record?.girisParaBirimi).toBe('USD')
   })
+
+  it('warns on SAT with insufficient portfolio lot and offers alternative and override (H5)', async () => {
+    // Construct dataset where THYAO exists in DELTA (100 lots) but 0 in ENIS
+    const thyaoTx: Transaction = {
+      id: 'tx_thyao_delta',
+      tarih: '2024-01-01',
+      hesap: 'GARAN',
+      portfoy: 'DELTA',
+      enstruman: 'THYAO',
+      yon: 'AL',
+      lot: 100,
+      girisParaBirimi: 'USD',
+      fiyat_tl: null,
+      fiyat_usd: 10,
+      kur: null,
+      komisyon_usd: 0,
+      brut_usd: 1000,
+      net_usd: 1000,
+      not: '',
+      kaynak: 'manual',
+      olusturulma: null,
+    }
+    const ds = {
+      ...fixture,
+      transactions: [thyaoTx],
+      portfolios: [
+        { kod: 'DELTA', ad: 'Delta', aciklama: '', renk: '#3b82f6', baslangicTarihi: null, bitisTarihi: null, kaynak: 'excel' as const, aktif: true },
+        { kod: 'ENIS', ad: 'Enis', aciklama: '', renk: '#10b981', baslangicTarihi: null, bitisTarihi: null, kaynak: 'excel' as const, aktif: true },
+      ],
+    }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(store)
+    const onSaved = vi.fn()
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+
+    const { getByLabelText, getByText, queryByTestId } = render(IslemFormu, {
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved },
+    })
+
+    await fireEvent.change(getByLabelText('Yön'), { target: { value: 'SAT' } })
+    await fireEvent.change(getByLabelText('Enstrüman'), { target: { value: 'THYAO' } })
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
+    await fireEvent.change(getByLabelText('Portföy'), { target: { value: 'ENIS' } })
+    await fireEvent.input(getByLabelText('Lot'), { target: { value: '50' } })
+    await fireEvent.input(getByLabelText('Fiyat (TL)'), { target: { value: '10' } })
+
+    // Click İncele -> warning card must appear
+    await fireEvent.click(getByText('İncele'))
+    const warnCard = queryByTestId('scope-warning-card')
+    expect(warnCard).toBeInTheDocument()
+    expect(warnCard?.textContent).toContain('ENIS portföyünde THYAO yok')
+    expect(warnCard?.textContent).toContain('DELTA portföyünde 100 lot var')
+
+    // Alternative button exists
+    expect(getByText("DELTA'yı seç")).toBeInTheDocument()
+    // "Yine de ENIS ile kaydet" exists
+    expect(getByText('Yine de ENIS ile kaydet')).toBeInTheDocument()
+    // "İptal" exists
+    expect(getByText('İptal')).toBeInTheDocument()
+
+    // 1) Test Cancel
+    await fireEvent.click(getByText('İptal'))
+    expect(queryByTestId('scope-warning-card')).toBeNull()
+
+    // 2) Trigger warning again, then click alternative button
+    await fireEvent.click(getByText('İncele'))
+    expect(queryByTestId('scope-warning-card')).toBeInTheDocument()
+    await fireEvent.click(getByText("DELTA'yı seç"))
+
+    // Should switch portfoy to DELTA and proceed to confirm since DELTA has 100 >= 50
+    expect(getByText('Onayla ve Kaydet')).toBeInTheDocument()
+    expect(getByText(/GARAN \/ DELTA/)).toBeInTheDocument()
+  })
+
+  it('allows proceeding anyway via "Yine de ... ile kaydet" without locking user (H5)', async () => {
+    const thyaoTx: Transaction = {
+      id: 'tx_thyao_delta2',
+      tarih: '2024-01-01',
+      hesap: 'GARAN',
+      portfoy: 'DELTA',
+      enstruman: 'THYAO',
+      yon: 'AL',
+      lot: 100,
+      girisParaBirimi: 'USD',
+      fiyat_tl: null,
+      fiyat_usd: 10,
+      kur: null,
+      komisyon_usd: 0,
+      brut_usd: 1000,
+      net_usd: 1000,
+      not: '',
+      kaynak: 'manual',
+      olusturulma: null,
+    }
+    const ds = {
+      ...fixture,
+      transactions: [thyaoTx],
+      portfolios: [
+        { kod: 'DELTA', ad: 'Delta', aciklama: '', renk: '#3b82f6', baslangicTarihi: null, bitisTarihi: null, kaynak: 'excel' as const, aktif: true },
+        { kod: 'ENIS', ad: 'Enis', aciklama: '', renk: '#10b981', baslangicTarihi: null, bitisTarihi: null, kaynak: 'excel' as const, aktif: true },
+      ],
+    }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(store)
+    const onSaved = vi.fn()
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+
+    const { getByLabelText, getByText } = render(IslemFormu, {
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved },
+    })
+
+    await fireEvent.change(getByLabelText('Yön'), { target: { value: 'SAT' } })
+    await fireEvent.change(getByLabelText('Enstrüman'), { target: { value: 'THYAO' } })
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
+    await fireEvent.change(getByLabelText('Portföy'), { target: { value: 'ENIS' } })
+    await fireEvent.input(getByLabelText('Lot'), { target: { value: '50' } })
+    await fireEvent.input(getByLabelText('Fiyat (TL)'), { target: { value: '10' } })
+
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByText('Yine de ENIS ile kaydet'))
+
+    // Should proceed to confirm step
+    expect(getByText('Onayla ve Kaydet')).toBeInTheDocument()
+    expect(getByText(/GARAN \/ ENIS/)).toBeInTheDocument()
+  })
+
+  it('shows no warning when chosen portfolio and broker have enough lots (H5)', async () => {
+    const thyaoTx: Transaction = {
+      id: 'tx_thyao_delta3',
+      tarih: '2024-01-01',
+      hesap: 'GARAN',
+      portfoy: 'DELTA',
+      enstruman: 'THYAO',
+      yon: 'AL',
+      lot: 100,
+      girisParaBirimi: 'USD',
+      fiyat_tl: null,
+      fiyat_usd: 10,
+      kur: null,
+      komisyon_usd: 0,
+      brut_usd: 1000,
+      net_usd: 1000,
+      not: '',
+      kaynak: 'manual',
+      olusturulma: null,
+    }
+    const ds = {
+      ...fixture,
+      transactions: [thyaoTx],
+      portfolios: [
+        { kod: 'DELTA', ad: 'Delta', aciklama: '', renk: '#3b82f6', baslangicTarihi: null, bitisTarihi: null, kaynak: 'excel' as const, aktif: true },
+      ],
+    }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(store)
+    const onSaved = vi.fn()
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+
+    const { getByLabelText, getByText, queryByTestId } = render(IslemFormu, {
+      props: { dataset: state.dataset!, view: state.derived!, source, store, onSaved },
+    })
+
+    await fireEvent.change(getByLabelText('Yön'), { target: { value: 'SAT' } })
+    await fireEvent.change(getByLabelText('Enstrüman'), { target: { value: 'THYAO' } })
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
+    await fireEvent.change(getByLabelText('Portföy'), { target: { value: 'DELTA' } })
+    await fireEvent.input(getByLabelText('Lot'), { target: { value: '50' } })
+    await fireEvent.input(getByLabelText('Fiyat (TL)'), { target: { value: '10' } })
+
+    await fireEvent.click(getByText('İncele'))
+    // No warning card, directly on confirm step
+    expect(queryByTestId('scope-warning-card')).toBeNull()
+    expect(getByText('Onayla ve Kaydet')).toBeInTheDocument()
+  })
 })
