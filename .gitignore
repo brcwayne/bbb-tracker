@@ -15,3 +15,7 @@ app/dist/
 app/dev-dist/
 app/.env
 logs/
+Ekstreler/
+*.xlsm
+*.xlsx
+.venv/
