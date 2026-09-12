@@ -45,17 +45,22 @@ export function cashBalanceByHesap(ds: Dataset): Record<string, number> {
 
 /**
  * Defterdeki TÜM işlem ve nakit akışlarından (kaynak ayrımı yapmadan) türetilmiş toplam nakit.
+ * asOfDate verilirse yalnızca o tarihe kadar (tarih <= asOfDate) olan hareketleri toplar.
  * meta.p0Sinirlari gereği hesap bazlı kırılım iddia etmez, yalnızca genel toplam döndürür.
  */
-export function turetilmisNakit(ds: Dataset): number {
+export function turetilmisNakit(ds: Dataset, asOfDate?: string): number {
   let cash = 0
   for (const c of ds.cashflows) {
-    if (c.tur === 'YATIRMA' || c.tur === 'TEMETTU') cash += c.tutar_usd
-    else if (c.tur === 'CEKME') cash -= c.tutar_usd
-    else if (c.tur === 'DUZELTME') cash += c.tutar_usd
+    if (!asOfDate || c.tarih <= asOfDate) {
+      if (c.tur === 'YATIRMA' || c.tur === 'TEMETTU') cash += c.tutar_usd
+      else if (c.tur === 'CEKME') cash -= c.tutar_usd
+      else if (c.tur === 'DUZELTME') cash += c.tutar_usd
+    }
   }
   for (const t of ds.transactions) {
-    cash += t.yon === 'AL' ? -t.net_usd : t.net_usd
+    if (!asOfDate || t.tarih <= asOfDate) {
+      cash += t.yon === 'AL' ? -t.net_usd : t.net_usd
+    }
   }
   return Math.round(cash * 100) / 100
 }

@@ -53,8 +53,7 @@ export interface Snapshot {
   netMevduatCekim_usd: number
   cekim_usd: number
   nakitTemettu_usd: number
-  nakit_usd: number | null
-  gerceklesmemisKZ_usd: number | null
+  nakit_usd: number
   netKZ_usd: number
   vergiKomisyon_usd: number
   kaynak: string

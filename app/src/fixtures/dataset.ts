@@ -15,8 +15,8 @@ export const fixture: Dataset = {
     { id: 'c_b', tarih: '2023-04-10', hesap: 'TOPLU', portfoy: null, tur: 'TEMETTU', enstruman: 'THYAO', tutar_tl: 100, tutar_usd: 4, kur: 25, aciklama: 'Cash', kaynak: 'migration' },
   ],
   snapshots: [
-    { tarih: '2021-03-31', toplamOzkaynak_usd: 5175, baslangicSermayesi_usd: 5000, netMevduatCekim_usd: 0, cekim_usd: 0, nakitTemettu_usd: 0, nakit_usd: null, gerceklesmemisKZ_usd: null, netKZ_usd: 175, vergiKomisyon_usd: 0, kaynak: 'excel-monthly-report' },
-    { tarih: '2024-01-31', toplamOzkaynak_usd: 5475, baslangicSermayesi_usd: 5175, netMevduatCekim_usd: 0, cekim_usd: 0, nakitTemettu_usd: 4, nakit_usd: null, gerceklesmemisKZ_usd: null, netKZ_usd: 300, vergiKomisyon_usd: 1.5, kaynak: 'excel-monthly-report' },
+    { tarih: '2021-03-31', toplamOzkaynak_usd: 5175, baslangicSermayesi_usd: 5000, netMevduatCekim_usd: 0, cekim_usd: 0, nakitTemettu_usd: 0, nakit_usd: 5000, netKZ_usd: 175, vergiKomisyon_usd: 0, kaynak: 'excel-monthly-report' },
+    { tarih: '2024-01-31', toplamOzkaynak_usd: 5475, baslangicSermayesi_usd: 5175, netMevduatCekim_usd: 0, cekim_usd: 0, nakitTemettu_usd: 4, nakit_usd: 5004, netKZ_usd: 300, vergiKomisyon_usd: 1.5, kaynak: 'excel-monthly-report' },
   ],
   instruments: [
     { kod: 'ASTOR', ad: 'ASTOR', sinif: 'BIST', girisParaBirimi: 'TL', fiyatKaynagi: 'yahoo', fiyatSembolu: 'ASTOR.IS', seviyeler: null },

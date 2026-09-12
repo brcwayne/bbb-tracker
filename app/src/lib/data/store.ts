@@ -11,7 +11,7 @@ import {
 } from './derive'
 import { dashboardTotals, thisMonthPerf } from './dashboard'
 import { bankTransfers, moneyMarketMoves, dividends, transfers as moneyTransfersOf } from './cashmoves'
-import { cashBalanceByHesap } from './cashBalances'
+import { cashBalanceByHesap, turetilmisNakit } from './cashBalances'
 
 export type DerivedBundle = ReturnType<typeof deriveAll>
 export interface AppState {
@@ -35,7 +35,13 @@ export function deriveAll(ds: Dataset, range?: { from: string; to: string }) {
   const inR = (iso: string) => iso >= r.from && iso <= r.to
   const positions = derivePositions(ds.transactions)
   const closedInRange: ClosedPosition[] = positions.closed.filter((c) => inR(c.sonSatisTarih))
-  const snaps = ds.snapshots.filter((s) => inR(s.tarih))
+  const snaps = ds.snapshots.filter((s) => inR(s.tarih)).map((s) => ({
+    ...s,
+    nakit_usd:
+      typeof s.nakit_usd === 'number' && !isNaN(s.nakit_usd)
+        ? s.nakit_usd
+        : turetilmisNakit(ds, s.tarih),
+  }))
   return {
     positions,
     closedInRange,

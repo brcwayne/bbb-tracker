@@ -143,4 +143,24 @@ describe('turetilmisNakit', () => {
     // 1000 + 50 - 200 + 10 - 500 + 300 = 660
     expect(turetilmisNakit(d)).toBe(660)
   })
+
+  it('asOfDate verildiğinde yalnızca o tarihe kadar olan hareketleri toplar', () => {
+    const d = ds({
+      cashflows: [
+        cf({ tarih: '2026-01-10', tur: 'YATIRMA', tutar_usd: 1000 }),
+        cf({ tarih: '2026-03-15', tur: 'YATIRMA', tutar_usd: 500 }),
+      ],
+      transactions: [
+        tx({ tarih: '2026-01-20', yon: 'AL', net_usd: 400 }),
+        tx({ tarih: '2026-04-01', yon: 'SAT', net_usd: 600 }),
+      ],
+    })
+
+    // 2026-01-31 itibarıyla: +1000 (YATIRMA) - 400 (AL) = 600
+    expect(turetilmisNakit(d, '2026-01-31')).toBe(600)
+    // 2026-03-31 itibarıyla: +1000 - 400 + 500 = 1100
+    expect(turetilmisNakit(d, '2026-03-31')).toBe(1100)
+    // Tarihsiz (hepsi): 1100 + 600 = 1700
+    expect(turetilmisNakit(d)).toBe(1700)
+  })
 })
