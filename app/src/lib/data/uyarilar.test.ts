@@ -143,8 +143,16 @@ describe('collectWarnings', () => {
 
   it('6. triggers kimlik-farki with level hata when accounting identity drifts > 0.5%', () => {
     const ds = JSON.parse(JSON.stringify(fixture))
-    ds.meta.gocNakitDuzeltmesi = undefined
     const derived = deriveAll(ds)
+    // gocNakitDuzeltmesi ve yuvarlamaArtigi artık turetilmisNakit(ds) ve satış/işlem
+    // çiftlerinden bağımsız hesaplanıyor (meta alanından geriye çözülmüyor); bu yüzden
+    // kimliği bozmak için gerçek bir defter tutarsızlığı enjekte etmek gerekiyor —
+    // açık pozisyon maliyetine hayali bir kalem eklemek gercekVarlik'i beklenenVarlik'ten
+    // gerçekten ayırır.
+    derived.positions.open = [
+      ...derived.positions.open,
+      { kod: 'FAKE', lot: 1, ortMaliyetUsd: 100000, toplamMaliyetUsd: 100000 },
+    ]
     const warnings = collectWarnings(ds, derived, emptyPrices)
     const w = warnings.find((x) => x.id === 'kimlik-farki')
     expect(w).toBeDefined()
@@ -155,7 +163,8 @@ describe('collectWarnings', () => {
 
   it('does not trigger kimlik-farki when identity is closed within 0.5%', () => {
     const ds = JSON.parse(JSON.stringify(fixture))
-    // fixture has gocNakitDuzeltmesi: -450 which closes the identity
+    // gocNakitDuzeltmesi ve yuvarlamaArtigi artık kimlikKontrol içinde bağımsız
+    // hesaplanıyor, dolayısıyla fikstürün kendi tutarlı defteri kimliği doğal olarak kapatır.
     const derived = deriveAll(ds)
     const warnings = collectWarnings(ds, derived, emptyPrices)
     const w = warnings.find((x) => x.id === 'kimlik-farki')

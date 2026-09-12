@@ -36,8 +36,9 @@ export function deriveAll(ds: Dataset, range?: { from: string; to: string }) {
   const positions = derivePositions(ds.transactions)
   const closedInRange: ClosedPosition[] = positions.closed.filter((c) => inR(c.sonSatisTarih))
   // Snapshot'lardaki nakit_usd, defterden türetilmiş nakittir (turetilmisNakit(ds, s.tarih)).
-  // Bu değer kurucu sermaye göç düzeltmesini (meta.gocNakitDuzeltmesi, $14.989,79) içerir,
-  // bu nedenle kurum bazlı ekstre bakiyeleriyle (cashBalanceByHesap) doğrudan eşleşmez.
+  // Bu, kurum ekstre bakiyelerinin (cashBalanceByHesap) toplamından göç sınırındaki
+  // kurucu sermaye farkı kadar (bkz. kimlik.ts: gocNakitDuzeltmesi, ~$14.989,38) sapar;
+  // bu nedenle kurum bazlı ekstre bakiyeleriyle doğrudan eşleşmez.
   const snaps = ds.snapshots.filter((s) => inR(s.tarih)).map((s) => ({
     ...s,
     nakit_usd:

@@ -142,49 +142,45 @@ describe('kimlikKontrol', () => {
     expect(res.beklenenVarlik).toBe(1050)
     expect(res.acikMaliyet).toBe(500)
     expect(res.nakit).toBe(550)
+    // Bu fikstürde satış hasılatı (5×120−0) tam olarak net_usd'ye (600) eşit
+    // ve gösterilen nakit (550) defterden türetilen nakitle (550) zaten örtüşüyor;
+    // bu yüzden her iki düzeltme terimi de sıfır çıkmalı.
+    expect(res.gocNakitDuzeltmesi).toBe(0)
+    expect(res.yuvarlamaArtigi).toBe(0)
     expect(res.gercekVarlik).toBe(1050)
     expect(res.fark).toBe(0)
     expect(res.farkOrani).toBe(0)
   })
 
-  it('gerçek veri setinde gocNakitDuzeltmesi olmadan fark ~$14.989,79 iken düzeltmeyle < $1 olur', () => {
+  it('gerçek veri setinde göç nakit düzeltmesi ve yuvarlama artığı bağımsız olarak hesaplanır, kimlik kuruşa kapanır', () => {
     const transactions = transactionsJson as unknown as Transaction[]
     const cashflows = cashflowsJson as unknown as Cashflow[]
     const snapshots = snapshotsJson as unknown as Dataset['snapshots']
     const meta = metaJson as unknown as Dataset['meta']
 
-    // 1. Düzeltmesiz meta ile kontrol
-    const metaWithoutFix = { ...meta, gocNakitDuzeltmesi: undefined }
-    const dsHam = makeFixtureDataset({
-      transactions,
-      cashflows,
-      snapshots,
-      meta: metaWithoutFix,
-    })
+    const ds = makeFixtureDataset({ transactions, cashflows, snapshots, meta })
 
-    const pos = derivePositions(dsHam.transactions)
-    const cashByHesap = cashBalanceByHesap(dsHam)
+    const pos = derivePositions(ds.transactions)
+    const cashByHesap = cashBalanceByHesap(ds)
     const displayedCash = Object.values(cashByHesap).reduce((s, v) => s + v, 0)
 
-    const resHam = kimlikKontrol(dsHam, pos.sales, pos.open, displayedCash)
+    const res = kimlikKontrol(ds, pos.sales, pos.open, displayedCash)
 
-    // Ham fark: gercekVarlik ($283.621,37) - beklenenVarlik ($298.611,16) = -$14.989,79
-    expect(resHam.beklenenVarlik).toBeCloseTo(298611.16, 1)
-    expect(resHam.gercekVarlik).toBeCloseTo(283621.37, 1)
-    expect(Math.abs(resHam.fark)).toBeCloseTo(14989.79, 1)
+    expect(res.beklenenVarlik).toBeCloseTo(298611.16, 2)
+    expect(displayedCash).toBeCloseTo(18795.01, 2)
 
-    // 2. gocNakitDuzeltmesi: 14989.79 ile kontrol
-    const metaWithFix = { ...meta, gocNakitDuzeltmesi: 14989.79 }
-    const dsDuzeltilmis = makeFixtureDataset({
-      transactions,
-      cashflows,
-      snapshots,
-      meta: metaWithFix,
-    })
+    // gocNakitDuzeltmesi artık meta.gocNakitDuzeltmesi'nden (geriye doğru çözülmüş bir
+    // tıkaç) OKUNMUYOR; defterden türetilen nakit ile gösterilen nakit arasındaki
+    // bağımsız ölçülebilir farktır (turetilmisNakit(ds) − nakit).
+    expect(res.gocNakitDuzeltmesi).toBeCloseTo(14989.38, 2)
 
-    const resDuzeltilmis = kimlikKontrol(dsDuzeltilmis, pos.sales, pos.open, displayedCash)
+    // yuvarlamaArtigi: satış hasılatının (fiyat_usd bazlı, ledger.ts) SAT işlemlerinin
+    // kendi net_usd alanından bağımsız ölçülmesinden kaynaklanan kuruş farkı — 47 satışın
+    // toplamı üzerinden bağımsız ölçülür, kimlikten geriye çözülmez.
+    expect(res.yuvarlamaArtigi).toBeCloseTo(0.41, 2)
 
-    expect(Math.abs(resDuzeltilmis.fark)).toBeLessThan(1.0)
-    expect(resDuzeltilmis.farkOrani).toBeLessThan(0.0001)
+    // İki terim birlikte, kimliği artık kuruşun çok altında (< $0,01) kapatır.
+    expect(Math.abs(res.fark)).toBeLessThan(0.01)
+    expect(res.farkOrani).toBeLessThan(0.00001)
   })
 })

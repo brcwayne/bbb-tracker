@@ -20,7 +20,7 @@ describe('vergi module (I7)', () => {
     portfolios: [],
     fxrates: {},
     assetTransfers: [],
-    meta: { semaVersiyonu: 1, olusturulma: '2026-09-12T00:00:00', kaynak: 'test.xlsm', gocNakitDuzeltmesi: 0, nakitHesapBazli: {}, p0Sinirlari: [] },
+    meta: { semaVersiyonu: 1, olusturulma: '2026-09-12T00:00:00', kaynak: 'test.xlsm', nakitHesapBazli: {}, p0Sinirlari: [] },
   }
 
   const mockSales: SaleEvent[] = [

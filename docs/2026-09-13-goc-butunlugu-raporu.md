@@ -13,7 +13,7 @@
    - **499,500 lot:** Excel Trade Log 124. satırındaki klerikal yazım hatası (500,000 lotluk satış sehven 500 lot yazılmış, $21,821.20 nakit girilmiş).
    - **84,640 lot:** Excel dosyası dondurulduktan sonra deftere eklenen iki satış (2026-08-24'te 61,955 lot ve 2026-09-02'de 22,685 lot).
    - `499,500 + 61,955 + 22,685 = 584,140 lot`. Excel `Stock Position` sayfası hem bayat kalmış hem de 499,500 lotluk veri giriş hatasından etkilenmiştir. Defter pozisyonu (207,152 lot) doğrudur.
-5. **Nakit Düzeltmesi İlişkisi:** `meta.gocNakitDuzeltmesi` ($14,989.79), Excel'in çift taraflı kayıt tutmayan ve kuruluş sermayelerini işlem bazlı nakitle karıştıran yapısının bir sonucudur; eksik satış geçmişi ile aynı dönemin (ad-hoc Excel dönemi) parçasıdır ancak bağımsız bir nakit mutabakatı kalemidir.
+5. **Nakit Düzeltmesi İlişkisi:** `kimlik.ts: gocNakitDuzeltmesi` ($14,989.38 — bkz. Session 6/E3 güncellemesi, madde 5), Excel'in çift taraflı kayıt tutmayan ve kuruluş sermayelerini işlem bazlı nakitle karıştıran yapısının bir sonucudur; eksik satış geçmişi ile aynı dönemin (ad-hoc Excel dönemi) parçasıdır ancak bağımsız bir nakit mutabakatı kalemidir.
 
 ---
 
@@ -102,9 +102,16 @@ Excel `Stock Position` sayfasında toplam 791,292 lot açık pozisyon görünür
 
 ---
 
-### 5. `meta.gocNakitDuzeltmesi` ($14,989.79) ile İlişki
+### 5. `kimlik.ts: gocNakitDuzeltmesi` ($14,989.38) ile İlişki
 
-`meta.gocNakitDuzeltmesi`, Excel Trade Log sayfasının 10. satırındaki başlık hücresinde yer alan statik `Cash Balance: 49403.886...` değerinin defterdeki çift taraflı muhasebe nakit akışlarıyla kapatılması için hesaplanan mutabakat farkıdır.
+> [!NOTE]
+> Session 6 (Görev E3) güncellemesi: Bu kalem eskiden `meta.gocNakitDuzeltmesi` ($14,989.79)
+> olarak elle ayarlanmış, `beklenenVarlik`'ten geriye çözülmüş bir tıkaçtı. Artık
+> `turetilmisNakit(ds) − nakit` olarak bağımsız hesaplanır ($14,989.38); eski tıkaçın
+> içindeki $0,41'lik fark ayrı bir kalem olarak adlandırılmıştır (`yuvarlamaArtigi`,
+> bkz. `docs/2026-09-12-mutabakat-raporu.md` §3 Hipotez 4).
+
+`kimlik.ts: gocNakitDuzeltmesi`, defterin kendi işlem ve nakit akışlarından türettiği nakit ile kurum ekstre bakiyelerinin toplamı arasındaki, bağımsız ölçülen mutabakat farkıdır.
 
 - Excel'de nakit akışları (mevduat yatırma/çekme, temettü, faiz) çift taraflı bir yevmiye defteri yerine ad-hoc toplamlarla izlenmiştir.
 - Bu durum, satışların kaydedilmemesi ile aynı tarihsel bağlama (Excel'in 2026 öncesinde düzenli bir işlem defteri olarak değil, bir varlık envanteri listesi olarak tutulması) aittir.
