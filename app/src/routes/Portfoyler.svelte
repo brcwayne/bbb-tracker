@@ -230,7 +230,7 @@
       html: true,
       fmt: (v: number | null, row: any) => {
         if (settings.basis === 'deger' && row.unpricedFallback) {
-          return `${money(row.toplamMaliyetUsd)} <span class="hint" style="display:block;font-size:0.8125rem;">(maliyet)</span>`
+          return `≈ ${money(row.toplamMaliyetUsd)} <span class="hint" style="display:block;font-size:0.8125rem;">güncel fiyat alınamadı, maliyet gösteriliyor</span>`
         }
         return v == null ? DASH : money(v)
       },

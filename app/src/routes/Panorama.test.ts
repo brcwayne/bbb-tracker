@@ -258,5 +258,73 @@ describe('Panorama', () => {
     const text = container.textContent ?? ''
     expect(text).toContain("2026-02'den bu yana")
   })
+
+  it('shows price coverage and fallback "≈" when prices are partially missing in deger mode (I5)', async () => {
+    const v = await derived()
+    settings.basis = 'deger'
+    prices.asOf = '2026-09-12T14:32:00Z'
+    prices.status = 'kismi'
+    // Only 1 of 3 open positions priced
+    prices.bySymbol = { 'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 10 } }
+    prices.usdPerGram = null
+
+    const { container } = render(Panorama, {
+      props: { dataset: v.dataset, derived: v.derived, view: v.derived },
+    })
+
+    // 1. Coverage visible in künye strip
+    expect(container.textContent).toContain('Fiyatlar: 1/3 pozisyon · 14:32')
+
+    // 2. Fallback mark "≈" and hint present
+    expect(container.textContent).toContain('≈')
+    expect(container.textContent).toContain('güncel fiyat alınamadı, maliyet gösteriliyor')
+
+    // Reset
+    prices.bySymbol = {}
+    prices.asOf = null
+    prices.status = 'idle'
+  })
+
+  it('shows NOT ONE "≈" when price coverage is 100% (zero false positives) (I5)', async () => {
+    const v = await derived()
+    settings.basis = 'deger'
+    prices.asOf = '2026-09-12T14:32:00Z'
+    prices.status = 'ready'
+    // All 3 open positions priced (ASTOR, THYAO, XAU)
+    prices.bySymbol = {
+      'ASTOR.IS': { price: 100, currency: 'TRY', priceUsd: 2.5 },
+      'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 10 },
+    }
+    prices.usdPerGram = 90 // XAU priced via usdPerGram
+
+    const { container } = render(Panorama, {
+      props: { dataset: v.dataset, derived: v.derived, view: v.derived },
+    })
+
+    expect(container.textContent).toContain('Fiyatlar: 3/3 pozisyon · 14:32')
+    expect(container.textContent).not.toContain('≈')
+    expect(container.textContent).not.toContain('güncel fiyat alınamadı, maliyet gösteriliyor')
+
+    // Reset
+    prices.bySymbol = {}
+    prices.asOf = null
+    prices.usdPerGram = null
+    prices.status = 'idle'
+  })
+
+  it('falls back to maliyet and says so when price API is fully off (I5)', async () => {
+    const v = await derived()
+    settings.basis = 'deger'
+    prices.asOf = null
+    prices.status = 'idle'
+
+    const { container } = render(Panorama, {
+      props: { dataset: v.dataset, derived: v.derived, view: v.derived },
+    })
+
+    expect(container.textContent).toContain('Fiyatlar: API kapalı (maliyet)')
+    // Does not crash
+    expect(container.textContent).toContain('Özkaynak')
+  })
 })
 

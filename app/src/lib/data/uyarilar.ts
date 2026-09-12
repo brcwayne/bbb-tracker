@@ -55,10 +55,64 @@ export function collectWarnings(
 
   // 3. Fiyatı alınamayan pozisyonlar (Panorama)
   if (live.fiyatsizPozisyon > 0) {
+    const byKod = new Map(ds.instruments.map((i) => [i.kod, i]))
+    const sourceStats: Record<string, { total: number; missing: number }> = {}
+
+    for (const pos of derived.positions.open) {
+      const inst = byKod.get(pos.kod)
+      const kaynak = inst?.fiyatKaynagi ?? 'diger'
+      if (!sourceStats[kaynak]) sourceStats[kaynak] = { total: 0, missing: 0 }
+      sourceStats[kaynak].total++
+
+      let hasPrice = false
+      if (inst) {
+        if (inst.fiyatKaynagi === 'altin-turev') {
+          hasPrice = prices.usdPerGram != null && inst.altinKatsayi != null
+        } else if (inst.fiyatSembolu && prices.bySymbol[inst.fiyatSembolu]?.priceUsd != null) {
+          hasPrice = true
+        }
+      }
+      if (!hasPrice) {
+        sourceStats[kaynak].missing++
+      }
+    }
+
+    const trSuffix = (n: number) => {
+      const last = n % 10
+      if (n === 10) return "'u"
+      if (last === 1 || last === 5 || last === 8) return "'i"
+      if (last === 2 || last === 7) return "'si"
+      if (last === 3 || last === 4) return "'ü"
+      if (last === 6) return "'sı"
+      if (last === 9) return "'u"
+      return "'si"
+    }
+
+    const sourceMessages: string[] = []
+    for (const [kaynak, stats] of Object.entries(sourceStats)) {
+      if (stats.missing > 0) {
+        if (kaynak === 'tefas') {
+          sourceMessages.push(`TEFAS'tan ${stats.total} fonun ${stats.missing}${trSuffix(stats.missing)} alınamadı`)
+        } else if (kaynak === 'yahoo') {
+          sourceMessages.push(`Yahoo'dan ${stats.total} hissenin ${stats.missing}${trSuffix(stats.missing)} alınamadı`)
+        } else if (kaynak === 'altin-turev') {
+          sourceMessages.push('Altın/Türev fiyatı alınamadı')
+        } else if (kaynak === 'tradingview') {
+          sourceMessages.push(`TradingView'dan ${stats.total} sembolün ${stats.missing}${trSuffix(stats.missing)} alınamadı`)
+        } else {
+          sourceMessages.push(`${stats.missing} pozisyonun fiyatı alınamadı`)
+        }
+      }
+    }
+
+    const mesaj = sourceMessages.length > 0
+      ? sourceMessages.join(', ')
+      : `${live.fiyatsizPozisyon} pozisyonun güncel fiyatı alınamadı`
+
     warnings.push({
       id: 'fiyatsiz-pozisyon',
       seviye: 'uyari',
-      mesaj: `${live.fiyatsizPozisyon} pozisyonun güncel fiyatı alınamadı`,
+      mesaj,
     })
   }
 

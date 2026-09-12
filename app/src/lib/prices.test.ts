@@ -85,6 +85,7 @@ describe('refreshPrices', () => {
       asOf: '2999-01-01T00:00:00Z',
       usdtry: 40,
       prices: {
+        'ASTOR.IS': { price: 100, currency: 'TRY', priceUsd: 2.5 },
         'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 10 },
         'GC=F': { price: 3110.34768, currency: 'USD', priceUsd: 3110.34768, usdPerGram: 100 },
         'BAD.IS': { error: 'kaynak' },
@@ -105,6 +106,7 @@ describe('refreshPrices', () => {
       asOf: '2999-01-01T00:00:00Z',
       usdtry: 40,
       prices: {
+        'ASTOR.IS': { price: 100, currency: 'TRY', priceUsd: 2.5 },
         'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 10 },
         'GC=F': { price: 3110.34768, currency: 'USD', priceUsd: 3110.34768, usdPerGram: 100 },
         'tefas:MAC': { price: 12.5, currency: 'TRY', priceUsd: 0.3125 },
@@ -122,6 +124,7 @@ describe('refreshPrices', () => {
       asOf: '2999-01-01T00:00:00Z',
       usdtry: 40,
       prices: {
+        'ASTOR.IS': { price: 100, currency: 'TRY', priceUsd: 2.5 },
         'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 10 },
         'GC=F': { price: 3110.34768, currency: 'USD', priceUsd: 3110.34768, usdPerGram: 100 },
         'tv:DMLKT': { price: 12.5, currency: 'TRY', priceUsd: 0.3125 },
@@ -152,12 +155,36 @@ describe('refreshPrices', () => {
     expect(prices.error).toBe('hiçbir sembol fiyatlanamadı')
   })
 
+  it('sets status "kismi" when some symbols arrived and some failed (I5)', async () => {
+    vi.stubEnv('VITE_PRICE_API', 'https://api.test')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      asOf: '2026-09-12T14:32:00Z',
+      usdtry: 40,
+      prices: {
+        'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: 10 },
+        'GC=F': { error: 'kaynak hatası' },
+      },
+    }))))
+    await refreshPrices(fixture)
+    expect(prices.status).toBe('kismi')
+    expect(prices.bySymbol['THYAO.IS'].priceUsd).toBe(10)
+    expect(prices.bySymbol['GC=F']).toBeUndefined()
+
+    // Price history saved for the successful symbol
+    const history = JSON.parse(localStorage.getItem('bbb-price-history') || '[]')
+    const todayRows = history.filter((h: any) => h.tarih === '2026-09-12')
+    expect(todayRows).toEqual([
+      { tarih: '2026-09-12', sembol: 'THYAO.IS', fiyatUsd: 10 },
+    ])
+  })
+
   it('keeps an entry whose priceUsd is null (Fix 7)', async () => {
     vi.stubEnv('VITE_PRICE_API', 'https://api.test')
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       asOf: '2999-01-01T00:00:00Z',
       usdtry: null,
       prices: {
+        'ASTOR.IS': { price: 100, currency: 'TRY', priceUsd: 2.5 },
         'THYAO.IS': { price: 400, currency: 'TRY', priceUsd: null },
         'GC=F': { price: 3110, currency: 'USD', priceUsd: 3110, usdPerGram: 100 },
       },

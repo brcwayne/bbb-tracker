@@ -1,6 +1,7 @@
 import type { Dataset } from './data/types'
 import { derivePositions } from './data/derive'
 import { applyLiveRate } from './settings.svelte'
+import { savePriceHistory } from './data/priceHistory'
 
 const GOLD_API_SYMBOL = 'GC=F'
 const TEFAS_PREFIX = 'tefas:'
@@ -24,7 +25,7 @@ export const prices = $state<{
   usdPerGram: number | null
   usdtry: number | null
   asOf: string | null
-  status: 'idle' | 'loading' | 'ready' | 'error'
+  status: 'idle' | 'loading' | 'ready' | 'kismi' | 'error'
   error?: string
 }>({
   bySymbol: {},
@@ -104,6 +105,15 @@ export async function refreshPrices(ds: Dataset): Promise<void> {
         usdPerGram = (v as { usdPerGram: number }).usdPerGram
       }
     }
+
+    let successfulCount = 0
+    for (const sym of symbols) {
+      const v = body.prices[sym]
+      if (v && !('error' in v)) {
+        successfulCount++
+      }
+    }
+
     if (symbols.length > 0 && Object.keys(bySymbol).length === 0) {
       throw new Error('hiçbir sembol fiyatlanamadı')
     }
@@ -111,8 +121,9 @@ export async function refreshPrices(ds: Dataset): Promise<void> {
     prices.usdPerGram = usdPerGram
     prices.usdtry = body.usdtry
     prices.asOf = body.asOf
-    prices.status = 'ready'
+    prices.status = (symbols.length > 0 && successfulCount < symbols.length) ? 'kismi' : 'ready'
     persist()
+    await savePriceHistory(bySymbol, body.asOf)
     if (typeof body.usdtry === 'number') applyLiveRate(body.usdtry)
   } catch (e) {
     prices.status = 'error'

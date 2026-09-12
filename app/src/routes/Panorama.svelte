@@ -12,7 +12,7 @@
   import Donut from '../lib/charts/Donut.svelte'
   import Histogram from '../lib/charts/Histogram.svelte'
   import BarChart from '../lib/charts/BarChart.svelte'
-  import { prices } from '../lib/prices.svelte'
+  import { prices, priceApiEnabled } from '../lib/prices.svelte'
   import { unrealizedTotalUsd, type PriceLookup } from '../lib/data/unrealized'
   import { CATEGORICAL } from '../lib/charts/palette'
   import { allocationByClassWithCash, cashRatios } from '../lib/data/allocation'
@@ -23,11 +23,8 @@
   import { holdingsByPortfolio } from '../lib/data/breakdowns'
 
   // Panorama displays high-level macro overview numbers, so strip cents/kuruş (whole: true)
-  // to avoid visual clutter and excessively long numbers.
-  const money = (
-    nUsd: number | null | undefined,
-    opts: { sign?: boolean; whole?: boolean } = {},
-  ) => formatMoney(nUsd, { whole: true, ...opts })
+  const money = (v: number | null | undefined, opts: Parameters<typeof formatMoney>[1] = {}) =>
+    formatMoney(v, { whole: true, ...opts })
 
   let {
     dataset,
@@ -41,11 +38,13 @@
     source?: DataSource
   } = $props()
 
-  const toneOf = (n: number): 'gain' | 'loss' | 'neutral' =>
-    n > 0 ? 'gain' : n < 0 ? 'loss' : 'neutral'
+  function toneOf(n: number | null | undefined): 'gain' | 'loss' | 'neutral' | undefined {
+    if (n == null || !Number.isFinite(n) || n === 0) return undefined
+    return n > 0 ? 'gain' : 'loss'
+  }
 
   function buildView(ds: Dataset, d: DerivedBundle) {
-    void settings.currency // re-run buildView when the display currency flips
+    void settings.period // re-run buildView when period changes
     void settings.basis // re-run buildView when valuation basis flips (H8)
     void prices.status // re-run buildView when live prices land
 
@@ -111,12 +110,28 @@
     const sonYazmaRaw = source?.lastModified ?? ds.meta.olusturulma
     const sonYazma = sonYazmaRaw ? dateTimeShort(sonYazmaRaw) : '—'
 
+    // Fiyat kapsaması (I5)
+    const totalPosCount = d.positions.open.length
+    const pricedPosCount = totalPosCount - live.fiyatsizPozisyon
+    let fiyatZamani = 'alınamadı (maliyet)'
+    if (prices.asOf) {
+      const asOfTime = prices.asOf.includes('T') ? prices.asOf.slice(11, 16) : prices.asOf
+      fiyatZamani = `${pricedPosCount}/${totalPosCount} pozisyon · ${asOfTime}`
+    } else if (!priceApiEnabled() || prices.status === 'idle') {
+      fiyatZamani = 'API kapalı (maliyet)'
+    } else if (prices.status === 'error') {
+      fiyatZamani = 'alınamadı (maliyet)'
+    }
+
+    const unpricedInDeger = isDeger && live.fiyatsizPozisyon > 0
+
     return {
       alloc,
       cashRatio,
       live,
       monthAy,
       monthNote,
+      unpricedInDeger,
       kpiItems: [
         { label: 'Toplam Özkaynak', value: money(equityUsd), num: equityUsd, fmt: (n: number) => money(n) },
         {
@@ -136,9 +151,9 @@
         },
         {
           label: 'Gerçekleşmemiş K/Z',
-          value: unrealTotal == null ? DASH : money(unrealTotal),
+          value: unrealTotal == null ? DASH : `${unpricedInDeger ? '≈ ' : ''}${money(unrealTotal)}`,
           num: unrealTotal == null ? undefined : unrealTotal,
-          fmt: unrealTotal == null ? undefined : (n: number) => money(n),
+          fmt: unrealTotal == null ? undefined : (n: number) => `${unpricedInDeger ? '≈ ' : ''}${money(n)}`,
           tone: unrealTotal == null ? undefined : toneOf(unrealTotal),
         },
         { label: 'İşlem', value: String(ds.transactions.length) },
@@ -148,7 +163,7 @@
         sonYazma,
         islemSayisi: ds.transactions.length,
         isDrive,
-        fiyatZamani: prices.asOf ? dateShort(prices.asOf.slice(0, 10)) : 'alınamadı',
+        fiyatZamani,
         kur: settings.rate ? settings.rate.toFixed(2) : '—',
         periodLabel: settings.period === 'all' ? '' : periodLabel,
       },
@@ -347,7 +362,10 @@
         </div>
         <div>
           <dt>Canlı Özkaynak <span class="scope">bugün</span><span class="hint">açık pozisyon değeri + nakit</span></dt>
-          <dd class="num strong">{money(vm.live.canliOzkaynakUsd)}</dd>
+          <dd class="num strong">{vm.unpricedInDeger ? '≈ ' : ''}{money(vm.live.canliOzkaynakUsd)}</dd>
+          {#if vm.unpricedInDeger}
+            <span class="hint" style="display:block;font-size:0.8125rem;">güncel fiyat alınamadı, maliyet gösteriliyor</span>
+          {/if}
         </div>
         <div>
           <dt>Yatırılan Sermaye <span class="scope">tüm zamanlar</span><span class="hint">bugüne dek yatırdığın para</span></dt>
@@ -359,11 +377,14 @@
             <span class="hint">bugünkü değerin, yatırdığın toplam paranın ne kadar üstünde</span>
           </dt>
           <dd class="num" class:pos={vm.ozet.toplamGetiri > 0} class:neg={vm.ozet.toplamGetiri < 0}>
-            {money(vm.ozet.toplamGetiri, { sign: true })}
+            {vm.unpricedInDeger ? '≈ ' : ''}{money(vm.ozet.toplamGetiri, { sign: true })}
             {#if vm.ozet.toplamGetiriPct != null}
               <span class="hint inline">{pct(vm.ozet.toplamGetiriPct)}</span>
             {/if}
           </dd>
+          {#if vm.unpricedInDeger}
+            <span class="hint" style="display:block;font-size:0.8125rem;">güncel fiyat alınamadı, maliyet gösteriliyor</span>
+          {/if}
         </div>
       </dl>
 
@@ -383,8 +404,11 @@
             class:pos={(vm.ozet.gerceklesmemisKz ?? 0) > 0}
             class:neg={(vm.ozet.gerceklesmemisKz ?? 0) < 0}
           >
-            {vm.ozet.gerceklesmemisKz == null ? DASH : money(vm.ozet.gerceklesmemisKz, { sign: true })}
+            {vm.unpricedInDeger ? '≈ ' : ''}{vm.ozet.gerceklesmemisKz == null ? DASH : money(vm.ozet.gerceklesmemisKz, { sign: true })}
           </dd>
+          {#if vm.unpricedInDeger}
+            <span class="hint" style="display:block;font-size:0.8125rem;">güncel fiyat alınamadı, maliyet gösteriliyor</span>
+          {/if}
         </div>
         <div>
           <dt>Alınan Temettü <span class="scope">tüm zamanlar</span></dt>

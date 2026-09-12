@@ -78,14 +78,39 @@ describe('collectWarnings', () => {
     expect(w?.mesaj).toContain('Nakit bakiyesi negatif (−$2.500)')
   })
 
-  it('3. triggers fiyatsiz-pozisyon when positions lack price', () => {
+  it('3. triggers fiyatsiz-pozisyon with failing sources named when positions lack price (I5)', () => {
     const ds = JSON.parse(JSON.stringify(fixture))
     const derived = deriveAll(ds)
     const warnings = collectWarnings(ds, derived, emptyPrices)
     const w = warnings.find((x) => x.id === 'fiyatsiz-pozisyon')
     expect(w).toBeDefined()
     expect(w?.seviye).toBe('uyari')
-    expect(w?.mesaj).toMatch(/\d+ pozisyonun güncel fiyatı alınamadı/)
+    expect(w?.mesaj).toContain("Yahoo'dan 2 hissenin 2'si alınamadı")
+    expect(w?.mesaj).toContain('Altın/Türev fiyatı alınamadı')
+  })
+
+  it('names TEFAS source in fiyatsiz-pozisyon warning when TEFAS fund is unpriced (I5)', () => {
+    const ds = {
+      ...fixture,
+      transactions: [
+        { ...fixture.transactions[0], id: 't_mac', enstruman: 'MAC', yon: 'AL' as const, lot: 1000 },
+      ],
+      instruments: [
+        {
+          kod: 'MAC',
+          ad: 'Marmara Capital',
+          sinif: 'FON_HISSE' as const,
+          girisParaBirimi: 'TL' as const,
+          fiyatKaynagi: 'tefas' as const,
+          fiyatSembolu: 'MAC',
+          seviyeler: null,
+        },
+      ],
+    }
+    const derived = deriveAll(ds)
+    const warnings = collectWarnings(ds, derived, emptyPrices)
+    const w = warnings.find((x) => x.id === 'fiyatsiz-pozisyon')
+    expect(w?.mesaj).toContain("TEFAS'tan 1 fonun 1'i alınamadı")
   })
 
   it('4. triggers odunc warning when ledger has borrowed lot error', () => {
