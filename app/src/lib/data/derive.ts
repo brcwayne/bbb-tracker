@@ -1,4 +1,5 @@
-import type { Transaction, Snapshot, Instrument } from './types'
+import type { Transaction, Snapshot, Instrument, AssetTransfer } from './types'
+import { buildLedger, type SaleEvent } from './ledger'
 
 export interface OpenPosition { kod: string; lot: number; ortMaliyetUsd: number; toplamMaliyetUsd: number }
 export interface ClosedPosition {
@@ -8,67 +9,70 @@ export interface ClosedPosition {
 }
 export interface Positions {
   open: OpenPosition[]; closed: ClosedPosition[]; realizedTotalUsd: number; errors: string[]
+  sales: SaleEvent[]
 }
 
 const EPS = 1e-9
 
 export function derivePositions(txns: Transaction[]): Positions {
-  const ordered = [...txns].sort((a, b) =>
-    a.tarih < b.tarih ? -1 : a.tarih > b.tarih ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
-  )
-  const open = new Map<string, OpenPosition>()
-  const closed = new Map<string, ClosedPosition>()
-  let realizedTotalUsd = 0
-  const errors: string[] = []
+  const ledger = buildLedger(txns, [], 'global')
+  const portLedger = buildLedger(txns, [], 'portfoy')
+  const g = ledger.byScope.get('')!
 
+  const borrowedTxIds = new Set(
+    portLedger.allSales.filter((s) => s.oduncAlindi).map((s) => s.txId),
+  )
+  for (const s of ledger.allSales) {
+    if (borrowedTxIds.has(s.txId)) {
+      s.oduncAlindi = true
+    }
+  }
+
+  const closed = new Map<string, ClosedPosition>()
   const cl = (kod: string) =>
     closed.get(kod) ??
     closed
       .set(kod, {
-        kod, alisLot: 0, alisTutarUsd: 0, satisLot: 0, satisTutarUsd: 0,
-        satisMaliyetUsd: 0, gerceklesmisKzUsd: 0, ilkAlisTarih: '', sonSatisTarih: '',
+        kod,
+        alisLot: 0,
+        alisTutarUsd: 0,
+        satisLot: 0,
+        satisTutarUsd: 0,
+        satisMaliyetUsd: 0,
+        gerceklesmisKzUsd: 0,
+        ilkAlisTarih: '',
+        sonSatisTarih: '',
       })
       .get(kod)!
 
-  for (const x of ordered) {
-    const pos = open.get(x.enstruman) ?? { kod: x.enstruman, lot: 0, ortMaliyetUsd: 0, toplamMaliyetUsd: 0 }
-    if (!open.has(x.enstruman)) open.set(x.enstruman, pos)
+  for (const s of ledger.allSales) {
+    const c = cl(s.kod)
+    c.satisLot += s.lot
+    c.satisTutarUsd += s.hasilatUsd
+    c.satisMaliyetUsd += s.maliyetUsd
+    c.gerceklesmisKzUsd += s.kzUsd
+    if (!c.ilkAlisTarih && s.ilkAlisTarih) c.ilkAlisTarih = s.ilkAlisTarih
+    c.sonSatisTarih = s.tarih
+  }
 
-    if (x.yon === 'AL') {
-      pos.toplamMaliyetUsd += x.net_usd
-      pos.lot += x.lot
-      pos.ortMaliyetUsd = pos.toplamMaliyetUsd / pos.lot
-      const c = cl(x.enstruman)
-      c.alisLot += x.lot
-      c.alisTutarUsd += x.net_usd
-      if (!c.ilkAlisTarih) c.ilkAlisTarih = x.tarih
-    } else {
-      let sell = x.lot
-      if (sell > pos.lot + EPS) {
-        errors.push(`${x.id}: aşırı satış ${x.enstruman} (istenen ${sell}, mevcut ${pos.lot})`)
-        sell = pos.lot
+  // Also collect alisLot / alisTutarUsd from all buy transactions for closed records
+  for (const t of txns) {
+    if (t.yon === 'AL') {
+      const c = closed.get(t.enstruman)
+      if (c) {
+        c.alisLot += t.lot
+        c.alisTutarUsd += t.net_usd
+        if (!c.ilkAlisTarih) c.ilkAlisTarih = t.tarih
       }
-      if (sell <= EPS) continue
-      const ort = pos.ortMaliyetUsd
-      const kz = (x.fiyat_usd - ort) * sell - x.komisyon_usd
-      realizedTotalUsd += kz
-      pos.lot -= sell
-      pos.toplamMaliyetUsd -= ort * sell
-      const c = cl(x.enstruman)
-      c.satisLot += sell
-      c.satisTutarUsd += x.fiyat_usd * sell - x.komisyon_usd
-      c.satisMaliyetUsd += ort * sell
-      c.gerceklesmisKzUsd += kz
-      c.sonSatisTarih = x.tarih
-      if (pos.lot <= EPS) open.delete(x.enstruman)
     }
   }
 
   return {
-    open: [...open.values()].filter((p) => p.lot > EPS).sort((a, b) => (a.kod < b.kod ? -1 : 1)),
+    open: g.open,
     closed: [...closed.values()].filter((c) => c.satisLot > EPS).sort((a, b) => (a.kod < b.kod ? -1 : 1)),
-    realizedTotalUsd,
-    errors,
+    realizedTotalUsd: g.realizedUsd,
+    errors: [...new Set([...ledger.errors, ...portLedger.errors])],
+    sales: ledger.allSales,
   }
 }
 
@@ -86,13 +90,25 @@ export function allocationByClass(open: OpenPosition[], instruments: Instrument[
   return allocation(open, (kod) => cls.get(kod) ?? '?')
 }
 
-export function allocationByPortfolio(open: OpenPosition[], txns: Transaction[]) {
-  const last = new Map<string, { tarih: string; portfoy: string }>()
-  for (const x of txns) {
-    const prev = last.get(x.enstruman)
-    if (!prev || x.tarih >= prev.tarih) last.set(x.enstruman, { tarih: x.tarih, portfoy: x.portfoy })
+export function allocationByPortfolio(
+  open: OpenPosition[],
+  txns: Transaction[],
+  transfers: AssetTransfer[] = [],
+) {
+  if (txns.length === 0) {
+    return allocation(open, () => '?')
   }
-  return allocation(open, (kod) => last.get(kod)?.portfoy ?? '?')
+  const ledger = buildLedger(txns, transfers, 'portfoy')
+  const tot = open.reduce((s, p) => s + p.toplamMaliyetUsd, 0) || 1
+  const slices: { key: string; tutarUsd: number; pay: number }[] = []
+  for (const [scopeName, scope] of ledger.byScope) {
+    if (!scopeName) continue
+    const portCost = scope.open.reduce((s, p) => s + p.toplamMaliyetUsd, 0)
+    if (portCost > 1e-9) {
+      slices.push({ key: scopeName, tutarUsd: portCost, pay: portCost / tot })
+    }
+  }
+  return slices.sort((a, b) => b.tutarUsd - a.tutarUsd)
 }
 
 const BUCKET_EDGES = [
