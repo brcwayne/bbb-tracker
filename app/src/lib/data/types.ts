@@ -76,6 +76,7 @@ export interface Instrument {
   } | null
   /** grams of fine gold per unit — present only on `fiyatKaynagi: "altin-turev"` rows */
   altinKatsayi?: number
+  kaynak?: string
 }
 
 export interface Broker {
@@ -207,4 +208,12 @@ export interface Dataset {
   categories?: Category[]
   people?: Person[]
   debts?: Debt[]
+  syncState?: SyncState | null
+}
+
+export interface SyncState {
+  sonKosu: string
+  sonucu: string
+  degisenDosya: number
+  hata: string | null
 }

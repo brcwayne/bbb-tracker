@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Dataset, Instrument, Transaction } from '../lib/data/types'
-  import type { DerivedBundle } from '../lib/data/store'
+  import type { DerivedBundle, AppState } from '../lib/data/store'
+  import type { DataSource } from '../lib/data/source'
+  import type { Writable } from 'svelte/store'
   import { pct, lot, dateShort, DASH } from '../lib/format'
   import { money } from '../lib/settings.svelte'
   import { prices } from '../lib/prices.svelte'
@@ -12,11 +14,22 @@
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
+  import LevelEditor from './LevelEditor.svelte'
 
   // RULING P1-3 annotation form; props optional, guarded in the template.
   // RULING P1-10: the prop name `derived` collides with the `$derived` rune, so
   // the view model is assembled by a plain function under the `{#if}` guard.
-  let { dataset, derived }: { dataset?: Dataset; derived?: DerivedBundle } = $props()
+  let {
+    dataset,
+    derived,
+    source,
+    store,
+  }: {
+    dataset?: Dataset
+    derived?: DerivedBundle
+    source?: DataSource
+    store?: Writable<AppState>
+  } = $props()
 
   // Filter state (RULING P1-9: scoped page styles below). Empty string = "(hepsi)".
   let fClass = $state('')
@@ -39,14 +52,57 @@
     return m
   }
 
-  function seviyeStr(inst: Instrument | undefined): string {
+  function seviyeDisplay(
+    inst: Instrument | undefined,
+    currentPrice: number | null,
+  ): string {
     const s = inst?.seviyeler
     if (!s) return DASH
     const parts: string[] = []
-    if (s.destek != null) parts.push(`D ${s.destek}`)
-    if (s.direnc != null) parts.push(`R ${s.direnc}`)
-    if (s.hedef != null) parts.push(`H ${s.hedef}`)
-    return parts.length ? parts.join(' / ') : DASH
+    const badges: string[] = []
+
+    if (s.destek != null) {
+      if (currentPrice != null && s.destek > 0) {
+        const dist = ((currentPrice - s.destek) / s.destek) * 100
+        const distStr = (dist > 0 ? '+' : '') + dist.toFixed(1) + '%'
+        parts.push(`D: ${s.destek} (${distStr})`)
+        if (currentPrice <= s.destek) {
+          badges.push('<span class="badge-level-cross loss">D kırıldı</span>')
+        }
+      } else {
+        parts.push(`D: ${s.destek}`)
+      }
+    }
+
+    if (s.direnc != null) {
+      if (currentPrice != null && s.direnc > 0) {
+        const dist = ((currentPrice - s.direnc) / s.direnc) * 100
+        const distStr = (dist > 0 ? '+' : '') + dist.toFixed(1) + '%'
+        parts.push(`R: ${s.direnc} (${distStr})`)
+        if (currentPrice >= s.direnc) {
+          badges.push('<span class="badge-level-cross gain">R aşıldı</span>')
+        }
+      } else {
+        parts.push(`R: ${s.direnc}`)
+      }
+    }
+
+    if (s.hedef != null) {
+      if (currentPrice != null && s.hedef > 0) {
+        const dist = ((currentPrice - s.hedef) / s.hedef) * 100
+        const distStr = (dist > 0 ? '+' : '') + dist.toFixed(1) + '%'
+        parts.push(`H: ${s.hedef} (${distStr})`)
+        if (currentPrice >= s.hedef) {
+          badges.push('<span class="badge-level-cross gain">H ulaşıldı</span>')
+        }
+      } else {
+        parts.push(`H: ${s.hedef}`)
+      }
+    }
+
+    if (parts.length === 0) return DASH
+    const text = parts.join(' / ')
+    return badges.length > 0 ? `${text} ${badges.join(' ')}` : text
   }
 
   function buildView(ds: Dataset, d: DerivedBundle) {
@@ -75,6 +131,28 @@
       const inst = instByKod.get(p.kod)
       const tx = latestTx.get(p.kod)
       const u = unreal.get(p.kod)
+
+      let nativePrice: number | null = null
+      if (inst) {
+        const bySym = prices.bySymbol[inst.fiyatSembolu]
+        if (inst.girisParaBirimi === 'TL' || inst.girisParaBirimi === 'TRY') {
+          if (bySym && bySym.currency === 'TRY' && typeof bySym.price === 'number') {
+            nativePrice = bySym.price
+          } else if (typeof prices.usdtry === 'number' && typeof u?.guncelFiyatUsd === 'number') {
+            nativePrice = u.guncelFiyatUsd * prices.usdtry
+          }
+        } else {
+          // USD
+          if (typeof u?.guncelFiyatUsd === 'number') {
+            nativePrice = u.guncelFiyatUsd
+          } else if (bySym && typeof bySym.priceUsd === 'number') {
+            nativePrice = bySym.priceUsd
+          } else if (bySym && typeof bySym.price === 'number') {
+            nativePrice = bySym.price
+          }
+        }
+      }
+
       return {
         isClosed: false,
         kod: p.kod,
@@ -88,7 +166,7 @@
         guncelFiyat: u?.guncelFiyatUsd ?? null,
         gerceklesmemisKz: u?.kzUsd ?? null,
         gerceklesmemisPct: u?.kzPct ?? null,
-        seviye: seviyeStr(inst),
+        seviye: seviyeDisplay(inst, nativePrice),
       }
     })
 
@@ -199,7 +277,7 @@
       tone: 'sign' as const,
       fmt: (v: number | null) => (v == null ? DASH : pct(v)),
     },
-    { key: 'seviye', label: 'Seviye' },
+    { key: 'seviye', label: 'Seviye', html: true },
   ]
 
   const closedColumns = [
@@ -309,6 +387,16 @@
         </div>
       {/if}
     </div>
+
+    {#if !isClosed}
+      <LevelEditor
+        kod={row.kod}
+        inst={dataset?.instruments.find((i) => i.kod === row.kod)}
+        {source}
+        {store}
+        {dataset}
+      />
+    {/if}
 
     {#if symSales.length > 0}
       <div class="sales-block">
@@ -879,5 +967,24 @@
     border-radius: 0 4px 4px 0;
     font-size: 0.875rem;
     color: var(--ink);
+  }
+  :global(.badge-level-cross) {
+    display: inline-block;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+  }
+  :global(.badge-level-cross.loss) {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--loss);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+  }
+  :global(.badge-level-cross.gain) {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--gain);
+    border: 1px solid rgba(34, 197, 94, 0.35);
   }
 </style>

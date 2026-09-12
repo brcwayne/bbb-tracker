@@ -119,6 +119,7 @@ export type Kind =
   | 'assetTransfers'
   | 'brokers'
   | 'portfolios'
+  | 'instruments'
   | 'personal_tx'
   | 'payment_plans'
   | 'personal_accounts'

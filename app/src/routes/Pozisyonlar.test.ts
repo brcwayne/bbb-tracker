@@ -206,4 +206,109 @@ describe('Pozisyonlar', () => {
     expect(panel?.textContent).toContain('91–365 gün')
     expect(panel?.textContent).toContain('365+ gün')
   })
+
+  it('positions without levels get no extra column and no badge', async () => {
+    const d = await v()
+    const { container } = render(Pozisyonlar, {
+      props: { dataset: d.dataset, derived: d.derived },
+    })
+    const openTable = container.querySelector('[data-testid="open-table"]') as HTMLElement
+    expect(openTable.querySelectorAll('.badge-level-cross').length).toBe(0)
+    const ths = Array.from(openTable.querySelectorAll('th')).map((th) => th.textContent?.trim())
+    expect(ths).toContain('Seviye')
+    expect(ths).not.toContain('Destek')
+    expect(ths).not.toContain('Direnç')
+    expect(ths).not.toContain('Hedef')
+  })
+
+  it('shows distance % and crossing badges on positions with levels', async () => {
+    const d = await v()
+    const ds = JSON.parse(JSON.stringify(d.dataset))
+    const astorInst = ds.instruments.find((i: any) => i.kod === 'ASTOR')
+    astorInst.seviyeler = {
+      destek: 80,
+      direnc: 120,
+      hedef: 150,
+      birim: 'TL',
+    }
+
+    prices.bySymbol = { 'ASTOR.IS': { price: 130, currency: 'TRY', priceUsd: 4 } }
+    prices.status = 'ready'
+
+    const { container } = render(Pozisyonlar, {
+      props: { dataset: ds, derived: d.derived },
+    })
+
+    const openTable = container.querySelector('[data-testid="open-table"]') as HTMLElement
+    const astorRow = within(openTable).getByText('ASTOR').closest('tr')!
+
+    expect(astorRow.textContent).toContain('D: 80 (+62.5%)')
+    expect(astorRow.textContent).toContain('R: 120 (+8.3%)')
+    expect(astorRow.textContent).toContain('H: 150 (-13.3%)')
+
+    expect(astorRow.querySelector('.badge-level-cross.gain')?.textContent).toContain('R aşıldı')
+    expect(astorRow.textContent).not.toContain('D kırıldı')
+
+    prices.bySymbol = {}
+    prices.status = 'idle'
+  })
+
+  it('level entry in detail saves to instruments and survives reload', async () => {
+    let savedInstruments: any[] = []
+    const d = await v()
+    const ds = JSON.parse(JSON.stringify(d.dataset))
+    const s = createAppStore()
+    const fakeSource = {
+      id: 'local' as const,
+      load: () => Promise.resolve(ds),
+      save: async (file: string, data: any) => {
+        if (file === 'instruments') {
+          savedInstruments = data
+          ds.instruments = data
+        }
+      },
+    }
+    await load(s, fakeSource)
+    const fresh = get(s)
+
+    const { container } = render(Pozisyonlar, {
+      props: {
+        dataset: fresh.dataset,
+        derived: fresh.derived,
+        source: fakeSource,
+        store: s,
+      },
+    })
+
+    const openTable = container.querySelector('[data-testid="open-table"]') as HTMLElement
+    const astorRow = within(openTable).getByText('ASTOR').closest('tr')!
+    await fireEvent.click(astorRow)
+
+    const editor = container.querySelector('[data-testid="level-editor-ASTOR"]') as HTMLElement
+    expect(editor).toBeInTheDocument()
+
+    const dInput = within(editor).getByTestId('input-destek')
+    const rInput = within(editor).getByTestId('input-direnc')
+    const hInput = within(editor).getByTestId('input-hedef')
+    const saveBtn = within(editor).getByTestId('btn-save-levels')
+
+    await fireEvent.input(dInput, { target: { value: '95.5' } })
+    await fireEvent.input(rInput, { target: { value: '115' } })
+    await fireEvent.input(hInput, { target: { value: '140' } })
+    await fireEvent.click(saveBtn)
+
+    expect(savedInstruments.length).toBeGreaterThan(0)
+    const savedAstor = savedInstruments.find((i) => i.kod === 'ASTOR')
+    expect(savedAstor.seviyeler).not.toBeNull()
+    expect(savedAstor.seviyeler.destek).toBe(95.5)
+    expect(savedAstor.seviyeler.direnc).toBe(115)
+    expect(savedAstor.seviyeler.hedef).toBe(140)
+    expect(savedAstor.seviyeler.birim).toBe('TL')
+    expect(savedAstor.seviyeler.guncelleme).toBeDefined()
+
+    await load(s, fakeSource)
+    const reloaded = get(s)
+    const reloadedAstor = reloaded.dataset?.instruments.find((i) => i.kod === 'ASTOR')
+    expect(reloadedAstor?.seviyeler?.destek).toBe(95.5)
+  })
 })
