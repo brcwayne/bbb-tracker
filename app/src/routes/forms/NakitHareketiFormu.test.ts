@@ -64,6 +64,34 @@ describe('NakitHareketiFormu', () => {
       get(store).dataset?.cashflows.some((c) => c.tur === 'YATIRMA' && c.hesap === 'GARAN' && c.tutar_usd === 250),
     ).toBe(true)
   })
+
+  it('saves a TL-denominated CEKME with tutar_tl set and tutar_usd converted', async () => {
+    const { state, store } = await v()
+    const rate = state.dataset!.fxrates[Object.keys(state.dataset!.fxrates).sort().reverse()[0]]
+    const onSaved = vi.fn()
+    let saved: unknown
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (_n: string, data: unknown) => {
+        saved = data
+      },
+    }
+    const { getByLabelText, getByText } = render(NakitHareketiFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved },
+    })
+    await fireEvent.change(getByLabelText('Tür'), { target: { value: 'CEKME' } })
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARAN' } })
+    await fireEvent.change(getByLabelText('Para Birimi'), { target: { value: 'TL' } })
+    await fireEvent.input(getByLabelText('Tutar (TL)'), { target: { value: '1000' } })
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByText('Onayla ve Kaydet'))
+    expect(onSaved).toHaveBeenCalled()
+    const record = (saved as any[])?.find((c) => c.tur === 'CEKME' && c.hesap === 'GARAN')
+    expect(record.tutar_tl).toBe(1000)
+    expect(record.kur).toBe(rate)
+    expect(record.tutar_usd).toBeCloseTo(1000 / rate, 6)
+  })
 })
 
 describe('NakitHareketiFormu edit mode', () => {

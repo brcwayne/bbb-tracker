@@ -4,7 +4,7 @@
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord, updateRecord } from '../../lib/data/store'
-  import { money } from '../../lib/settings.svelte'
+  import { money, settings } from '../../lib/settings.svelte'
 
   let {
     dataset,
@@ -32,16 +32,23 @@
   let hesap = $state(editing?.hesap ?? '')
   let hedefHesap = $state(editing?.hedefHesap ?? '')
   let enstruman = $state(editing?.enstruman ?? '')
-  let tutarUsd = $state(editing ? String(editing.tutar_usd) : '')
+  let paraBirimi = $state<'USD' | 'TL'>(editing?.tutar_tl != null ? 'TL' : 'USD')
+  let tutarInput = $state(
+    editing ? String(editing.tutar_tl != null ? editing.tutar_tl : editing.tutar_usd) : '',
+  )
   let aciklama = $state(editing?.aciklama ?? '')
   let tarih = $state(editing?.tarih ?? todayIso())
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
   let saving = $state(false)
 
+  const tutarUsd = $derived(
+    paraBirimi === 'USD' ? Number(tutarInput || 0) : Number(tutarInput || 0) / settings.rate,
+  )
+
   function review() {
     error = null
-    if (!hesap || !tutarUsd) {
+    if (!hesap || !tutarInput) {
       error = 'Tüm alanları doldurun.'
       return
     }
@@ -77,9 +84,9 @@
         portfoy: null,
         tur,
         enstruman: tur === 'TEMETTU' ? enstruman : null,
-        tutar_tl: null,
-        tutar_usd: Number(tutarUsd),
-        kur: null,
+        tutar_tl: paraBirimi === 'TL' ? Number(tutarInput) : null,
+        tutar_usd: tutarUsd,
+        kur: paraBirimi === 'TL' ? settings.rate : null,
         aciklama,
         kaynak: 'manual',
         ...(tur === 'TRANSFER' ? { hedefHesap } : {}),
@@ -94,7 +101,8 @@
       onSaved()
       if (!editing) {
         tur = 'YATIRMA'
-        hesap = hedefHesap = enstruman = tutarUsd = aciklama = ''
+        hesap = hedefHesap = enstruman = tutarInput = aciklama = ''
+        paraBirimi = 'USD'
         tarih = todayIso()
         step = 'form'
       }
@@ -143,8 +151,21 @@
       </label>
     {/if}
     <label>
-      Tutar (USD)
-      <input type="number" bind:value={tutarUsd} aria-label="Tutar (USD)" min="0" step="any" />
+      Para Birimi
+      <select bind:value={paraBirimi} aria-label="Para Birimi">
+        <option value="USD">USD</option>
+        <option value="TL">TL</option>
+      </select>
+    </label>
+    <label>
+      Tutar ({paraBirimi})
+      <input
+        type="number"
+        bind:value={tutarInput}
+        aria-label={`Tutar (${paraBirimi})`}
+        min="0"
+        step="any"
+      />
     </label>
     <label class="wide">
       Açıklama
@@ -159,7 +180,14 @@
   <button onclick={review}>İncele</button>
 {:else}
   <div class="summary">
-    <p><strong>{tur}</strong> — {hesap}{tur === 'TRANSFER' ? ` → ${hedefHesap}` : ''} · {money(Number(tutarUsd))}</p>
+    <p>
+      <strong>{tur}</strong> — {hesap}{tur === 'TRANSFER' ? ` → ${hedefHesap}` : ''} ·
+      {#if paraBirimi === 'TL'}
+        {tutarInput} TL (≈ {money(tutarUsd)})
+      {:else}
+        {money(tutarUsd)}
+      {/if}
+    </p>
     {#if tur === 'TEMETTU'}<p>{enstruman}</p>{/if}
     {#if aciklama}<p>{aciklama}</p>{/if}
   </div>
