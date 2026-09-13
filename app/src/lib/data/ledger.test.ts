@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildLedger, type SaleEvent } from './ledger'
 import { fixture } from '../../fixtures/dataset'
 import type { Transaction, AssetTransfer } from './types'
-import realTxns from '../../../../data/transactions.json'
+import { hasRealData, loadRealData } from './testRealData'
 
 const t = (o: Partial<Transaction>): Transaction => ({
   id: o.id ?? 'x',
@@ -250,8 +250,8 @@ describe('ledger — unit tests', () => {
 })
 
 describe('ledger — real dataset reconciliation', () => {
-  it('matches all anchor values from actual transactions', () => {
-    const typedRealTxns = realTxns as unknown as Transaction[]
+  it.skipIf(!hasRealData())('matches all anchor values from actual transactions', () => {
+    const typedRealTxns = loadRealData<Transaction[]>('transactions.json')
     const globalRes = buildLedger(typedRealTxns, [], 'global')
 
     const g = globalRes.byScope.get('')!

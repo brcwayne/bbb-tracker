@@ -3,6 +3,7 @@ import { buildWaterfall } from './waterfall'
 import type { Snapshot, Transaction, Cashflow } from './types'
 import type { SaleEvent } from './ledger'
 import type { AylikSermaye } from './equityCurve'
+import { hasRealData, loadRealData } from './testRealData'
 
 function mockSnap(overrides: Partial<Snapshot> = {}): Snapshot {
   return {
@@ -114,9 +115,10 @@ describe('buildWaterfall (H4)', () => {
     expect(vergiStep?.isInfo).toBe(true)
   })
 
-  it('drops Değerleme (bakiye) to zero in real snapshots data (2026-08, 2026-06, 2026-03) (H4-fix)', async () => {
-    // Import real snapshots
-    const snapshots: Snapshot[] = (await import('../../../../data/snapshots.json')).default as unknown as Snapshot[]
+  it.skipIf(!hasRealData())(
+    'drops Değerleme (bakiye) to zero in real snapshots data (2026-08, 2026-06, 2026-03) (H4-fix)',
+    () => {
+    const snapshots = loadRealData<Snapshot[]>('snapshots.json')
 
     // 1) 2026-08: vergiKomisyon = 48.42, netKZ = 21717.66
     const snap08 = snapshots.find((s) => s.tarih === '2026-08-31')!
@@ -144,7 +146,8 @@ describe('buildWaterfall (H4)', () => {
     ])
     expect(res03).not.toBeNull()
     expect(Math.abs(res03!.degerlemeBakiye)).toBeLessThan(0.01)
-  })
+    },
+  )
 
   it('falls back to prevSnap.toplamOzkaynak_usd when baslangicSermayesi_usd is null', () => {
     const prevSnap = mockSnap({ tarih: '2026-07-31', toplamOzkaynak_usd: 85000 })
@@ -224,10 +227,10 @@ describe('buildWaterfall (H4)', () => {
     expect(degStep?.tutarUsd).toBe(0)
   })
 
-  it('gerçek BBB defter serisinde her ay için degerlemeBakiye TAM SIFIRDIR', async () => {
-    const transactions = (await import('../../../../data/transactions.json')).default as unknown as Transaction[]
-    const cashflows = (await import('../../../../data/cashflows.json')).default as unknown as Cashflow[]
-    const snapshots = (await import('../../../../data/snapshots.json')).default as unknown as Snapshot[]
+  it.skipIf(!hasRealData())('gerçek BBB defter serisinde her ay için degerlemeBakiye TAM SIFIRDIR', async () => {
+    const transactions = loadRealData<Transaction[]>('transactions.json')
+    const cashflows = loadRealData<Cashflow[]>('cashflows.json')
+    const snapshots = loadRealData<Snapshot[]>('snapshots.json')
 
     const { derivePositions } = await import('./derive')
     const { buildEquityCurve } = await import('./equityCurve')

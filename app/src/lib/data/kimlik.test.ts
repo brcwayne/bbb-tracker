@@ -4,11 +4,7 @@ import { derivePositions } from './derive'
 import { cashBalanceByHesap } from './cashBalances'
 import type { Dataset, Transaction, Cashflow } from './types'
 import type { SaleEvent } from './ledger'
-
-import transactionsJson from '../../../../data/transactions.json'
-import cashflowsJson from '../../../../data/cashflows.json'
-import snapshotsJson from '../../../../data/snapshots.json'
-import metaJson from '../../../../data/meta.json'
+import { hasRealData, loadRealData } from './testRealData'
 
 function makeFixtureDataset(overrides: Partial<Dataset> = {}): Dataset {
   return {
@@ -152,35 +148,38 @@ describe('kimlikKontrol', () => {
     expect(res.farkOrani).toBe(0)
   })
 
-  it('gerçek veri setinde göç nakit düzeltmesi ve yuvarlama artığı bağımsız olarak hesaplanır, kimlik kuruşa kapanır', () => {
-    const transactions = transactionsJson as unknown as Transaction[]
-    const cashflows = cashflowsJson as unknown as Cashflow[]
-    const snapshots = snapshotsJson as unknown as Dataset['snapshots']
-    const meta = metaJson as unknown as Dataset['meta']
+  it.skipIf(!hasRealData())(
+    'gerçek veri setinde göç nakit düzeltmesi ve yuvarlama artığı bağımsız olarak hesaplanır, kimlik kuruşa kapanır',
+    () => {
+      const transactions = loadRealData<Transaction[]>('transactions.json')
+      const cashflows = loadRealData<Cashflow[]>('cashflows.json')
+      const snapshots = loadRealData<Dataset['snapshots']>('snapshots.json')
+      const meta = loadRealData<Dataset['meta']>('meta.json')
 
-    const ds = makeFixtureDataset({ transactions, cashflows, snapshots, meta })
+      const ds = makeFixtureDataset({ transactions, cashflows, snapshots, meta })
 
-    const pos = derivePositions(ds.transactions)
-    const cashByHesap = cashBalanceByHesap(ds)
-    const displayedCash = Object.values(cashByHesap).reduce((s, v) => s + v, 0)
+      const pos = derivePositions(ds.transactions)
+      const cashByHesap = cashBalanceByHesap(ds)
+      const displayedCash = Object.values(cashByHesap).reduce((s, v) => s + v, 0)
 
-    const res = kimlikKontrol(ds, pos.sales, pos.open, displayedCash)
+      const res = kimlikKontrol(ds, pos.sales, pos.open, displayedCash)
 
-    expect(res.beklenenVarlik).toBeCloseTo(298611.16, 2)
-    expect(displayedCash).toBeCloseTo(18795.01, 2)
+      expect(res.beklenenVarlik).toBeCloseTo(298611.16, 2)
+      expect(displayedCash).toBeCloseTo(18795.01, 2)
 
-    // gocNakitDuzeltmesi artık meta.gocNakitDuzeltmesi'nden (geriye doğru çözülmüş bir
-    // tıkaç) OKUNMUYOR; defterden türetilen nakit ile gösterilen nakit arasındaki
-    // bağımsız ölçülebilir farktır (turetilmisNakit(ds) − nakit).
-    expect(res.gocNakitDuzeltmesi).toBeCloseTo(14989.38, 2)
+      // gocNakitDuzeltmesi artık meta.gocNakitDuzeltmesi'nden (geriye doğru çözülmüş bir
+      // tıkaç) OKUNMUYOR; defterden türetilen nakit ile gösterilen nakit arasındaki
+      // bağımsız ölçülebilir farktır (turetilmisNakit(ds) − nakit).
+      expect(res.gocNakitDuzeltmesi).toBeCloseTo(14989.38, 2)
 
-    // yuvarlamaArtigi: satış hasılatının (fiyat_usd bazlı, ledger.ts) SAT işlemlerinin
-    // kendi net_usd alanından bağımsız ölçülmesinden kaynaklanan kuruş farkı — 47 satışın
-    // toplamı üzerinden bağımsız ölçülür, kimlikten geriye çözülmez.
-    expect(res.yuvarlamaArtigi).toBeCloseTo(0.41, 2)
+      // yuvarlamaArtigi: satış hasılatının (fiyat_usd bazlı, ledger.ts) SAT işlemlerinin
+      // kendi net_usd alanından bağımsız ölçülmesinden kaynaklanan kuruş farkı — 47 satışın
+      // toplamı üzerinden bağımsız ölçülür, kimlikten geriye çözülmez.
+      expect(res.yuvarlamaArtigi).toBeCloseTo(0.41, 2)
 
-    // İki terim birlikte, kimliği artık kuruşun çok altında (< $0,01) kapatır.
-    expect(Math.abs(res.fark)).toBeLessThan(0.01)
-    expect(res.farkOrani).toBeLessThan(0.00001)
-  })
+      // İki terim birlikte, kimliği artık kuruşun çok altında (< $0,01) kapatır.
+      expect(Math.abs(res.fark)).toBeLessThan(0.01)
+      expect(res.farkOrani).toBeLessThan(0.00001)
+    },
+  )
 })

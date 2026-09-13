@@ -3,10 +3,7 @@ import { buildEquityCurve, type AylikSermaye } from './equityCurve'
 import { derivePositions } from './derive'
 import type { Dataset, Transaction, Cashflow, Snapshot } from './types'
 import type { SaleEvent } from './ledger'
-
-import transactionsJson from '../../../../data/transactions.json'
-import cashflowsJson from '../../../../data/cashflows.json'
-import snapshotsJson from '../../../../data/snapshots.json'
+import { hasRealData, loadRealData } from './testRealData'
 
 function makeFixtureDataset(overrides: Partial<Dataset> = {}): Dataset {
   return {
@@ -99,10 +96,10 @@ describe('buildEquityCurve (I2)', () => {
     expect(buildEquityCurve(ds, [])).toEqual([])
   })
 
-  it('gerçek BBB veri setinde Dalga 4 Session 2 çapalarını tam karşılar', () => {
-    const transactions = transactionsJson as unknown as Transaction[]
-    const cashflows = cashflowsJson as unknown as Cashflow[]
-    const snapshots = snapshotsJson as unknown as Snapshot[]
+  it.skipIf(!hasRealData())('gerçek BBB veri setinde Dalga 4 Session 2 çapalarını tam karşılar', () => {
+    const transactions = loadRealData<Transaction[]>('transactions.json')
+    const cashflows = loadRealData<Cashflow[]>('cashflows.json')
+    const snapshots = loadRealData<Snapshot[]>('snapshots.json')
 
     const ds = makeFixtureDataset({
       transactions,
