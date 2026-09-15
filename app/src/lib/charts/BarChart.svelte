@@ -39,6 +39,7 @@
   viewBox={`0 0 ${width} ${height}`}
   role="img"
   aria-label="bar grafik"
+  style="max-width:100%; height:auto; display:block;"
   onmouseleave={() => (hoverI = null)}
 >
   {#each bars as b, i}
