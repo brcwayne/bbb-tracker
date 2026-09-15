@@ -220,6 +220,30 @@ export async function updateRecord<T extends { kaynak?: string }>(
   })
 }
 
+/** `updateRecord`'un çoğulu: `matches` ile eşleşen her satırı `patch(satır)` ile
+ *  değiştirir, tek bir dosya yazımında. Bir RecurringRule'un tutarını "bundan
+ *  sonraki tüm tekrarlar" seçeneğiyle değiştirmek için kullanılır. */
+export async function updateRecords<T extends { kaynak?: string }>(
+  store: Writable<AppState>,
+  source: DataSource,
+  file: Kind,
+  matches: (r: T) => boolean,
+  patch: (r: T) => T,
+  opts: MutateOpts = {},
+): Promise<void> {
+  return writeAndCommit(store, source, file, (current) => {
+    const arr = current as T[]
+    const allowed = opts.allowKaynak ?? ['manual']
+    return arr.map((r) => {
+      if (!matches(r)) return r
+      if (!opts.allowImported && !allowed.includes(r.kaynak ?? '')) {
+        throw new Error('Sadece manuel kayıtlar düzenlenebilir.')
+      }
+      return patch(r)
+    })
+  })
+}
+
 export async function deleteRecord<T extends { kaynak?: string }>(
   store: Writable<AppState>,
   source: DataSource,
