@@ -21,6 +21,7 @@ export function monthlyTotals(rows: PersonalTx[], today: string, months = 12): M
 
   for (const row of rows) {
     if (row.tur !== 'GIDER') continue
+    if (row.durum === 'planlandi') continue
     if (row.tarih > today) continue
     const ay = row.tarih.slice(0, 7)
     if (ay < startAy || ay > todayAy) continue
@@ -64,6 +65,7 @@ export function monthSummary(
   for (const row of rows) {
     if (!row.tarih.startsWith(prefix)) continue
     if (row.tarih > today) continue
+    if (row.durum === 'planlandi') continue
 
     if (row.tur === 'GIDER') {
       summary.gider[row.paraBirimi] =
@@ -96,6 +98,7 @@ export function categoryBreakdown(
   for (const row of rows) {
     if (!row.tarih.startsWith(prefix)) continue
     if (row.tarih > today) continue
+    if (row.durum === 'planlandi') continue
     if (row.tur !== 'GIDER') continue
     if (row.paraBirimi !== para) continue
 

@@ -73,6 +73,17 @@ describe('personal ledger derivations: totals and breakdown', () => {
     ], TODAY, 12)
     expect(out.map((m) => m.ay)).toEqual(['2026-09'])
   })
+
+  it('planlandi satırları ay/kategori toplamlarından hariç tutar', () => {
+    const rows = [
+      tx({ id: 'a', tarih: '2026-09-02', tutar: 229.9, durum: 'planlandi' }),
+      tx({ id: 'b', tarih: '2026-09-03', tutar: 100 }),
+    ]
+    expect(monthlyTotals(rows, TODAY).find((m) => m.ay === '2026-09')?.toplam).toBe(100)
+    expect(monthSummary(rows, 2026, 9, TODAY).gider.TRY).toBe(100)
+    expect(monthSummary(rows, 2026, 9, TODAY).adet).toBe(1)
+    expect(categoryBreakdown(rows, 2026, 9, TODAY, 'TRY').find((c) => c.kod === 'market')?.toplam).toBe(100)
+  })
 })
 
 describe('personal ledger derivations: instalments and debts', () => {
