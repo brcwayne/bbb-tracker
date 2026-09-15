@@ -17,6 +17,7 @@ describe('router with volumes', () => {
     go('#/h/borclar'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-borclar' })
     go('#/h/harcamalar'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-harcamalar' })
     go('#/h/taksitler'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-taksitler' })
+    go('#/h/tekrarlar'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-tekrarlar' })
   })
 
   it('mevcut yatırım yolları aynen çalışmaya devam eder', () => {
@@ -33,8 +34,8 @@ describe('router with volumes', () => {
 
   it('sekme şeridi cilde göre değişir', () => {
     expect(routesFor('yatirim')).toHaveLength(10)
-    expect(routesFor('hesaplar')).toHaveLength(5)
-    expect(HESAP_ROUTES.map((r) => r.label)).toEqual(['Hesaplar', 'Özet', 'Harcamalar', 'Taksitler', 'Borçlar'])
+    expect(routesFor('hesaplar')).toHaveLength(6)
+    expect(HESAP_ROUTES.map((r) => r.label)).toEqual(['Hesaplar', 'Özet', 'Harcamalar', 'Taksitler', 'Tekrarlayanlar', 'Borçlar'])
   })
 
   it('her cildin bir giriş sayfası var', () => {
@@ -74,7 +75,7 @@ describe('hesap rotaları', () => {
 
   it('sekme şeridinde beş sekme var, detay sekme değil', () => {
     const ids = routesFor('hesaplar').map((r) => r.id)
-    expect(ids).toEqual(['h-hesaplar', 'h-ozet', 'h-harcamalar', 'h-taksitler', 'h-borclar'])
+    expect(ids).toEqual(['h-hesaplar', 'h-ozet', 'h-harcamalar', 'h-taksitler', 'h-tekrarlar', 'h-borclar'])
   })
 
   it('yatırım rotaları değişmedi', () => {

@@ -12,7 +12,7 @@ export type Route =
   | 'ekle'
   | 'log'
 
-export type HesapRoute = 'h-hesaplar' | 'h-ozet' | 'h-harcamalar' | 'h-taksitler' | 'h-borclar' | 'h-hesap'
+export type HesapRoute = 'h-hesaplar' | 'h-ozet' | 'h-harcamalar' | 'h-taksitler' | 'h-tekrarlar' | 'h-borclar' | 'h-hesap'
 
 export interface RouteEntry<T extends string = string> {
   id: T
@@ -38,6 +38,7 @@ export const HESAP_ROUTES: RouteEntry<HesapRoute>[] = [
   { id: 'h-ozet', path: '#/h/ozet', label: 'Özet' },
   { id: 'h-harcamalar', path: '#/h/harcamalar', label: 'Harcamalar' },
   { id: 'h-taksitler', path: '#/h/taksitler', label: 'Taksitler' },
+  { id: 'h-tekrarlar', path: '#/h/tekrarlar', label: 'Tekrarlayanlar' },
   { id: 'h-borclar', path: '#/h/borclar', label: 'Borçlar' },
 ]
 
@@ -86,6 +87,7 @@ export function currentRoute(): CurrentRouteResult {
       ozet: 'h-ozet',
       harcamalar: 'h-harcamalar',
       taksitler: 'h-taksitler',
+      tekrarlar: 'h-tekrarlar',
       borclar: 'h-borclar',
       hesap: 'h-hesap',
     }
