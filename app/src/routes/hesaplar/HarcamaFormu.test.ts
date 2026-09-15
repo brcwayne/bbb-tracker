@@ -185,10 +185,14 @@ describe('HarcamaFormu', () => {
     await load(store, { id: 'local', load: () => Promise.resolve(ds) })
     const onSaved = vi.fn()
     let savedData: unknown
+    const personalTxSaves: PersonalTx[][] = []
     const source = {
       id: 'drive' as const,
       load: () => Promise.resolve(ds),
-      save: async (_n: string, data: unknown) => { savedData = data },
+      save: async (n: string, data: unknown) => {
+        savedData = data
+        if (n === 'personal_tx') personalTxSaves.push(data as PersonalTx[])
+      },
     }
 
     const { getByLabelText, getByText } = render(HarcamaFormu, {
@@ -212,6 +216,16 @@ describe('HarcamaFormu', () => {
     const list = savedData as PersonalTx[]
     expect(list.find((r) => r.id === 'px_rr_editing')!.tutar).toBe(259.9)
     expect(list.find((r) => r.id === 'px_rr_onceki')!.tutar).toBe(229.9)
+
+    // personal_tx iki kez yazılır (doğrudan updateRecord + toplu updateRecords), ama
+    // düzenlenen satır ikinci (toplu) yazımda TEKRAR işlenmemeli — updateRecords'ın patch
+    // fonksiyonu eşleşmeyen satırlar için aynı referansı döndürür, o yüzden px_rr_editing'in
+    // ilk yazımdaki referansı ile son yazımdaki referansı aynı olmalı (bkz. review fix:
+    // bulk predicate'e `r.id !== editing!.id` eklendi).
+    expect(personalTxSaves).toHaveLength(2)
+    const afterDirectUpdate = personalTxSaves[0].find((r) => r.id === 'px_rr_editing')
+    const afterBulkUpdate = personalTxSaves[1].find((r) => r.id === 'px_rr_editing')
+    expect(afterBulkUpdate).toBe(afterDirectUpdate)
   })
 })
 

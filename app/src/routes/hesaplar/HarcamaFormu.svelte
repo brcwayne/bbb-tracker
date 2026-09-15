@@ -153,7 +153,11 @@
           }
           await updateRecords<PersonalTx>(
             store, source, 'personal_tx',
-            (r) => r.tekrarKuralId === editing!.tekrarKuralId && r.durum === 'planlandi' && r.tarih >= editing!.tarih,
+            (r) =>
+              r.id !== editing!.id &&
+              r.tekrarKuralId === editing!.tekrarKuralId &&
+              r.durum === 'planlandi' &&
+              r.tarih >= editing!.tarih,
             (r) => ({ ...r, tutar: Number(tutar), kategori, hesap }),
           )
         }
