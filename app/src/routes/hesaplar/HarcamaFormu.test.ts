@@ -159,5 +159,59 @@ describe('HarcamaFormu', () => {
     const { container } = render(HarcamaFormu, { dataset: fixture, hesap: 'NAKIT', onSaved: vi.fn() })
     expect((container.querySelector('#hf-hesap') as HTMLSelectElement).disabled).toBe(false)
   })
+
+  it('planlı bir kaydın tutarı "bundan sonraki tüm tekrarlar" ile değişince kural + sonraki satırlar güncellenir', async () => {
+    const rule = {
+      id: 'rr_1', tur: 'GIDER' as const, aciklama: 'Netflix', kategori: 'market',
+      hesap: 'NAKIT', sahip: 'ENIS', paraBirimi: 'TRY' as const, tutar: 229.9,
+      gunOfMonth: 5, baslangicTarihi: '2026-01-01', bitisTarihi: null, aktif: true,
+      olusturulma: '', kaynak: 'manual' as const,
+    }
+    const oncekiAy: PersonalTx = {
+      id: 'px_rr_onceki', tarih: '2026-09-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY',
+      kategori: 'market', aciklama: 'Netflix', hesap: 'NAKIT', sahip: 'ENIS',
+      taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual',
+      olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi',
+    }
+    const editingTx: PersonalTx = {
+      ...oncekiAy, id: 'px_rr_editing', tarih: '2026-10-05',
+    }
+    const ds: any = {
+      ...fixture,
+      personalTx: [...(fixture.personalTx ?? []), oncekiAy, editingTx],
+      recurringRules: [rule],
+    }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const onSaved = vi.fn()
+    let savedData: unknown
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (_n: string, data: unknown) => { savedData = data },
+    }
+
+    const { getByLabelText, getByText } = render(HarcamaFormu, {
+      props: { dataset: ds, source, store, onSaved, editing: editingTx },
+    })
+
+    await fireEvent.input(getByLabelText('Tutar'), { target: { value: '259.90' } })
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByLabelText('Bundan sonraki tüm tekrarlar'))
+    await fireEvent.click(getByText('Onayla ve Güncelle'))
+
+    // confirmSave zincirinde üç ardışık `await` var (personal_tx patch, recurring_rules
+    // güncellemesi, personal_tx toplu güncelleme) — tek bir `fireEvent.click` beklemesi
+    // hepsinin tamamlanmasını garanti etmez, bkz. edit.test.ts'teki aynı desen.
+    await vi.waitFor(() => {
+      expect(onSaved).toHaveBeenCalled()
+    })
+    // Son `source.save` çağrısı personal_tx dosyasınadır (recurring_rules güncellemesi
+    // önce yazılır); px_rr_editing (düzenlenen ve düzenleme tarihinden sonraki) güncellenmeli,
+    // px_rr_onceki (geçmiş) dokunulmamalı.
+    const list = savedData as PersonalTx[]
+    expect(list.find((r) => r.id === 'px_rr_editing')!.tutar).toBe(259.9)
+    expect(list.find((r) => r.id === 'px_rr_onceki')!.tutar).toBe(229.9)
+  })
 })
 

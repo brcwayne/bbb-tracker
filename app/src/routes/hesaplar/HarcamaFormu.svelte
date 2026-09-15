@@ -3,7 +3,7 @@
   import type { Dataset, PersonalTx } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord, updateRecord, load } from '../../lib/data/store'
+  import { appendRecord, updateRecord, updateRecords, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd } from '../../lib/format'
   import { newPersonalId } from '../../lib/data/ids'
@@ -48,6 +48,17 @@
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
   let saving = $state(false)
+
+  type ApplyScope = 'single' | 'future'
+  let applyScope = $state<ApplyScope>('single')
+
+  const isPlannedEdit = $derived(
+    Boolean(editing?.tekrarKuralId) && editing?.durum === 'planlandi',
+  )
+  const plannedFieldsChanged = $derived(
+    isPlannedEdit &&
+      (Number(tutar) !== editing!.tutar || kategori !== editing!.kategori || hesap !== editing!.hesap),
+  )
 
   const isInstalment = $derived(Boolean(editing?.taksitPlaniId))
 
@@ -131,6 +142,21 @@
         await updateRecord<PersonalTx>(store, source, 'personal_tx', (r) => r.id === editing!.id, patch, {
           allowKaynak: ['telegram', 'manual'],
         })
+        if (plannedFieldsChanged && applyScope === 'future' && dataset) {
+          const rule = (dataset.recurringRules ?? []).find((r) => r.id === editing!.tekrarKuralId)
+          if (rule) {
+            await updateRecord(
+              store, source, 'recurring_rules',
+              (r: any) => r.id === rule.id,
+              { ...rule, tutar: Number(tutar), kategori, hesap },
+            )
+          }
+          await updateRecords<PersonalTx>(
+            store, source, 'personal_tx',
+            (r) => r.tekrarKuralId === editing!.tekrarKuralId && r.durum === 'planlandi' && r.tarih >= editing!.tarih,
+            (r) => ({ ...r, tutar: Number(tutar), kategori, hesap }),
+          )
+        }
       } else {
         const newRecord: PersonalTx = {
           id: newPersonalId(),
@@ -308,6 +334,19 @@
           <dd>{editing?.taksitNo}/{editing?.taksitToplam}</dd>
         {/if}
       </dl>
+
+      {#if plannedFieldsChanged}
+        <div class="field">
+          <label>
+            <input type="radio" name="applyScope" value="single" bind:group={applyScope} />
+            Sadece bu kayıt
+          </label>
+          <label>
+            <input type="radio" name="applyScope" value="future" bind:group={applyScope} />
+            Bundan sonraki tüm tekrarlar
+          </label>
+        </div>
+      {/if}
 
       <div class="actions">
         <button type="button" class="btn-secondary" onclick={() => (step = 'form')} disabled={saving}>
