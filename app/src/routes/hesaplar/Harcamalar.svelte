@@ -281,10 +281,13 @@
             <tbody>
               {#each filteredRows as r (r.id)}
                 {@const isFuture = r.tarih > today}
-                <tr class:editing-row={editing?.id === r.id}>
+                {@const isPlanned = r.durum === 'planlandi'}
+                <tr class:editing-row={editing?.id === r.id} class:planned-row={isPlanned}>
                   <td data-col="tarih" class="nowrap">
                     {r.tarih}
-                    {#if isFuture}
+                    {#if isPlanned}
+                      <span class="future-marker" title="Tekrarlayan işlemden otomatik üretildi, henüz onaylanmadı">Planlandı</span>
+                    {:else if isFuture}
                       <span class="future-marker" title="Gelecek taksit">Gelecek</span>
                     {/if}
                   </td>
@@ -511,6 +514,12 @@
   }
   tr.editing-row {
     background: rgba(201, 168, 106, 0.08);
+  }
+  tr.planned-row {
+    opacity: 0.6;
+  }
+  tr.planned-row td[data-col='tutar'] {
+    color: var(--gold);
   }
   .nowrap {
     white-space: nowrap;

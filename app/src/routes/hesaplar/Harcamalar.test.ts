@@ -108,5 +108,23 @@ describe('Harcamalar sayfası', () => {
     expect(container.textContent).not.toContain('Bakiye düzeltmesi')
     expect(container.textContent).toContain('1 kayıt')
   })
+
+  it('planlandi satırı planned-row sınıfıyla ve "Planlandı" rozetiyle gösterilir', () => {
+    const planned: Dataset = {
+      ...fixture,
+      personalTx: [
+        ...(fixture.personalTx ?? []),
+        {
+          id: 'px_planned', tarih: '2026-10-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY',
+          kategori: 'market', aciklama: 'Netflix', hesap: 'NAKIT', sahip: 'ENIS',
+          taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual',
+          olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi',
+        },
+      ],
+    }
+    const { container, getByText } = render(Harcamalar, { dataset: planned, today: '2026-09-08' })
+    expect(getByText('Planlandı')).toBeInTheDocument()
+    expect(container.querySelector('tr.planned-row')).not.toBeNull()
+  })
 })
 
