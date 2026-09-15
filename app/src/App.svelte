@@ -46,6 +46,7 @@
   import Harcamalar from './routes/hesaplar/Harcamalar.svelte'
   import Taksitler from './routes/hesaplar/Taksitler.svelte'
   import Borclar from './routes/hesaplar/Borclar.svelte'
+  import Tekrarlayanlar from './routes/hesaplar/Tekrarlayanlar.svelte'
   import Hesaplar from './routes/hesaplar/Hesaplar.svelte'
   import HesapDetay from './routes/hesaplar/HesapDetay.svelte'
   import UyariSeridi from './lib/ui/UyariSeridi.svelte'
@@ -77,6 +78,7 @@
     'h-ozet': Ozet,
     'h-harcamalar': Harcamalar,
     'h-taksitler': Taksitler,
+    'h-tekrarlar': Tekrarlayanlar,
     'h-borclar': Borclar,
     'h-hesap': HesapDetay,
   }
