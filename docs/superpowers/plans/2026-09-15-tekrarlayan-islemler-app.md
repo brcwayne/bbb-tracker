@@ -36,12 +36,17 @@
 
 - [ ] **Step 1: Mevcut dataset-key testini oku ve yeni vakayı yaz (failing)**
 
-`app/src/lib/data/store.datasetKey.test.ts` dosyasını aç, mevcut testlerin şeklini kopyalayarak şu vakayı ekle (dosyanın üstündeki importları ve yardımcı fonksiyonları koru, sadece yeni bir `it(...)` bloğu ekleniyor):
+`app/src/lib/data/store.datasetKey.test.ts` dosyasını aç. Dosyada paylaşılan bir `makeHarness` yardımcı fonksiyonu YOK — mevcut tek test, `dsAsLoaderProduces` adlı modül-seviyesi sabit bir dataset ile `writable<AppState>({...})`/düz obje `source` kurup `appendRecord`'u doğrudan çağırıyor. Aynı deseni kullan: `dsAsLoaderProduces` sabitine `recurringRules: []` alanını ekle (mevcut `paymentPlans: [], personalAccounts: [], categories: [], people: [], debts: [],` satırının sonuna), sonra dosyanın sonuna yeni bir `it(...)` bloğu ekle:
 
 ```ts
 it('recurring_rules dosya adı recurringRules dataset alanına yazılır', async () => {
-  const { store, source } = makeHarness({ recurringRules: [] })
-  await appendRecord(store, source, 'recurring_rules', {
+  const store = writable<AppState>({ status: 'ready', dataset: dsAsLoaderProduces,
+    derived: {} as any, sourceText: '' } as any)
+  const saved: Record<string, unknown> = {}
+  const source: any = { id: 'drive', load: async () => dsAsLoaderProduces,
+    save: async (n: string, d: unknown) => { saved[n] = d } }
+
+  await appendRecord(store, source, 'recurring_rules' as any, {
     id: 'rr_abc123abc123',
     tur: 'GIDER',
     aciklama: 'Netflix',
@@ -57,13 +62,10 @@ it('recurring_rules dosya adı recurringRules dataset alanına yazılır', async
     olusturulma: new Date().toISOString(),
     kaynak: 'manual',
   })
-  const state = get(store)
-  expect(state.dataset?.recurringRules).toHaveLength(1)
-  expect(state.dataset?.recurringRules?.[0].aciklama).toBe('Netflix')
+  expect(saved.recurring_rules).toHaveLength(1)
+  expect((saved.recurring_rules as any[])[0].aciklama).toBe('Netflix')
 })
 ```
-
-Bu dosyadaki `makeHarness` yardımcı fonksiyonunun imzasını incele (zaten `personalTx`/`paymentPlans` gibi alanlarla çağrılan bir örnek var) ve aynı şekilde `recurringRules: []` geçir.
 
 - [ ] **Step 2: Testi çalıştır, başarısız olduğunu doğrula**
 
@@ -196,37 +198,42 @@ git commit -m "feat(recurring): RecurringRule veri modeli ve dosya kaydı"
 
 - [ ] **Step 1: Failing testi yaz**
 
-`app/src/lib/data/store.updateRecords.test.ts` (mevcut `store.datasetKey.test.ts`'deki `makeHarness` desenini kopyala/uyarlar veya oradan import et — dosyayı önce oku):
+`app/src/lib/data/store.updateRecords.test.ts` — `store.datasetKey.test.ts`'te kullanılan gerçek deseni (paylaşılan bir harness yok; `writable<AppState>({...})` + düz obje `source` doğrudan test içinde kurulur) uygula:
 
 ```ts
 import { describe, it, expect } from 'vitest'
+import { writable } from 'svelte/store'
 import { get } from 'svelte/store'
 import { updateRecords } from './store'
-import { makeHarness } from './store.datasetKey.test' // yoksa aynı yardımcıyı bu dosyaya da kopyala
+import type { AppState } from './store'
 
 describe('updateRecords', () => {
   it('eşleşen tüm satırları tek seferde günceller', async () => {
-    const { store, source } = makeHarness({
+    const dataset: any = {
+      transactions: [], cashflows: [], snapshots: [], instruments: [], brokers: [],
+      portfolios: [], meta: {}, fxrates: {}, assetTransfers: [],
       personalTx: [
         { id: 'px_1', tarih: '2026-10-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY', kategori: 'eglence', aciklama: 'Netflix', hesap: 'nakit', sahip: 'enis', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi' },
         { id: 'px_2', tarih: '2026-11-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY', kategori: 'eglence', aciklama: 'Netflix', hesap: 'nakit', sahip: 'enis', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi' },
-        { id: 'px_3', tarih: '2026-09-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY', kategori: 'eglence', aciklama: 'Netflix', hesap: 'nakit', sahip: 'enis', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '', tekrarKuralId: 'rr_1', durum: undefined },
+        { id: 'px_3', tarih: '2026-09-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY', kategori: 'eglence', aciklama: 'Netflix', hesap: 'nakit', sahip: 'enis', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '', tekrarKuralId: 'rr_1' },
       ],
-    })
+      paymentPlans: [], personalAccounts: [], categories: [], people: [], debts: [], recurringRules: [],
+    }
+    const store = writable<AppState>({ status: 'ready', dataset, derived: {} as any, sourceText: '' } as any)
+    const source: any = { id: 'drive', load: async () => dataset, save: async () => {} }
+
     await updateRecords(
       store, source, 'personal_tx',
       (r: any) => r.tekrarKuralId === 'rr_1' && r.durum === 'planlandi' && r.tarih >= '2026-10-05',
       (r: any) => ({ ...r, tutar: 259.9 }),
     )
     const rows = get(store).dataset?.personalTx ?? []
-    expect(rows.find((r) => r.id === 'px_1')!.tutar).toBe(259.9)
-    expect(rows.find((r) => r.id === 'px_2')!.tutar).toBe(259.9)
-    expect(rows.find((r) => r.id === 'px_3')!.tutar).toBe(229.9) // geçmiş satır dokunulmadı
+    expect(rows.find((r: any) => r.id === 'px_1')!.tutar).toBe(259.9)
+    expect(rows.find((r: any) => r.id === 'px_2')!.tutar).toBe(259.9)
+    expect(rows.find((r: any) => r.id === 'px_3')!.tutar).toBe(229.9) // geçmiş satır dokunulmadı
   })
 })
 ```
-
-Not: `store.datasetKey.test.ts`'i önce Read ile aç, `makeHarness`'in gerçek imzasını ve export edilip edilmediğini gör; export edilmiyorsa aynı yardımcıyı bu yeni test dosyasına da (kopyalayarak) ekle — iki test dosyası arasında dolaylı bağımlılık kurma.
 
 - [ ] **Step 2: Testi çalıştır, başarısız olduğunu doğrula**
 
@@ -469,20 +476,20 @@ git commit -m "feat(recurring): materialize() ile 12 aylık önizleme üretimi"
 
 - [ ] **Step 1: Failing testleri yaz**
 
-`app/src/lib/data/personal.test.ts` içine, ilgili `describe('monthlyTotals', ...)` / `describe('monthSummary', ...)` / `describe('categoryBreakdown', ...)` bloklarının içine (dosyayı Read ile açıp gerçek yapıyı görerek) şu üç vakayı ekle:
+`app/src/lib/data/personal.test.ts`'te zaten bir `tx(o: Partial<PersonalTx>): PersonalTx` fabrika yardımcısı ve `TODAY = '2026-09-08'` sabiti var (dosyanın başında). `describe('personal ledger derivations: totals and breakdown', ...)` bloğunun sonuna, mevcut testlerin hemen ardına ekle:
 
 ```ts
-it('planlandi satırları toplama dahil etmez', () => {
-  const rows = [
-    { tarih: '2026-09-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY', durum: 'planlandi' } as any,
-    { tarih: '2026-09-10', tur: 'GIDER', tutar: 100, paraBirimi: 'TRY' } as any,
-  ]
-  const result = monthlyTotals(rows, '2026-09-15', 1)
-  expect(result.find((r) => r.ay === '2026-09')?.toplam).toBe(100)
-})
+  it('planlandi satırları ay/kategori toplamlarından hariç tutar', () => {
+    const rows = [
+      tx({ id: 'a', tarih: '2026-09-02', tutar: 229.9, durum: 'planlandi' }),
+      tx({ id: 'b', tarih: '2026-09-03', tutar: 100 }),
+    ]
+    expect(monthlyTotals(rows, TODAY).find((m) => m.ay === '2026-09')?.toplam).toBe(100)
+    expect(monthSummary(rows, 2026, 9, TODAY).gider.TRY).toBe(100)
+    expect(monthSummary(rows, 2026, 9, TODAY).adet).toBe(1)
+    expect(categoryBreakdown(rows, 2026, 9, TODAY, 'TRY').find((c) => c.kod === 'market')?.toplam).toBe(100)
+  })
 ```
-
-Aynı örnek satırlarla `monthSummary(rows, 2026, 9, '2026-09-15').gider['TRY']` için `100` ve `categoryBreakdown` için planlı satırın kategori toplamına girmediğini doğrulayan birer test daha ekle (mevcut dosyadaki `kategori` alanını kullanan örnek satır formatını taklit et).
 
 - [ ] **Step 2: Testleri çalıştır, başarısız olduklarını doğrula**
 
@@ -524,26 +531,27 @@ git commit -m "fix(recurring): planlandi satırları ay/kategori toplamlarından
 
 - [ ] **Step 1: Failing testi yaz**
 
-`Harcamalar.test.ts`'i Read ile aç, mevcut render kurulumunu (`dataset.personalTx` ile nasıl mock veri veriliyor) kopyala ve şu vakayı ekle:
+`Harcamalar.test.ts`'in gerçek deseni: `fixture` (`../../fixtures/dataset`) + `render(Harcamalar, { dataset, today })` (props sarmalayıcısı YOK, doğrudan obje). Dosyanın sonuna ekle:
 
 ```ts
-it('planlandi satırı planned-row sınıfıyla ve "Planlandı" rozetiyle gösterilir', () => {
-  const { container, getByText } = render(Harcamalar, {
-    props: {
-      dataset: {
-        ...baseDataset, // dosyadaki mevcut temel dataset sabitini kullan
-        personalTx: [
-          { id: 'px_1', tarih: '2026-10-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY', kategori: 'eglence', aciklama: 'Netflix', hesap: 'nakit', sahip: 'enis', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi' },
-        ],
-      },
-    },
+  it('planlandi satırı planned-row sınıfıyla ve "Planlandı" rozetiyle gösterilir', () => {
+    const planned: Dataset = {
+      ...fixture,
+      personalTx: [
+        ...(fixture.personalTx ?? []),
+        {
+          id: 'px_planned', tarih: '2026-10-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY',
+          kategori: 'market', aciklama: 'Netflix', hesap: 'NAKIT', sahip: 'ENIS',
+          taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual',
+          olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi',
+        },
+      ],
+    }
+    const { container, getByText } = render(Harcamalar, { dataset: planned, today: '2026-09-08' })
+    expect(getByText('Planlandı')).toBeInTheDocument()
+    expect(container.querySelector('tr.planned-row')).not.toBeNull()
   })
-  expect(getByText('Planlandı')).toBeInTheDocument()
-  expect(container.querySelector('tr.planned-row')).not.toBeNull()
-})
 ```
-
-(`baseDataset` yerine dosyadaki gerçek yardımcı/sabit adını kullan — Read ile kontrol et.)
 
 - [ ] **Step 2: Testi çalıştır, başarısız olduğunu doğrula**
 
@@ -612,35 +620,33 @@ git commit -m "feat(recurring): Harcamalar'da planlı satırlar soluk turuncu g�
 
 **Files:**
 - Modify: `app/src/router.ts`
-- Test: `app/src/router.test.ts` (dosya yoksa oluştur; varsa Read ile açıp mevcut desene uy)
+- Modify: `app/src/router.test.ts` (dosya zaten var — iki mevcut test bu değişiklikle kırılır, güncellenmeleri gerekiyor)
 
 **Interfaces:**
 - Produces: `HesapRoute` artık `'h-tekrarlar'` içeriyor; `#/h/tekrarlar` → `{ volume: 'hesaplar', route: 'h-tekrarlar' }`.
 
-- [ ] **Step 1: Failing testi yaz**
+- [ ] **Step 1: Mevcut testleri güncelle + yeni testi ekle (failing)**
 
-`app/src/router.test.ts` içinde (dosya yoksa aşağıdaki gibi minimal bir dosya oluştur; varsa mevcut `describe('currentRoute', ...)` bloğuna ekle):
+`app/src/router.test.ts`'te `describe('router with volumes', ...)` içindeki `'sekme şeridi cilde göre değişir'` testi şu an `routesFor('hesaplar')).toHaveLength(5)` ve sabit bir etiket listesi bekliyor — 6. sekme eklenince bu test kırılacak, güncelle:
 
 ```ts
-import { describe, it, expect } from 'vitest'
-import { currentRoute, HESAP_ROUTES } from './router'
-
-describe('currentRoute — tekrarlayanlar', () => {
-  it('#/h/tekrarlar h-tekrarlar rotasına eşlenir', () => {
-    location.hash = '#/h/tekrarlar'
-    expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-tekrarlar' })
+  it('sekme şeridi cilde göre değişir', () => {
+    expect(routesFor('yatirim')).toHaveLength(10)
+    expect(routesFor('hesaplar')).toHaveLength(6)
+    expect(HESAP_ROUTES.map((r) => r.label)).toEqual(['Hesaplar', 'Özet', 'Harcamalar', 'Taksitler', 'Tekrarlayanlar', 'Borçlar'])
   })
+```
 
-  it('HESAP_ROUTES listesinde Tekrarlayanlar sekmesi var', () => {
-    expect(HESAP_ROUTES.some((r) => r.id === 'h-tekrarlar' && r.label === 'Tekrarlayanlar')).toBe(true)
-  })
-})
+Aynı `describe` bloğundaki `'kişisel yollar hesaplar cildine çözülür'` testine bir satır ekle (mevcut `go('#/h/taksitler'); expect(...)` satırının altına):
+
+```ts
+    go('#/h/tekrarlar'); expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-tekrarlar' })
 ```
 
 - [ ] **Step 2: Testi çalıştır, başarısız olduğunu doğrula**
 
 Run: `cd app && npx vitest run src/router.test.ts`
-Expected: FAIL — `h-tekrarlar` tanımlı değil.
+Expected: FAIL — `h-tekrarlar` tanımlı değil, `routesFor('hesaplar')` hâlâ 5 döner.
 
 - [ ] **Step 3: `router.ts`'i güncelle**
 
@@ -700,43 +706,39 @@ git commit -m "feat(recurring): Tekrarlayanlar sekmesi için rota kaydı"
 
 - [ ] **Step 1: Failing testleri yaz**
 
-`app/src/routes/hesaplar/Tekrarlayanlar.test.ts` (mevcut `Borclar.test.ts`'i Read ile açıp render/harness deseninden ilham al):
+`app/src/routes/hesaplar/Tekrarlayanlar.test.ts` — `Borclar.test.ts`'in gerçek deseni: `render(Component, { dataset, ... })`, `props:` sarmalayıcısı YOK. `writeAndCommit` (`store.ts`) içeride `get(store)` çağırdığı için `store` gerçek `writable(...)` olmalı, mock nesne değil:
 
 ```ts
 import { describe, it, expect, vi } from 'vitest'
 import { render, fireEvent } from '@testing-library/svelte'
+import { writable, get } from 'svelte/store'
 import Tekrarlayanlar from './Tekrarlayanlar.svelte'
-import type { Dataset } from '../../lib/data/types'
+import { fixture } from '../../fixtures/dataset'
+import type { AppState } from '../../lib/data/store'
 
-const dataset: Dataset = {
-  transactions: [], cashflows: [], snapshots: [], instruments: [], brokers: [],
-  portfolios: [], meta: {} as any, fxrates: {}, assetTransfers: [],
-  personalTx: [],
+const dataset = {
+  ...fixture,
   recurringRules: [
-    { id: 'rr_1', tur: 'GIDER', aciklama: 'Netflix', kategori: 'eglence', hesap: 'nakit', sahip: 'enis', paraBirimi: 'TRY', tutar: 229.9, gunOfMonth: 5, baslangicTarihi: '2026-01-01', bitisTarihi: null, aktif: true, olusturulma: '', kaynak: 'manual' },
+    { id: 'rr_1', tur: 'GIDER' as const, aciklama: 'Netflix', kategori: 'market', hesap: 'NAKIT', sahip: 'ENIS', paraBirimi: 'TRY' as const, tutar: 229.9, gunOfMonth: 5, baslangicTarihi: '2026-01-01', bitisTarihi: null, aktif: true, olusturulma: '', kaynak: 'manual' as const },
   ],
-  categories: [{ kod: 'eglence', ad: 'Eğlence', tur: 'GIDER', aktif: true } as any],
-  personalAccounts: [{ kod: 'nakit', ad: 'Nakit', aktif: true } as any],
-  people: [{ kod: 'enis', ad: 'Enis', aktif: true } as any],
 }
 
 describe('Tekrarlayanlar', () => {
   it('mevcut kuralları listeler', () => {
-    const { getByText } = render(Tekrarlayanlar, { props: { dataset } })
+    const { getByText } = render(Tekrarlayanlar, { dataset })
     expect(getByText('Netflix')).toBeInTheDocument()
   })
 
   it('kural durdurulunca aktif=false olarak güncellenir', async () => {
-    const store = { subscribe: vi.fn(), set: vi.fn() } as any
-    const source = { id: 'local', save: vi.fn().mockResolvedValue(undefined), load: vi.fn() } as any
-    const { getByTitle } = render(Tekrarlayanlar, { props: { dataset, source, store } })
+    const store = writable<AppState>({ status: 'ready', dataset, derived: {} as any, sourceText: '' } as any)
+    let savedData: unknown
+    const source: any = { id: 'drive', load: () => Promise.resolve(dataset), save: async (_n: string, d: unknown) => { savedData = d } }
+    const { getByTitle } = render(Tekrarlayanlar, { dataset, source, store })
     await fireEvent.click(getByTitle('Durdur'))
-    expect(source.save).toHaveBeenCalled()
+    expect((savedData as any[])[0].aktif).toBe(false)
   })
 })
 ```
-
-Not: `store`'un gerçek `Writable<AppState>` davranışını taklit etmesi gerekiyorsa (çünkü `writeAndCommit` içinde `get(store)` çağrılıyor), `svelte/store`'un gerçek `writable(...)`'ını kullan — mock yerine `writable({ status: 'ready', dataset, derived: undefined as any, sourceText: '' })` ver. Bu, `store.ts`'deki `writeAndCommit`'in `get(store)` ve `store.set(...)` çağırdığını gördüğün için gerekli (Task 1-2'de o dosyayı zaten okudun).
 
 - [ ] **Step 2: Testleri çalıştır, başarısız olduklarını doğrula**
 
@@ -1110,40 +1112,58 @@ git commit -m "feat(recurring): Tekrarlayanlar sekmesi — liste, ekleme, durdur
 
 - [ ] **Step 1: Failing testi yaz**
 
-`HarcamaFormu.test.ts`'i Read ile aç (mevcut `editing` prop'lu render deseni ve `confirmSave` tetikleme akışı için). Şu vakayı ekle:
+`HarcamaFormu.test.ts`'in gerçek deseni: `fixture` (`../../fixtures/dataset`) temel dataset'i + `createAppStore()` + `load(store, {id:'local', load: () => Promise.resolve(ds)})`, kategori kodu `'market'`, hesap `'NAKIT'`, sahip `'ENIS'` (bkz. dosyadaki "mevcut kaydın tutarını düzeltir" testi). Aynı deseni kullanarak dosyanın sonuna ekle:
 
 ```ts
 it('planlı bir kaydın tutarı "bundan sonraki tüm tekrarlar" ile değişince kural + sonraki satırlar güncellenir', async () => {
-  const editing = {
-    id: 'px_2', tarih: '2026-11-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY',
-    kategori: 'eglence', aciklama: 'Netflix', hesap: 'nakit', sahip: 'enis',
+  const rule = {
+    id: 'rr_1', tur: 'GIDER' as const, aciklama: 'Netflix', kategori: 'market',
+    hesap: 'NAKIT', sahip: 'ENIS', paraBirimi: 'TRY' as const, tutar: 229.9,
+    gunOfMonth: 5, baslangicTarihi: '2026-01-01', bitisTarihi: null, aktif: true,
+    olusturulma: '', kaynak: 'manual' as const,
+  }
+  const oncekiAy: PersonalTx = {
+    id: 'px_1', tarih: '2026-09-05', tur: 'GIDER', tutar: 229.9, paraBirimi: 'TRY',
+    kategori: 'market', aciklama: 'Netflix', hesap: 'NAKIT', sahip: 'ENIS',
     taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual',
     olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi',
   }
-  const dataset = {
-    /* ... mevcut testteki temel dataset alanları ... */
-    personalTx: [editing],
-    recurringRules: [{ id: 'rr_1', tur: 'GIDER', aciklama: 'Netflix', kategori: 'eglence', hesap: 'nakit', sahip: 'enis', paraBirimi: 'TRY', tutar: 229.9, gunOfMonth: 5, baslangicTarihi: '2026-01-01', bitisTarihi: null, aktif: true, olusturulma: '', kaynak: 'manual' }],
-    categories: [{ kod: 'eglence', ad: 'Eğlence', tur: 'GIDER', aktif: true }],
-    personalAccounts: [{ kod: 'nakit', ad: 'Nakit', aktif: true }],
-    people: [{ kod: 'enis', ad: 'Enis', aktif: true }],
+  const editingTx: PersonalTx = {
+    ...oncekiAy, id: 'px_2', tarih: '2026-10-05',
   }
-  // mevcut testteki store/source mock kurulumunu kopyala
+  const ds: any = {
+    ...fixture,
+    personalTx: [...(fixture.personalTx ?? []), oncekiAy, editingTx],
+    recurringRules: [rule],
+  }
+  const store = createAppStore()
+  await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+  const onSaved = vi.fn()
+  let savedData: unknown
+  const source = {
+    id: 'drive' as const,
+    load: () => Promise.resolve(ds),
+    save: async (_n: string, data: unknown) => { savedData = data },
+  }
+
   const { getByLabelText, getByText } = render(HarcamaFormu, {
-    props: { dataset, source, store, editing, onSaved: vi.fn() },
+    props: { dataset: ds, source, store, onSaved, editing: editingTx },
   })
+
   await fireEvent.input(getByLabelText('Tutar'), { target: { value: '259.90' } })
   await fireEvent.click(getByText('İncele'))
   await fireEvent.click(getByLabelText('Bundan sonraki tüm tekrarlar'))
   await fireEvent.click(getByText('Onayla ve Güncelle'))
-  expect(source.save).toHaveBeenCalled()
-  // dosyanın `store.datasetKey.test.ts`'teki gibi gerçek writable(store) kullanıldığı varsayımıyla:
-  const saved = get(store).dataset.personalTx
-  expect(saved.find((r: any) => r.id === 'px_2').tutar).toBe(259.9)
+
+  expect(onSaved).toHaveBeenCalled()
+  // Son `source.save` çağrısı personal_tx dosyasınadır (recurring_rules güncellemesi
+  // önce yazılır); px_2 (düzenlenen ve düzenleme tarihinden sonraki) güncellenmeli,
+  // px_1 (geçmiş) dokunulmamalı.
+  const list = savedData as PersonalTx[]
+  expect(list.find((r) => r.id === 'px_2')!.tutar).toBe(259.9)
+  expect(list.find((r) => r.id === 'px_1')!.tutar).toBe(229.9)
 })
 ```
-
-(Mevcut dosyadaki gerçek mock/harness'e göre bu iskeleti uyarla — dosyayı Read etmeden bu adımı yazma.)
 
 - [ ] **Step 2: Testi çalıştır, başarısız olduğunu doğrula**
 
