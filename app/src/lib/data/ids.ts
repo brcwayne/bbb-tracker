@@ -13,3 +13,9 @@ export function newCashflowId(): string {
   const rand = crypto.getRandomValues(new Uint8Array(8))
   return 'c_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
 }
+
+/** Mints a recurring-rule id: `rr_` + 12 hex, same shape as `newPersonalId`. */
+export function newRecurringRuleId(): string {
+  const rand = crypto.getRandomValues(new Uint8Array(6))
+  return 'rr_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
+}

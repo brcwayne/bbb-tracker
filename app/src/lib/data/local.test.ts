@@ -45,7 +45,7 @@ describe('LocalFileSource', () => {
     expect(ds.transactions).toHaveLength(7)
     expect(ds.meta.olusturulma).toBe('2026-09-03T16:24:37')
     expect(Object.keys(ds.fxrates)).toContain('2020-01-06')
-    expect(fetch).toHaveBeenCalledTimes(16)
+    expect(fetch).toHaveBeenCalledTimes(17)
   })
 
   it('throws a clear error on a missing file', async () => {

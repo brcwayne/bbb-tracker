@@ -17,7 +17,7 @@ export const NAMES = [
 /** Optional — a missing personal file yields [] and never fails the load. */
 export const PERSONAL_NAMES = [
   'personal_tx', 'payment_plans', 'personal_accounts',
-  'categories', 'people', 'debts',
+  'categories', 'people', 'debts', 'recurring_rules',
 ] as const
 
 export const PERSONAL_KEY_MAP = {
@@ -27,6 +27,7 @@ export const PERSONAL_KEY_MAP = {
   categories: 'categories',
   people: 'people',
   debts: 'debts',
+  recurring_rules: 'recurringRules',
 } as const satisfies Record<typeof PERSONAL_NAMES[number], keyof Dataset>
 
 export function describeSource(

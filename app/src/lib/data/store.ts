@@ -127,6 +127,7 @@ export type Kind =
   | 'categories'
   | 'people'
   | 'debts'
+  | 'recurring_rules'
 
 async function writeAndCommit(
   store: Writable<AppState>,

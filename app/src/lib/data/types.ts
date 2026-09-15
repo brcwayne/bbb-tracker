@@ -106,6 +106,24 @@ export interface Meta {
 
 export type FxRates = Record<string, number>
 
+export interface RecurringRule {
+  id: string
+  tur: 'GIDER' | 'GELIR'
+  aciklama: string
+  kategori: string
+  hesap: string
+  sahip: string
+  paraBirimi: 'TRY' | 'USD'
+  tutar: number
+  /** 1-31; ayın gerçek gün sayısından fazlaysa o ayın son gününe sabitlenir. */
+  gunOfMonth: number
+  baslangicTarihi: string
+  bitisTarihi: string | null
+  aktif: boolean
+  olusturulma: string
+  kaynak: 'manual'
+}
+
 export interface PersonalTx {
   id: string
   tarih: string
@@ -125,6 +143,10 @@ export interface PersonalTx {
   not: string
   kaynak: string
   olusturulma: string
+  /** Bir RecurringRule'dan üretilmişse o kuralın id'si. */
+  tekrarKuralId?: string | null
+  /** 'planlandi' = henüz gerçekleşmemiş önizleme satırı; yoksa normal/gerçekleşmiş kayıt. */
+  durum?: 'planlandi'
 }
 
 export interface PaymentPlan {
@@ -207,6 +229,7 @@ export interface Dataset {
   categories?: Category[]
   people?: Person[]
   debts?: Debt[]
+  recurringRules?: RecurringRule[]
   syncState?: SyncState | null
 }
 
