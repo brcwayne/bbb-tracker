@@ -152,5 +152,24 @@ describe('Hesap detayı', () => {
     expect(yeniTutar).toBeTruthy()
     expect(yeniTutar).not.toBe(ilkTutar)
   })
+
+  it('planlandı (onaylanmamış tekrarlayan) satırı Planlandı rozetiyle soluk gösterir', () => {
+    const datasetWithPlanned = {
+      ...fixture,
+      personalTx: [
+        ...(fixture.personalTx ?? []),
+        {
+          id: 'px_planli', tarih: '2026-09-25', tur: 'GIDER' as const, tutar: 229.9, paraBirimi: 'TRY' as const,
+          kategori: 'market', aciklama: 'Netflix', hesap: 'NAKIT', sahip: 'ENIS',
+          taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '',
+          kaynak: 'manual' as const, olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi' as const,
+        },
+      ],
+    }
+    const { container } = render(HesapDetay, { dataset: datasetWithPlanned, param: 'NAKIT', today: TODAY })
+    expect(container.textContent).toContain('Planlandı')
+    const li = [...container.querySelectorAll('li.hareket')].find((el) => el.textContent?.includes('Planlandı'))
+    expect(li?.classList.contains('planlandi')).toBe(true)
+  })
 })
 

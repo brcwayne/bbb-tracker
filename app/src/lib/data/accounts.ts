@@ -43,6 +43,7 @@ export function accountBalances(
     let sum = 0
     for (const r of rows) {
       if (r.tarih > today) continue
+      if (r.durum === 'planlandi') continue
       sum += txDelta(r, a.kod, a.paraBirimi)
     }
     out.set(a.kod, round2(sum))
@@ -103,6 +104,7 @@ export function cardStatement(
     let sum = 0
     for (const r of rows) {
       if (r.tarih <= from || r.tarih > to) continue
+      if (r.durum === 'planlandi') continue
       sum += txDelta(r, account.kod, account.paraBirimi)
     }
     return round2(-sum)
@@ -111,6 +113,7 @@ export function cardStatement(
   let borc = 0
   for (const r of rows) {
     if (r.tarih > today) continue
+    if (r.durum === 'planlandi') continue
     borc += txDelta(r, account.kod, account.paraBirimi)
   }
 
@@ -273,6 +276,9 @@ export function monthMovements(
     if (!ilgili) continue
 
     kayitlar.push(r)
+    // Planlanan (henüz onaylanmamış) satır listede görünür — badge ile
+    // işaretlenir — ama giriş/çıkış toplamlarına ve gün hücrelerine katılmaz.
+    if (r.durum === 'planlandi') continue
 
     const d = txDelta(r, account.kod, account.paraBirimi)
     if (d === 0 && r.paraBirimi !== account.paraBirimi) {

@@ -291,7 +291,7 @@
         <ul class="hareketler">
           {#each gorunenKayitlar as r (r.id)}
             {@const t = satirTutari(r)}
-            <li class="hareket">
+            <li class="hareket" class:planlandi={r.durum === 'planlandi'}>
               <span class="tarih num">{r.tarih.slice(8, 10)}.{r.tarih.slice(5, 7)}</span>
               <span class="ad">
                 {satirBasligi(r)}
@@ -300,6 +300,7 @@
                 {/if}
                 {#if r.kaynak === 'telegram'}<span class="rozet kaynak">telegram</span>{/if}
                 {#if r.paraBirimi !== account.paraBirimi}<span class="rozet" title="Farklı para birimi">≠</span>{/if}
+                {#if r.durum === 'planlandi'}<span class="rozet planlandi">Planlandı</span>{/if}
               </span>
               <span class="tutar num" class:gain={t.isaret > 0} class:loss={t.isaret < 0}>{t.metin}</span>
               <div class="hareket-islemler">
@@ -571,6 +572,9 @@
   .hareket:last-child {
     border-bottom: 0;
   }
+  li.hareket.planlandi {
+    opacity: 0.6;
+  }
   .tarih {
     font-size: 0.8rem;
     color: var(--ink-soft);
@@ -595,6 +599,9 @@
   }
   .rozet.kaynak {
     color: var(--accent-defter);
+  }
+  .rozet.planlandi {
+    color: var(--gold);
   }
   .tutar {
     font-family: var(--font-num);

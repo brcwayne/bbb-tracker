@@ -89,6 +89,14 @@ describe('accountBalances', () => {
     ], [acc({})], TODAY)
     expect(out.get('NAKIT')).toBe(-0.3)
   })
+
+  it('planlandı durumundaki satırı bakiyeye katmaz', () => {
+    const out = accountBalances([
+      tx({ id: 'a', tur: 'GIDER', tutar: 100, tarih: '2026-09-02' }),
+      tx({ id: 'b', tur: 'GIDER', tutar: 229.9, tarih: '2026-09-05', durum: 'planlandi' }),
+    ], [acc({})], TODAY)
+    expect(out.get('NAKIT')).toBe(-100)
+  })
 })
 
 describe('cardStatement', () => {
@@ -185,6 +193,17 @@ describe('cardStatement', () => {
       tx({ id: 'a', tarih: '2026-09-03', tur: 'TRANSFER', tutar: 500, hesap: 'GARANTI-BANKA', karsiHesap: 'GARANTI-DIJI' }),
     ], kart, TODAY)
     expect(out.buAy).toBe(-500)
+  })
+
+  it('planlandı durumundaki satırı ne dönem toplamına ne toplam borca katar', () => {
+    const out = cardStatement([
+      kartSatiri({ id: 'a', tarih: '2026-09-03', tutar: 800 }),
+      kartSatiri({ id: 'b', tarih: '2026-09-05', tutar: 500, durum: 'planlandi' }),
+      kartSatiri({ id: 'c', tarih: '2026-09-20', tutar: 900, durum: 'planlandi' }),
+    ], kart, TODAY)
+    expect(out.buAy).toBe(800)
+    expect(out.gelecekAy).toBe(0)
+    expect(out.toplamBorc).toBe(-800)
   })
 })
 
@@ -361,6 +380,17 @@ describe('monthMovements', () => {
       tx({ id: 'c', tarih: '2026-09-05' }),
     ], nakit, 2026, 9)
     expect(out.kayitlar.map((r) => r.id)).toEqual(['b', 'c', 'a'])
+  })
+
+  it('planlandı satırı listede kalır ama giriş/çıkış/net toplamına katılmaz', () => {
+    const out = monthMovements([
+      tx({ id: 'a', tarih: '2026-09-02', tur: 'GIDER', tutar: 620 }),
+      tx({ id: 'b', tarih: '2026-09-05', tur: 'GIDER', tutar: 229.9, durum: 'planlandi' }),
+    ], nakit, 2026, 9)
+    expect(out.kayitlar.map((r) => r.id)).toEqual(['b', 'a'])
+    expect(out.kayitlar.find((r) => r.id === 'b')?.durum).toBe('planlandi')
+    expect(out).toMatchObject({ giris: 0, cikis: 620, net: -620 })
+    expect(out.gunler.has(5)).toBe(false)
   })
 })
 
