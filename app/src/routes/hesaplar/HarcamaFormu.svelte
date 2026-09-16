@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, PersonalTx } from '../../lib/data/types'
+  import type { Dataset, PersonalTx, RecurringRule } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord, updateRecord, updateRecords, load } from '../../lib/data/store'
+  import { appendRecord, appendRecords, updateRecord, updateRecords, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd } from '../../lib/format'
-  import { newPersonalId } from '../../lib/data/ids'
+  import { newPersonalId, newRecurringRuleId } from '../../lib/data/ids'
+  import { materialize } from '../../lib/data/recurring'
 
   function todayIso() {
     const d = new Date()
@@ -44,6 +45,7 @@
   let sahip = $state(editing?.sahip ?? '')
   let aciklama = $state(editing?.aciklama ?? '')
   let notText = $state(editing?.not ?? '')
+  let tekrarla = $state(false)
 
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
@@ -162,6 +164,7 @@
           )
         }
       } else {
+        const ruleId = tekrarla ? newRecurringRuleId() : null
         const newRecord: PersonalTx = {
           id: newPersonalId(),
           tarih,
@@ -178,8 +181,35 @@
           not: notText.trim(),
           kaynak: 'manual',
           olusturulma: new Date().toISOString(),
+          ...(ruleId ? { tekrarKuralId: ruleId } : {}),
         }
         await appendRecord<PersonalTx>(store, source, 'personal_tx', newRecord)
+
+        if (tekrarla && ruleId) {
+          const gunOfMonth = parseInt(tarih.split('-')[2], 10) || 1
+          const rule: RecurringRule = {
+            id: ruleId,
+            tur,
+            aciklama: aciklama.trim(),
+            kategori,
+            hesap,
+            sahip,
+            paraBirimi,
+            tutar: Number(tutar),
+            gunOfMonth,
+            baslangicTarihi: tarih,
+            bitisTarihi: null,
+            aktif: true,
+            olusturulma: new Date().toISOString(),
+            kaynak: 'manual',
+          }
+          await appendRecord<RecurringRule>(store, source, 'recurring_rules', rule)
+          const allTx = [...(dataset?.personalTx ?? []), newRecord]
+          const futureRows = materialize([rule], allTx, todayIso(), 12)
+          if (futureRows.length > 0) {
+            await appendRecords<PersonalTx>(store, source, 'personal_tx', futureRows)
+          }
+        }
       }
       onSaved()
     } catch (e: any) {
@@ -308,6 +338,15 @@
         </div>
       {/if}
 
+      {#if !editing}
+        <div class="checkbox-field">
+          <label class="checkbox-label" for="hf-tekrarla">
+            <input id="hf-tekrarla" type="checkbox" aria-label="Her ay tekrarla" bind:checked={tekrarla} />
+            <span>Her ay tekrarla</span>
+          </label>
+        </div>
+      {/if}
+
       <div class="actions">
         {#if onCancel}
           <button type="button" class="btn-secondary" onclick={onCancel}>Vazgeç</button>
@@ -336,6 +375,10 @@
         {#if isInstalment}
           <dt>Taksit:</dt>
           <dd>{editing?.taksitNo}/{editing?.taksitToplam}</dd>
+        {/if}
+        {#if tekrarla && !editing}
+          <dt>Tekrar:</dt>
+          <dd>Her ayın {parseInt(tarih.split('-')[2], 10)}'i (Önümüzdeki 12 ay planlanır)</dd>
         {/if}
       </dl>
 
@@ -526,5 +569,27 @@
   .num {
     font-family: var(--font-num);
     font-variant-numeric: tabular-nums;
+  }
+  .checkbox-field {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0;
+  }
+  .checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--ink);
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .checkbox-label input[type="checkbox"] {
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: var(--accent-defter, #c9a86a);
+    cursor: pointer;
   }
 </style>

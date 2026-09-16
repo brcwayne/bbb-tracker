@@ -227,5 +227,51 @@ describe('HarcamaFormu', () => {
     const afterBulkUpdate = personalTxSaves[1].find((r) => r.id === 'px_rr_editing')
     expect(afterBulkUpdate).toBe(afterDirectUpdate)
   })
+
+  it('her ay tekrarla seçildiğinde kural ve planlanan satırları oluşturur', async () => {
+    const { state, store } = await setup()
+    const onSaved = vi.fn()
+    const savedFiles: Record<string, unknown> = {}
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (n: string, data: unknown) => {
+        savedFiles[n] = data
+      },
+    }
+    const { getByLabelText, getByText } = render(HarcamaFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved },
+    })
+
+    await fireEvent.change(getByLabelText('Tür'), { target: { value: 'GIDER' } })
+    await fireEvent.change(getByLabelText('Kategori'), { target: { value: 'eglence' } })
+    await fireEvent.input(getByLabelText('Açıklama'), { target: { value: 'Netflix' } })
+    await fireEvent.input(getByLabelText('Tutar'), { target: { value: '229.90' } })
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'NAKIT' } })
+    await fireEvent.change(getByLabelText('Sahip'), { target: { value: 'ENIS' } })
+    await fireEvent.click(getByLabelText('Her ay tekrarla'))
+
+    await fireEvent.click(getByText('İncele'))
+    expect(getByText(/önümüzdeki 12 ay planlanır/i)).toBeInTheDocument()
+    await fireEvent.click(getByText('Onayla ve Kaydet'))
+
+    await vi.waitFor(() => {
+      expect(onSaved).toHaveBeenCalled()
+    })
+
+    const rules = savedFiles['recurring_rules'] as any[]
+    expect(rules).toBeDefined()
+    expect(rules).toHaveLength(1)
+    expect(rules[0].aciklama).toBe('Netflix')
+    expect(rules[0].tutar).toBe(229.9)
+
+    const txs = savedFiles['personal_tx'] as PersonalTx[]
+    expect(txs).toBeDefined()
+    const netflixRows = txs.filter((r) => r.aciklama === 'Netflix')
+    expect(netflixRows.length).toBeGreaterThanOrEqual(12)
+    const realRow = netflixRows.find((r) => r.durum !== 'planlandi')
+    expect(realRow).toBeDefined()
+    expect(realRow!.tekrarKuralId).toBe(rules[0].id)
+  })
 })
 
