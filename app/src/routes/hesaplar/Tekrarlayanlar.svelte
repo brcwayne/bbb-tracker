@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, RecurringRule } from '../../lib/data/types'
+  import type { Dataset, PersonalTx, RecurringRule } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord, appendRecords, updateRecord, load } from '../../lib/data/store'
+  import { appendRecord, appendRecords, updateRecord, deleteRecords, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { materialize } from '../../lib/data/recurring'
   import { newRecurringRuleId } from '../../lib/data/ids'
@@ -107,12 +107,21 @@
   async function toggleAktif(rule: RecurringRule) {
     if (!store || !source) return
     actionError = null
+    const duruyor = rule.aktif // durduruluyor mu (true → false geçişi)
     try {
       await updateRecord<RecurringRule>(
         store, source, 'recurring_rules',
         (r) => r.id === rule.id,
         { ...rule, aktif: !rule.aktif },
       )
+      // D9: kural durdurulduğunda, henüz onaylanmamış ('planlandi') ileri
+      // tarihli satırları da sil — devam ettirmede dokunma.
+      if (duruyor) {
+        await deleteRecords<PersonalTx>(
+          store, source, 'personal_tx',
+          (r) => r.tekrarKuralId === rule.id && r.durum === 'planlandi',
+        )
+      }
     } catch (e: any) {
       actionError = e instanceof Error ? e.message : String(e)
     }
@@ -314,5 +323,42 @@
     border-radius: 6px;
     padding: 0.5rem 0.75rem;
     margin-bottom: 0.75rem;
+  }
+
+  .btn-primary {
+    background: #238636;
+    color: #ffffff;
+    border: 1px solid rgba(240, 246, 252, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #2ea043;
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .btn-icon {
+    background: transparent;
+    border: 0;
+    color: var(--ink-soft);
+    padding: 0.2rem 0.35rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .btn-icon:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .btn-icon:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 </style>

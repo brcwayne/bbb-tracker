@@ -244,6 +244,29 @@ export async function updateRecords<T extends { kaynak?: string }>(
   })
 }
 
+/** `deleteRecord`'un çoğulu: `matches` ile eşleşen her satırı tek bir dosya
+ *  yazımında siler. Bir RecurringRule durdurulduğunda onun henüz onaylanmamış
+ *  ('planlandi') personal_tx satırlarını topluca kaldırmak için kullanılır. */
+export async function deleteRecords<T extends { kaynak?: string }>(
+  store: Writable<AppState>,
+  source: DataSource,
+  file: Kind,
+  matches: (r: T) => boolean,
+  opts: MutateOpts = {},
+): Promise<void> {
+  return writeAndCommit(store, source, file, (current) => {
+    const arr = current as T[]
+    const allowed = opts.allowKaynak ?? ['manual']
+    for (const r of arr) {
+      if (!matches(r)) continue
+      if (!opts.allowImported && !allowed.includes(r.kaynak ?? '')) {
+        throw new Error('Sadece manuel kayıtlar silinebilir.')
+      }
+    }
+    return arr.filter((r) => !matches(r))
+  })
+}
+
 export async function deleteRecord<T extends { kaynak?: string }>(
   store: Writable<AppState>,
   source: DataSource,

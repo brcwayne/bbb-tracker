@@ -12,6 +12,21 @@ const dataset = {
   ],
 }
 
+// rr_1'in henüz onaylanmamış (durum: 'planlandi') ileri tarihli bir satırını da
+// içeren varyant — D9: durdurma bu satırı silmeli.
+const datasetWithPlanned = {
+  ...dataset,
+  personalTx: [
+    ...(fixture.personalTx ?? []),
+    {
+      id: 'px_rr1', tarih: '2026-10-05', tur: 'GIDER' as const, tutar: 229.9, paraBirimi: 'TRY' as const,
+      kategori: 'market', aciklama: 'Netflix', hesap: 'NAKIT', sahip: 'ENIS',
+      taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '',
+      kaynak: 'manual' as const, olusturulma: '', tekrarKuralId: 'rr_1', durum: 'planlandi' as const,
+    },
+  ],
+}
+
 describe('Tekrarlayanlar', () => {
   it('mevcut kuralları listeler', () => {
     const { getByText } = render(Tekrarlayanlar, { dataset })
@@ -20,10 +35,55 @@ describe('Tekrarlayanlar', () => {
 
   it('kural durdurulunca aktif=false olarak güncellenir', async () => {
     const store = writable<AppState>({ status: 'ready', dataset, derived: {} as any, sourceText: '' } as any)
-    let savedData: unknown
-    const source: any = { id: 'drive', load: () => Promise.resolve(dataset), save: async (_n: string, d: unknown) => { savedData = d } }
+    // toggleAktif durdururken hem 'recurring_rules'a hem 'personal_tx'e yazar
+    // (D9) — dosya bazlı yakala, sonuncusu değil.
+    const saved: Record<string, any[]> = {}
+    const source: any = {
+      id: 'drive',
+      load: () => Promise.resolve(dataset),
+      save: async (file: string, d: unknown) => { saved[file] = d as any[] },
+    }
     const { getByTitle } = render(Tekrarlayanlar, { dataset, source, store })
     await fireEvent.click(getByTitle('Durdur'))
-    expect((savedData as any[])[0].aktif).toBe(false)
+    expect(saved['recurring_rules'][0].aktif).toBe(false)
+  })
+
+  it('kural durdurulunca planlandı personal_tx satırları da silinir (D9)', async () => {
+    const store = writable<AppState>(
+      { status: 'ready', dataset: datasetWithPlanned, derived: {} as any, sourceText: '' } as any,
+    )
+    const saved: Record<string, any[]> = {}
+    const source: any = {
+      id: 'drive',
+      load: () => Promise.resolve(datasetWithPlanned),
+      save: async (file: string, d: unknown) => { saved[file] = d as any[] },
+    }
+    const { getByTitle } = render(Tekrarlayanlar, { dataset: datasetWithPlanned, source, store })
+    await fireEvent.click(getByTitle('Durdur'))
+
+    expect(saved['recurring_rules'][0].aktif).toBe(false)
+    expect(saved['personal_tx'].some((r) => r.id === 'px_rr1')).toBe(false)
+    // Kuralla ilgisiz diğer satırlar dokunulmadan kalır.
+    expect(saved['personal_tx'].some((r) => r.id === 'px_1')).toBe(true)
+  })
+
+  it('kural devam ettirilince personal_tx silinmez', async () => {
+    const durdurulmusDataset = {
+      ...datasetWithPlanned,
+      recurringRules: [{ ...datasetWithPlanned.recurringRules[0], aktif: false }],
+    }
+    const store = writable<AppState>(
+      { status: 'ready', dataset: durdurulmusDataset, derived: {} as any, sourceText: '' } as any,
+    )
+    const saveCalls: string[] = []
+    const source: any = {
+      id: 'drive',
+      load: () => Promise.resolve(durdurulmusDataset),
+      save: async (file: string) => { saveCalls.push(file) },
+    }
+    const { getByTitle } = render(Tekrarlayanlar, { dataset: durdurulmusDataset, source, store })
+    await fireEvent.click(getByTitle('Devam Ettir'))
+
+    expect(saveCalls).toEqual(['recurring_rules'])
   })
 })
