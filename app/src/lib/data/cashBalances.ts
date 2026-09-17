@@ -23,7 +23,7 @@ export function cashBalanceByHesap(ds: Dataset): Record<string, number> {
     else if (c.tur === 'CEKME') bump(c.hesap, -c.tutar_usd)
     else if (c.tur === 'TRANSFER' && c.hedefHesap) {
       bump(c.hesap, -c.tutar_usd)
-      bump(c.hedefHesap, c.tutar_usd)
+      bump(c.hedefHesap, c.hedefTutarUsd ?? c.tutar_usd)
     }
     // DUZELTME stores the signed delta directly (positive or negative),
     // unlike YATIRMA/CEKME's always-positive tutar_usd with sign implied by
@@ -114,13 +114,13 @@ export function cashSplitByHesap(
       else e.usd -= c.tutar_usd
     } else if (c.tur === 'TRANSFER' && c.hedefHesap) {
       const target = getEntry(c.hedefHesap)
-      if (isTl) {
-        e.tl -= c.tutar_tl!
-        target.tl += c.tutar_tl!
-      } else {
-        e.usd -= c.tutar_usd
-        target.usd += c.tutar_usd
-      }
+      if (isTl) e.tl -= c.tutar_tl!
+      else e.usd -= c.tutar_usd
+
+      if (c.hedefTutarTl != null) target.tl += c.hedefTutarTl
+      else if (c.hedefTutarUsd != null) target.usd += c.hedefTutarUsd
+      else if (isTl) target.tl += c.tutar_tl!
+      else target.usd += c.tutar_usd
     }
   }
 

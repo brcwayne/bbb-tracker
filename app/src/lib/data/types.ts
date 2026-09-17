@@ -31,6 +31,14 @@ export interface Cashflow {
   aciklama: string
   kaynak: string
   hedefHesap?: string
+  /** Yalnızca tur==='TRANSFER' ve hedef kurumun para birimi kaynaktan
+   *  farklıysa dolu. Kaynak taraf her zaman tutar_tl/tutar_usd'de kalır
+   *  (mevcut anlam değişmedi); bu iki alan yalnızca HEDEF tarafın kendi
+   *  para biriminde ne kadar aldığını taşır. İkisinden yalnızca biri
+   *  dolu olur (hedef TL ise hedefTutarTl, USD ise hedefTutarUsd). Boşsa
+   *  hedef, kaynakla aynı tutar+para birimini alır (bugünkü davranış). */
+  hedefTutarTl?: number | null
+  hedefTutarUsd?: number | null
 }
 
 export interface AssetTransfer {

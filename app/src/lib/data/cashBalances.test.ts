@@ -61,6 +61,42 @@ describe('cashBalanceByHesap', () => {
     expect(bal.GARAN).toBeCloseTo(500 + 400, 6)
   })
 
+  it('TRANSFER farklı para biriminde hedefe hedefTutarUsd ekler (kaynak tutar_usd ile farklı)', () => {
+    const bal = cashBalanceByHesap(ds({
+      cashflows: [
+        cf({
+          tur: 'TRANSFER',
+          hesap: 'MIDAS',
+          hedefHesap: 'GARAN',
+          tutar_usd: 100,
+          hedefTutarUsd: 95,
+          hedefTutarTl: 3800,
+        }),
+      ],
+    }))
+    expect(bal.MIDAS).toBeCloseTo(1000 - 100, 6)
+    expect(bal.GARAN).toBeCloseTo(500 + 95, 6)
+    expect(bal.GARAN - 500).not.toBe(100)
+    expect(bal.GARAN - 500).toBe(95)
+  })
+
+  it('TRANSFER hedefTutarUsd/hedefTutarTl tanımsızken geriye dönük tam uyumludur', () => {
+    const bal = cashBalanceByHesap(ds({
+      cashflows: [
+        cf({
+          tur: 'TRANSFER',
+          hesap: 'MIDAS',
+          hedefHesap: 'GARAN',
+          tutar_usd: 250,
+          hedefTutarUsd: null,
+          hedefTutarTl: null,
+        }),
+      ],
+    }))
+    expect(bal.MIDAS).toBeCloseTo(1000 - 250, 6)
+    expect(bal.GARAN).toBeCloseTo(500 + 250, 6)
+  })
+
   it('DUZELTME işaretli farkı doğrudan uygular — pozitif de negatif de', () => {
     const bal = cashBalanceByHesap(ds({
       cashflows: [
@@ -132,6 +168,86 @@ describe('cashSplitByHesap', () => {
     expect(split.MIDAS.usd).toBe(1050)
     // totalUsd = 1050 + 2000 / 48 = 1091.67
     expect(split.MIDAS.totalUsd).toBeCloseTo(1091.67, 2)
+  })
+
+  it('TRANSFER farklı para biriminde kaynak ve hedefi kendi para birimlerinde günceller (USD -> TL)', () => {
+    const split = cashSplitByHesap(
+      ds({
+        cashflows: [
+          cf({
+            tur: 'TRANSFER',
+            hesap: 'MIDAS',
+            hedefHesap: 'GARAN',
+            tutar_usd: 100, // kaynak USD
+            tutar_tl: null,
+            hedefTutarTl: 3800, // hedef TL
+            hedefTutarUsd: 100,
+          }),
+        ],
+      }),
+      38,
+    )
+    // MIDAS baseline USD 1000 - 100 = 900, TL 0
+    expect(split.MIDAS.usd).toBe(900)
+    expect(split.MIDAS.tl).toBe(0)
+    // GARAN baseline USD 500 (değişmez), TL 0 + 3800 = 3800
+    expect(split.GARAN.usd).toBe(500)
+    expect(split.GARAN.tl).toBe(3800)
+  })
+
+  it('TRANSFER farklı para biriminde kaynak ve hedefi kendi para birimlerinde günceller (TL -> USD)', () => {
+    const split = cashSplitByHesap(
+      ds({
+        cashflows: [
+          cf({
+            tur: 'TRANSFER',
+            hesap: 'GARAN',
+            hedefHesap: 'MIDAS',
+            tutar_tl: 4000, // kaynak TL
+            tutar_usd: 100,
+            hedefTutarUsd: 100, // hedef USD
+            hedefTutarTl: null,
+          }),
+        ],
+      }),
+      40,
+    )
+    // GARAN baseline USD 500 (değişmez), TL 0 - 4000 = -4000
+    expect(split.GARAN.tl).toBe(-4000)
+    expect(split.GARAN.usd).toBe(500)
+    // MIDAS baseline USD 1000 + 100 = 1100, TL 0 (değişmez)
+    expect(split.MIDAS.usd).toBe(1100)
+    expect(split.MIDAS.tl).toBe(0)
+  })
+
+  it('TRANSFER hedefTutar alanları boşken aynı para biriminde çalışır (geriye dönük uyumluluk)', () => {
+    const split = cashSplitByHesap(
+      ds({
+        cashflows: [
+          cf({
+            tur: 'TRANSFER',
+            hesap: 'MIDAS',
+            hedefHesap: 'GARAN',
+            tutar_usd: 200,
+            tutar_tl: null,
+          }),
+          cf({
+            tur: 'TRANSFER',
+            hesap: 'GARAN',
+            hedefHesap: 'MIDAS',
+            tutar_tl: 1000,
+            tutar_usd: 25,
+          }),
+        ],
+      }),
+      40,
+    )
+    // USD transferi: MIDAS USD -200, GARAN USD +200
+    // TL transferi: GARAN TL -1000, MIDAS TL +1000
+    expect(split.MIDAS.usd).toBe(800)
+    expect(split.GARAN.usd).toBe(700)
+    expect(split.GARAN.tl).toBe(-1000)
+    expect(split.MIDAS.tl).toBe(1000)
   })
 
   it('formatBrokerCash hem TL hem USD olduğunda ikisini birden gösterir', () => {
