@@ -46,6 +46,11 @@ export default defineConfig({
     svelteTesting(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Registration is done by hand in src/lib/pwaUpdate.ts (via
+      // `virtual:pwa-register`) so it can poll for updates and reload once a
+      // new service worker takes control — the default injected script only
+      // registers the SW once and never revisits an already-open tab.
+      injectRegister: false,
       includeAssets: ['icons/*.png'],
       manifest,
       workbox,
