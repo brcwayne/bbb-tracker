@@ -66,7 +66,15 @@ describe('deriveAll — P1.6 blocks', () => {
   it('carries cashByHesap and moneyTransfers', () => {
     const d = deriveAll(fixture)
     expect(d.cashByHesap).toBeDefined()
-    expect(d.moneyTransfers).toEqual([])
+    expect(d.moneyTransfers).toEqual([
+      {
+        tarih: '2026-03-01',
+        kaynakHesap: 'MIDAS',
+        hedefHesap: 'GARAN',
+        tutarUsd: 100,
+        aciklama: 'Midas USD -> Garan TL',
+      },
+    ])
   })
 })
 

@@ -13,6 +13,7 @@ export const fixture: Dataset = {
   cashflows: [
     { id: 'c_a', tarih: '2019-01-02', hesap: 'TOPLU', portfoy: null, tur: 'YATIRMA', enstruman: null, tutar_tl: null, tutar_usd: 5000, kur: null, aciklama: 'ilk', kaynak: 'migration' },
     { id: 'c_b', tarih: '2023-04-10', hesap: 'TOPLU', portfoy: null, tur: 'TEMETTU', enstruman: 'THYAO', tutar_tl: 100, tutar_usd: 4, kur: 25, aciklama: 'Cash', kaynak: 'migration' },
+    { id: 'c_c', tarih: '2026-03-01', hesap: 'MIDAS', portfoy: null, tur: 'TRANSFER', enstruman: null, tutar_tl: null, tutar_usd: 100, kur: 40, aciklama: 'Midas USD -> Garan TL', kaynak: 'manual', hedefHesap: 'GARAN', hedefTutarTl: 4000, hedefTutarUsd: 100 },
   ],
   snapshots: [
     { tarih: '2021-03-31', toplamOzkaynak_usd: 5175, baslangicSermayesi_usd: 5000, netMevduatCekim_usd: 0, cekim_usd: 0, nakitTemettu_usd: 0, nakit_usd: 5000, netKZ_usd: 175, vergiKomisyon_usd: 0, kaynak: 'excel-monthly-report' },
