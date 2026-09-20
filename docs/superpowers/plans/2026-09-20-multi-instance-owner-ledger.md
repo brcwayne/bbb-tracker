@@ -1467,3 +1467,18 @@ This task **acts outside the repos** (the VM, Google, Telegram). Do the parts ma
 | §5 parity + smoke | Tasks 5, 7 (shared fixture + byte-equality test), 10 Step E |
 
 Known scope trims (spec §6 out of scope): data-driven trade flow, café Sheet import, statement-based opening balances, OAuth verification, currency conversion.
+
+---
+
+## Execution notes (added 2026-09-20 while executing)
+
+Deviations from the plan as written, each found by reading the code rather than assuming:
+
+- **Baselines:** bot 625 tests, web 561 tests, svelte-check 0 errors / 71 pre-existing warnings. "0 warnings" in Task 8 means *no new* warnings.
+- **Task 4:** more owner literals existed than the plan listed (`add_debt_settlement_entry`, two `r.get("sahip", "ENIS")` sites). All removed; the source-scan test guards them.
+- **Task 8, tab visibility:** `HESAP_ROUTES` is *not* extended. Existing router tests pin it at six tabs, so the Kişiler tab is appended by `visibleRoutes` only when ≥ 2 active owners exist (`KISILER_ROUTE`). Single-owner datasets are byte-for-byte unchanged.
+- **Task 8, fixture path in tests:** jsdom makes `import.meta.url` a non-`file:` URL, so tests read the fixture via `process.cwd()` like `testRealData.ts` does.
+- **Task 8b (added): owner picker on `BakiyeDuzeltme`.** The spec (§3.2) said balance corrections can be assigned to an owner, but the form always wrote `account.sahip`. Without this, per-owner opening balances could not be entered. The picker appears only with ≥ 2 owners and defaults to the account's owner.
+- **Task 9, seed tool (added): `src/cli/make_seed.py`.** The web app throws `X.json bulunamadı` unless all 8 core files exist in the Drive folder, so a new instance needs a valid empty starter set. It is generated from `personal_seed` (single source of truth) and refused for the code `ENIS`. A web test (`starter.test.ts`) proves the empty set does not crash derivation.
+- **Task 9, deploy script:** no `--delete` (a removed local file never removes anything on Enis's live VM), and a timestamped code backup is taken on the VM before every rsync, matching Enis's own `bbb-bot-yedek-*.tar.gz` habit.
+- **VM facts read (read-only):** units are system-level (`/etc/systemd/system`); Enis's `.path` watches `~/bbb-telegram-bot/data/{transactions,cashflows}.json` and `~/BBB/data/{personal_tx,payment_plans,cashflows}.json`; only the `gdrive` remote exists.

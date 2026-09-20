@@ -74,4 +74,50 @@ describe('BakiyeDuzeltme', () => {
       paraBirimi: 'TRY',
     })
   })
+
+  describe('kimin parası (birden fazla kişi varken)', () => {
+    const twoPeople = {
+      ...fixture,
+      people: [
+        { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+        { kod: 'ANNE', ad: 'Anne', haneUyesi: false, aktif: true },
+      ],
+    }
+
+    it('tek kişi varken seçici göstermez', () => {
+      const one = { ...fixture, people: [{ kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true }] }
+      const { container } = render(BakiyeDuzeltme, { dataset: one, account, today: TODAY })
+      expect(container.querySelector('#b-sahip')).toBeNull()
+    })
+
+    it('iki kişi varken seçici hesabın sahibiyle başlar', () => {
+      const { container } = render(BakiyeDuzeltme, { dataset: twoPeople, account, today: TODAY })
+      const sel = container.querySelector('#b-sahip') as HTMLSelectElement
+      expect(sel).toBeTruthy()
+      expect(sel.value).toBe(account.sahip)
+    })
+
+    it('seçilen kişiyi düzeltme satırına yazar', async () => {
+      let yazilan: any = null
+      const save = vi.fn(async (_n: string, data: unknown) => {
+        yazilan = data
+      })
+      const { container, getByText } = render(BakiyeDuzeltme, {
+        dataset: twoPeople,
+        account,
+        today: TODAY,
+        store: makeStore(),
+        source: { id: 'drive', load: async () => twoPeople, save },
+      })
+      await setTutar(container, '999999')
+      const sel = container.querySelector('#b-sahip') as HTMLSelectElement
+      sel.value = 'ANNE'
+      sel.dispatchEvent(new Event('change', { bubbles: true }))
+      await Promise.resolve()
+      ;(getByText(/kaydet/i) as HTMLButtonElement).click()
+      await new Promise((r) => setTimeout(r, 0))
+      const eklenen = yazilan[yazilan.length - 1]
+      expect(eklenen).toMatchObject({ tur: 'DUZELTME', hesap: account.kod, sahip: 'ANNE' })
+    })
+  })
 })

@@ -32,6 +32,12 @@
   )
 
   let gercekText = $state<string | number>('')
+
+  // Whose money the correction belongs to. Shown only with two or more owners; a
+  // single-owner dataset behaves exactly as before (the account's own `sahip`).
+  const owners = $derived((dataset?.people ?? []).filter((p) => p.aktif !== false))
+  let secilenSahip = $state('')
+  const sahip = $derived(secilenSahip || account.sahip)
   let saving = $state(false)
   let error = $state<string | null>(null)
 
@@ -64,7 +70,7 @@
         kategori: 'duzeltme',
         aciklama: 'Bakiye düzeltmesi',
         hesap: account.kod,
-        sahip: account.sahip,
+        sahip,
         taksitPlaniId: null,
         taksitNo: null,
         taksitToplam: null,
@@ -106,6 +112,17 @@
     <label for="b-gercek">{account.ad} hesabında gerçekte ne var?</label>
     <input id="b-gercek" type="number" step="0.01" inputmode="decimal" bind:value={gercekText} />
   </div>
+
+  {#if owners.length >= 2}
+    <div class="field">
+      <label for="b-sahip">Kimin parası?</label>
+      <select id="b-sahip" value={sahip} onchange={(e) => (secilenSahip = e.currentTarget.value)}>
+        {#each owners as p (p.kod)}
+          <option value={p.kod}>{p.ad}</option>
+        {/each}
+      </select>
+    </div>
+  {/if}
 
   {#if fark !== null && fark !== 0}
     <p class="ozet">
@@ -187,7 +204,8 @@
     color: var(--muted, #8b949e);
   }
 
-  input {
+  input,
+  select {
     background: var(--surface-2, #21262d);
     border: 1px solid var(--border, #30363d);
     color: var(--text, #e6edf3);
@@ -199,7 +217,8 @@
     width: 100%;
   }
 
-  input:focus {
+  input:focus,
+  select:focus {
     border-color: #58a6ff;
   }
 
