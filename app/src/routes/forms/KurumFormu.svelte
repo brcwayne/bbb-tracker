@@ -46,7 +46,7 @@
     try {
       if (editing) {
         const patch: Broker = { ...editing, kod: editing.kod, ad: ad.trim(), tur: tur.trim(), sahip: sahip.trim() }
-        await updateRecord<Broker>(store, source, 'brokers', (b) => b.kod === editing!.kod, patch)
+        await updateRecord<Broker>(store, source, 'brokers', (b) => b.kod === editing!.kod, patch, { allowKaynak: ['telegram', 'manual'] })
       } else {
         const record: Broker = { kod: kod.trim(), ad: ad.trim(), tur: tur.trim(), sahip: sahip.trim(), aktif: true, kaynak: 'manual' }
         await appendRecord(store, source, 'brokers', record)

@@ -96,4 +96,22 @@ describe('KurumFormu edit mode', () => {
     const updated = get(store).dataset?.brokers.find((b) => b.kod === 'B_MANUAL')
     expect(updated?.ad).toBe('Yeni Ad')
   })
+
+  it('botla oluşturulan kurumu da düzenleyebilir', async () => {
+    const botBroker = { kod: 'IS-YATIRIM', ad: 'İş Yatırım', tur: 'BROKER', sahip: 'Zek', aktif: true, kaynak: 'telegram' }
+    const ds = { ...fixture, brokers: [...fixture.brokers, botBroker] }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const state = get(store)
+    const onSaved = vi.fn()
+    const source = { id: 'drive' as const, load: () => Promise.resolve(ds), save: async () => {} }
+    const { getByLabelText, getByText } = render(KurumFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved, editing: botBroker },
+    })
+    await fireEvent.input(getByLabelText('Ad'), { target: { value: 'İş Yatırım Menkul' } })
+    await fireEvent.click(getByText('İncele'))
+    await fireEvent.click(getByText('Onayla ve Güncelle'))
+    expect(onSaved).toHaveBeenCalled()
+    expect(get(store).dataset?.brokers.find((b) => b.kod === 'IS-YATIRIM')?.ad).toBe('İş Yatırım Menkul')
+  })
 })

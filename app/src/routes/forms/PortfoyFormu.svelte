@@ -49,7 +49,7 @@
       const cleanAd = ad.trim() || cleanKod
       if (editing) {
         const patch: Portfolio = { ...editing, kod: editing.kod, ad: cleanAd, aktif }
-        await updateRecord<Portfolio>(store, source, 'portfolios', (p) => p.kod === editing!.kod, patch, { allowImported: true })
+        await updateRecord<Portfolio>(store, source, 'portfolios', (p) => p.kod === editing!.kod, patch, { allowImported: true, allowKaynak: ['telegram', 'manual'] })
       } else {
         const record: Portfolio = { kod: cleanKod, ad: cleanAd, aktif, kaynak: 'manual' }
         await appendRecord(store, source, 'portfolios', record)
