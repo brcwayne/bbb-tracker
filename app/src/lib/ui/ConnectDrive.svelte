@@ -13,15 +13,18 @@
 
   let busy = $state(false)
   let error = $state<string | undefined>(undefined)
+  let yeniKlasor = $state(false)
 
-  async function go() {
+  async function go(klasoruDeAc = false) {
+    yeniKlasor = klasoruDeAc
     busy = true
     error = undefined
     try {
       await connect()
       // Only open the Picker when no folder is remembered — a return visitor
-      // with a stored folder goes straight through.
-      if (!hasFolder?.()) await chooseFolder()
+      // with a stored folder goes straight through. "Başka klasör seç" ile
+      // gelindiğinde klasör unutulmuş olur, yani seçici yine açılır.
+      if (yeniKlasor || !hasFolder?.()) await chooseFolder()
       onConnected()
     } catch (e) {
       error = e instanceof Error ? e.message : String(e)
@@ -35,14 +38,24 @@
   <div class="card">
     <h1>Google Drive'a bağlan</h1>
     <p>BBB verileri Drive'daki <code>BBB/</code> klasöründen okunur. Bağlan ve klasörü seç.</p>
-    <button type="button" class="btn" onclick={go} disabled={busy}>
+    <button type="button" class="btn" onclick={() => go(false)} disabled={busy}>
       {busy ? 'Bağlanıyor…' : 'Google ile bağlan'}
+    </button>
+    <button type="button" class="btn ghost" onclick={() => go(true)} disabled={busy}>
+      Başka hesap / klasör seç
     </button>
     {#if error}<p class="err">{error}</p>{/if}
   </div>
 </div>
 
 <style>
+  .ghost {
+    background: transparent;
+    border: 1px solid var(--hairline, #30363d);
+    color: var(--ink-soft, #8b949e);
+    margin-top: 0.5rem;
+  }
+
   .connect {
     position: fixed;
     inset: 0;

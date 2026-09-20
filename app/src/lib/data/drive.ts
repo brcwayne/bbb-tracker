@@ -99,7 +99,7 @@ export class DriveSource implements DataSource {
     writeStoredToken(t, expiresInS)
   }
 
-  private requestToken(prompt: '' | 'none' | 'consent'): Promise<void> {
+  private requestToken(prompt: '' | 'none' | 'consent' | 'select_account'): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       try {
         if (!this.tokenClient) {
@@ -153,7 +153,18 @@ export class DriveSource implements DataSource {
 
   /** Interactive — behind the "Google ile bağlan" button. */
   connect(): Promise<void> {
-    return this.requestToken('')
+    // 'select_account': aynı tarayıcıda birden fazla Google hesabı olabilir.
+    // prompt:'' açık oturumu hiç sormadan kullanır ve kullanıcı başka bir
+    // hesaba geçmek istediğinde bunu imkânsız kılar.
+    return this.requestToken('select_account')
+  }
+
+  /** Hatırlanan klasörü unutur, böylece bir dahaki bağlanışta yenisi seçilir. */
+  forgetFolder(): void {
+    this.folderId = null
+    try {
+      localStorage.removeItem(FOLDER_KEY)
+    } catch {}
   }
 
   /** Silent refresh on load; rejects (no UI) when a real sign-in is needed. */
@@ -230,6 +241,12 @@ export class DriveSource implements DataSource {
     if (listRes.status === 401 || listRes.status === 403) {
       this.setToken(null)
       throw new NeedsAuthError('oturum süresi doldu')
+    }
+    if (listRes.status === 404) {
+      // Hatırlanan klasör bu hesaba ait değil (ör. başka bir Google hesabına
+      // geçildi). Unut ki kullanıcı yenisini seçebilsin, yoksa çıkmaz sokak.
+      this.forgetFolder()
+      throw new NeedsAuthError('klasör bu hesapta bulunamadı — yeniden bağlanıp klasörü seç')
     }
     if (!listRes.ok) throw new Error(`Drive: dosya listesi alınamadı (${listRes.status})`)
     const { files } = (await listRes.json()) as {

@@ -13,6 +13,7 @@
   import VolumeSwitch from './lib/ui/VolumeSwitch.svelte'
   import EmptyState from './lib/ui/EmptyState.svelte'
   import ConnectDrive from './lib/ui/ConnectDrive.svelte'
+  import HesapDegistir from './lib/ui/HesapDegistir.svelte'
   import { createAppStore, load, pickSource, deriveAll } from './lib/data/store'
   import { DriveSource } from './lib/data/drive'
   import {
@@ -189,6 +190,9 @@
       </span>
     {/if}
     <span class="stamp num" data-testid="source-stamp">{$store.sourceText ?? '—'}</span>
+    {#if drive}
+      <HesapDegistir {drive} onSwitched={() => load(store, source)} />
+    {/if}
     <select class="src num" aria-label="Veri kaynağı" value={source.id} onchange={onSrcChange}>
       <option value="local">local</option>
       <option value="drive">Drive</option>
