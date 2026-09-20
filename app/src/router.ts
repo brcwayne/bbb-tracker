@@ -12,7 +12,7 @@ export type Route =
   | 'ekle'
   | 'log'
 
-export type HesapRoute = 'h-hesaplar' | 'h-ozet' | 'h-harcamalar' | 'h-taksitler' | 'h-tekrarlar' | 'h-borclar' | 'h-hesap'
+export type HesapRoute = 'h-hesaplar' | 'h-ozet' | 'h-harcamalar' | 'h-taksitler' | 'h-tekrarlar' | 'h-borclar' | 'h-kisiler' | 'h-hesap'
 
 export interface RouteEntry<T extends string = string> {
   id: T
@@ -42,6 +42,10 @@ export const HESAP_ROUTES: RouteEntry<HesapRoute>[] = [
   { id: 'h-borclar', path: '#/h/borclar', label: 'Borçlar' },
 ]
 
+/** Not in HESAP_ROUTES on purpose: it is added to the tab strip only when the dataset has
+ *  two or more owners (see `visibleRoutes`), so every single-owner dataset is unchanged. */
+export const KISILER_ROUTE: RouteEntry<HesapRoute> = { id: 'h-kisiler', path: '#/h/kisiler', label: 'Kişiler' }
+
 export const FIRST_PATH: Record<Volume, string> = {
   yatirim: '#/',
   hesaplar: '#/h/hesaplar',
@@ -57,6 +61,17 @@ export interface CurrentRouteResult {
   /** The path segment after a parameterised route: an account `kod` on
    *  `h-hesap`, a person `kod` on `h-borclar`. */
   param?: string
+}
+
+/** The nav tabs to show. The Kişiler tab only makes sense with two or more owners, so a
+ *  single-owner dataset looks exactly as it always has. */
+export function visibleRoutes(
+  volume: Volume,
+  people: { aktif?: boolean }[] = [],
+): RouteEntry<Route | HesapRoute>[] {
+  const all = routesFor(volume)
+  const owners = people.filter((p) => p.aktif !== false).length
+  return volume === 'hesaplar' && owners >= 2 ? [...all, KISILER_ROUTE] : all
 }
 
 export function otherVolume(v: Volume): { volume: Volume; href: string; label: string; ariaLabel: string } {
@@ -89,6 +104,7 @@ export function currentRoute(): CurrentRouteResult {
       taksitler: 'h-taksitler',
       tekrarlar: 'h-tekrarlar',
       borclar: 'h-borclar',
+      kisiler: 'h-kisiler',
       hesap: 'h-hesap',
     }
     const matched = hesapMap[sub]

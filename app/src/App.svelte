@@ -5,7 +5,8 @@
     onRouteChange,
     ROUTES,
     HESAP_ROUTES,
-    routesFor,
+    visibleRoutes,
+    KISILER_ROUTE,
     type CurrentRouteResult,
   } from './router'
   import ThemeToggle from './lib/ui/ThemeToggle.svelte'
@@ -46,6 +47,7 @@
   import Harcamalar from './routes/hesaplar/Harcamalar.svelte'
   import Taksitler from './routes/hesaplar/Taksitler.svelte'
   import Borclar from './routes/hesaplar/Borclar.svelte'
+  import Kisiler from './routes/hesaplar/Kisiler.svelte'
   import Tekrarlayanlar from './routes/hesaplar/Tekrarlayanlar.svelte'
   import Hesaplar from './routes/hesaplar/Hesaplar.svelte'
   import HesapDetay from './routes/hesaplar/HesapDetay.svelte'
@@ -80,6 +82,7 @@
     'h-taksitler': Taksitler,
     'h-tekrarlar': Tekrarlayanlar,
     'h-borclar': Borclar,
+    'h-kisiler': Kisiler,
     'h-hesap': HesapDetay,
   }
   const Active = $derived(pages[route])
@@ -87,7 +90,7 @@
   const title = $derived(
     route === 'h-hesap'
       ? ($store.dataset?.personalAccounts?.find((a) => a.kod === param)?.ad ?? 'Hesap')
-      : ([...ROUTES, ...HESAP_ROUTES].find((r) => r.id === route)?.label ?? 'BBB'),
+      : ([...ROUTES, ...HESAP_ROUTES, KISILER_ROUTE].find((r) => r.id === route)?.label ?? 'BBB'),
   )
 
   // Re-derive reactively when the global period changes (no reload).
@@ -234,7 +237,7 @@
 {/if}
 
 <nav class="tabs">
-  {#each routesFor(volume) as r}
+  {#each visibleRoutes(volume, $store.dataset?.people ?? []) as r}
     <a href={r.path} class:active={r.id === route || (route === 'h-hesap' && r.id === 'h-hesaplar')}>{r.label}</a>
   {/each}
 </nav>
