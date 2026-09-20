@@ -1,0 +1,62 @@
+{
+  "cases": [
+    {
+      "name": "karma: every row kind, gap is zero",
+      "today": "2026-09-20",
+      "people": [
+        {"kod": "BEN", "ad": "Ben", "haneUyesi": true, "aktif": true},
+        {"kod": "ANNE", "ad": "Anne", "haneUyesi": false, "aktif": true},
+        {"kod": "KAFE", "ad": "Kafe", "haneUyesi": false, "aktif": true},
+        {"kod": "DEDE", "ad": "Dede", "haneUyesi": false, "aktif": true}
+      ],
+      "accounts": [
+        {"kod": "BANKA", "ad": "Banka", "tur": "BANKA", "paraBirimi": "TRY", "sahip": "BEN", "aktif": true},
+        {"kod": "NAKIT", "ad": "Nakit", "tur": "NAKIT", "paraBirimi": "TRY", "sahip": "BEN", "aktif": true},
+        {"kod": "KART", "ad": "Kart", "tur": "KREDI_KARTI", "paraBirimi": "TRY", "sahip": "BEN", "aktif": true}
+      ],
+      "rows": [
+        {"id": "r1", "tarih": "2026-09-01", "tur": "DUZELTME", "tutar": 20000, "paraBirimi": "TRY", "hesap": "BANKA", "sahip": "ANNE"},
+        {"id": "r2", "tarih": "2026-09-01", "tur": "DUZELTME", "tutar": 5000, "paraBirimi": "TRY", "hesap": "BANKA", "sahip": "BEN"},
+        {"id": "r3", "tarih": "2026-09-02", "tur": "GELIR", "tutar": 3000, "paraBirimi": "TRY", "hesap": "BANKA", "sahip": "KAFE"},
+        {"id": "r4", "tarih": "2026-09-03", "tur": "GIDER", "tutar": 800, "paraBirimi": "TRY", "hesap": "BANKA", "sahip": "ANNE"},
+        {"id": "r5", "tarih": "2026-09-04", "tur": "SAHIP_AKTARIM", "tutar": 5000, "paraBirimi": "TRY", "hesap": "", "sahip": "ANNE", "karsiSahip": "BEN"},
+        {"id": "r6", "tarih": "2026-09-05", "tur": "TRANSFER", "tutar": 1000, "paraBirimi": "TRY", "hesap": "BANKA", "karsiHesap": "NAKIT", "sahip": "BEN"},
+        {"id": "r7", "tarih": "2026-09-06", "tur": "GIDER", "tutar": 400, "paraBirimi": "TRY", "hesap": "KART", "sahip": "BEN"},
+        {"id": "r8", "tarih": "2026-09-07", "tur": "GIDER", "tutar": 100, "paraBirimi": "TRY", "hesap": "NAKIT", "sahip": ""},
+        {"id": "r9", "tarih": "2026-10-01", "tur": "GIDER", "tutar": 999, "paraBirimi": "TRY", "hesap": "BANKA", "sahip": "BEN"},
+        {"id": "r10", "tarih": "2026-09-01", "tur": "GIDER", "tutar": 777, "paraBirimi": "TRY", "hesap": "BANKA", "sahip": "BEN", "durum": "planlandi"},
+        {"id": "r11", "tarih": "2026-09-08", "tur": "TRANSFER", "tutar": 2000, "paraBirimi": "TRY", "hesap": "BANKA", "karsiHesap": "QNB", "sahip": "ANNE"}
+      ],
+      "expected": {
+        "owners": {
+          "ANNE": {"TRY": 12200},
+          "BEN": {"TRY": 9600},
+          "KAFE": {"TRY": 3000},
+          "DEDE": {},
+          "__sahipsiz__": {"TRY": -100}
+        },
+        "ownerTotal": {"TRY": 24700},
+        "accountTotal": {"TRY": 24700},
+        "gap": {"TRY": 0}
+      }
+    },
+    {
+      "name": "yetim: a row on an unknown account shows up as a gap",
+      "today": "2026-09-20",
+      "people": [{"kod": "BEN", "ad": "Ben", "haneUyesi": true, "aktif": true}],
+      "accounts": [
+        {"kod": "NAKIT", "ad": "Nakit", "tur": "NAKIT", "paraBirimi": "TRY", "sahip": "BEN", "aktif": true}
+      ],
+      "rows": [
+        {"id": "y1", "tarih": "2026-09-01", "tur": "DUZELTME", "tutar": 1000, "paraBirimi": "TRY", "hesap": "NAKIT", "sahip": "BEN"},
+        {"id": "y2", "tarih": "2026-09-02", "tur": "GIDER", "tutar": 50, "paraBirimi": "TRY", "hesap": "YOK", "sahip": "BEN"}
+      ],
+      "expected": {
+        "owners": {"BEN": {"TRY": 950}},
+        "ownerTotal": {"TRY": 950},
+        "accountTotal": {"TRY": 1000},
+        "gap": {"TRY": -50}
+      }
+    }
+  ]
+}

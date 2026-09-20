@@ -135,7 +135,7 @@ export interface RecurringRule {
 export interface PersonalTx {
   id: string
   tarih: string
-  tur: 'GIDER' | 'GELIR' | 'TRANSFER' | 'DUZELTME'
+  tur: 'GIDER' | 'GELIR' | 'TRANSFER' | 'DUZELTME' | 'SAHIP_AKTARIM'
   tutar: number
   paraBirimi: 'TRY' | 'USD'
   kategori: string
@@ -145,6 +145,8 @@ export interface PersonalTx {
    *  the transfer flow shipped; declared here for the first time. */
   karsiHesap?: string
   sahip: string
+  /** Receiver on a SAHIP_AKTARIM (`sahip` is the giver). */
+  karsiSahip?: string
   taksitPlaniId: string | null
   taksitNo: number | null
   taksitToplam: number | null
