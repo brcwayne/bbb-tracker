@@ -110,12 +110,25 @@ export class DriveSource implements DataSource {
           })
         }
         let done = false
+        // Sessiz yenileme (prompt:'none') arayüz açmaz, anında cevaplanır —
+        // kısa süre doğrudur, kullanıcı açılışta beklemesin. Elle giriş ise
+        // insanı bekler: hesap seçimi, şifre, izin ekranı. 8 saniye buna
+        // yetmiyordu ve yeni bir hesapla giriş "yetki zaman aşımı" ile
+        // düşüyordu. Yine de sonsuza kadar asılı kalmaması için üst sınır var.
+        const sessiz = prompt === 'none'
+        const sure = sessiz ? 8_000 : 5 * 60_000
         const timer = setTimeout(() => {
           if (!done) {
             done = true
-            reject(new NeedsAuthError('yetki zaman aşımı'))
+            reject(
+              new NeedsAuthError(
+                sessiz
+                  ? 'yetki zaman aşımı'
+                  : 'Google giriş penceresinden yanıt gelmedi — açılır pencere engellenmiş olabilir. Engeli kaldırıp tekrar dene.',
+              ),
+            )
           }
-        }, 8000)
+        }, sure)
         this.tokenClient.callback = (resp: {
           access_token?: string
           expires_in?: number
