@@ -31,6 +31,8 @@
   const accounts = $derived((dataset?.personalAccounts ?? []).filter((a) => a.aktif !== false))
   const people = $derived((dataset?.people ?? []).filter((p) => p.aktif !== false))
   const catName = (kod: string) => categories.find((c) => c.kod === kod)?.ad ?? kod
+  const personName = (kod: string) => (dataset?.people ?? []).find((p) => p.kod === kod)?.ad ?? kod
+  const showSahip = $derived(new Set(rules.map((r) => r.sahip).filter(Boolean)).size >= 2)
 
   let showAdd = $state(false)
   let tur = $state<'GIDER' | 'GELIR'>('GIDER')
@@ -223,7 +225,7 @@
         <li class="rule-row" class:pasif={!r.aktif}>
           <div class="rule-main">
             <strong>{r.aciklama}</strong>
-            <span class="rule-sub">{catName(r.kategori)} · her ayın {r.gunOfMonth}'i</span>
+            <span class="rule-sub">{catName(r.kategori)} · her ayın {r.gunOfMonth}'i{#if showSahip} · {personName(r.sahip)}{/if}</span>
           </div>
           <div class="rule-amount num">
             {r.paraBirimi === 'USD' ? usd(r.tutar) : tryFmt(r.tutar)}

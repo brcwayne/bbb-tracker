@@ -86,4 +86,47 @@ describe('Tekrarlayanlar', () => {
 
     expect(saveCalls).toEqual(['recurring_rules'])
   })
+
+  describe('kişi boyutu (Görev 1)', () => {
+    it('tek sahip varken kural satırında kişi adı gösterilmez', () => {
+      const { container } = render(Tekrarlayanlar, { dataset })
+      const sub = container.querySelector('.rule-sub')
+      expect(sub?.textContent).not.toContain('Enis')
+      expect(sub?.textContent).not.toContain('ENIS')
+    })
+
+    it('birden fazla sahip varken kural satırında kişi adı (ad, kod değil) gösterilir', () => {
+      const twoOwnersDataset = {
+        ...dataset,
+        people: [
+          { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+          { kod: 'ZEK', ad: 'Zek', haneUyesi: false, aktif: true },
+        ],
+        recurringRules: [
+          dataset.recurringRules[0],
+          {
+            id: 'rr_2',
+            tur: 'GIDER' as const,
+            aciklama: 'Spotify',
+            kategori: 'market',
+            hesap: 'NAKIT',
+            sahip: 'ZEK',
+            paraBirimi: 'TRY' as const,
+            tutar: 59.9,
+            gunOfMonth: 10,
+            baslangicTarihi: '2026-01-01',
+            bitisTarihi: null,
+            aktif: true,
+            olusturulma: '',
+            kaynak: 'manual' as const,
+          },
+        ],
+      }
+      const { container } = render(Tekrarlayanlar, { dataset: twoOwnersDataset })
+      const subs = Array.from(container.querySelectorAll('.rule-sub')).map((el) => el.textContent)
+      expect(subs.some((s) => s?.includes('Enis'))).toBe(true)
+      expect(subs.some((s) => s?.includes('Zek'))).toBe(true)
+      expect(subs.some((s) => s?.includes('ZEK'))).toBe(false)
+    })
+  })
 })

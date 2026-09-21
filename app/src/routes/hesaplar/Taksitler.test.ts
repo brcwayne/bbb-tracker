@@ -164,5 +164,67 @@ describe('Taksitler sayfası', () => {
 
     expect(saved).toBe(false)
   })
+
+  describe('kişi boyutu (Görev 1)', () => {
+    it('tek sahip varken planda kişi adı gösterilmez', () => {
+      const { container } = render(Taksitler, { dataset: fixture, today: '2026-09-08' })
+      const meta = container.querySelector('.plan-meta')
+      expect(meta?.textContent).not.toContain('Enis')
+      expect(meta?.textContent).not.toContain('ENIS')
+    })
+
+    it('birden fazla sahip varken planda kişi adı gösterilir', () => {
+      const twoOwnersDataset: Dataset = {
+        ...fixture,
+        people: [
+          { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+          { kod: 'ZEK', ad: 'Zek', haneUyesi: false, aktif: true },
+        ],
+        paymentPlans: [
+          ...(fixture.paymentPlans ?? []),
+          {
+            id: 'pp_zek',
+            alisTarihi: '2026-08-01',
+            aciklama: 'Zek Laptop',
+            toplamTutar: 30000,
+            paraBirimi: 'TRY',
+            taksitSayisi: 3,
+            taksitTutari: 10000,
+            sonTaksitTutari: 10000,
+            kategori: 'ev',
+            hesap: 'NAKIT',
+            sahip: 'ZEK',
+            durum: 'AKTIF',
+            kaynak: 'manual',
+            olusturulma: '2026-08-01T10:00:00Z',
+          },
+        ],
+        personalTx: [
+          ...(fixture.personalTx ?? []),
+          {
+            id: 'px_zek_1',
+            tarih: '2026-08-01',
+            tur: 'GIDER',
+            tutar: 10000,
+            paraBirimi: 'TRY',
+            kategori: 'ev',
+            aciklama: 'Zek Laptop 1/3',
+            hesap: 'NAKIT',
+            sahip: 'ZEK',
+            taksitPlaniId: 'pp_zek',
+            taksitNo: 1,
+            taksitToplam: 3,
+            not: '',
+            kaynak: 'manual',
+            olusturulma: '2026-08-01T10:00:00Z',
+          },
+        ],
+      }
+      const { container } = render(Taksitler, { dataset: twoOwnersDataset, today: '2026-09-08' })
+      const metas = Array.from(container.querySelectorAll('.plan-meta')).map((el) => el.textContent)
+      expect(metas.some((m) => m?.includes('Enis'))).toBe(true)
+      expect(metas.some((m) => m?.includes('Zek'))).toBe(true)
+    })
+  })
 })
 

@@ -36,8 +36,11 @@
   )
   const categories = $derived(dataset?.categories ?? [])
   const catName = (kod: string) => categories.find((c) => c.kod === kod)?.ad ?? kod
+  const people = $derived(dataset?.people ?? [])
+  const personName = (kod: string) => people.find((p) => p.kod === kod)?.ad ?? kod
 
   const active = $derived(activePlans(plans, rows, today))
+  const showSahip = $derived(new Set(active.map((item) => item.plan.sahip).filter(Boolean)).size >= 2)
   const schedule = $derived(instalmentSchedule(rows, today, 12))
 
   const scheduleBars = $derived(
@@ -132,7 +135,7 @@
             <div class="plan-header">
               <div class="plan-titles">
                 <h4 class="plan-name">{p.aciklama}</h4>
-                <span class="plan-meta">{catName(p.kategori)} · {p.hesap} · {p.sahip}</span>
+                <span class="plan-meta">{catName(p.kategori)} · {p.hesap}{#if showSahip} · {personName(p.sahip)}{/if}</span>
               </div>
               <span class="progress-badge num">{item.ilerleme}</span>
             </div>
