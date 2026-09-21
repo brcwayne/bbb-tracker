@@ -226,5 +226,138 @@ describe('Borçlar sayfası', () => {
     expect(container.textContent).toContain('Bora borcu')
     expect(container.textContent).toContain('Alper borcu')
   })
+
+  it("tek sahip varken 'Kimin Parası' sütunu ve form alanı görünmez", async () => {
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async () => {},
+    }
+    const { container, getAllByRole } = render(Borclar, {
+      props: { dataset: fixture, source, store },
+    })
+    expect(container.textContent).not.toContain('Kimin Parası')
+
+    const editBtns = getAllByRole('button', { name: /Düzenle/i })
+    await fireEvent.click(editBtns[0])
+
+    expect(container.querySelector('#edit-sahip')).toBeNull()
+  })
+
+  it("birden fazla sahip varken 'Kimin Parası' sütunu ve varsayılan sahip gösterilir", () => {
+    const multiOwnerDataset: Dataset = {
+      ...fixture,
+      people: [
+        { kod: 'ZEK', ad: 'Zek', haneUyesi: true, aktif: true },
+        { kod: 'ANNE', ad: 'Anne', haneUyesi: true, aktif: true },
+      ],
+      personalAccounts: [
+        { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ZEK', aktif: true },
+      ],
+      debts: [
+        {
+          id: 'db_1',
+          tarih: '2026-09-01',
+          yon: 'VERDIM',
+          kisi: 'AHMET',
+          tutar: 5000,
+          paraBirimi: 'TRY',
+          aciklama: 'Elden borç',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'telegram',
+          olusturulma: '2026-09-01T10:00:00Z',
+          sahip: 'ANNE',
+        },
+        {
+          id: 'db_2',
+          tarih: '2026-09-03',
+          yon: 'ALDIM',
+          kisi: 'AYSE',
+          tutar: 800,
+          paraBirimi: 'TRY',
+          aciklama: 'Yemek masrafı',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'telegram',
+          olusturulma: '2026-09-03T14:00:00Z',
+          // sahip yok: varsayılan sahip (hesap sahibi ZEK)
+        },
+      ],
+    }
+
+    const { container } = render(Borclar, { dataset: multiOwnerDataset })
+    expect(container.textContent).toContain('Kimin Parası')
+
+    const row1 = container.querySelector('[data-debt-id="db_1"]')
+    expect(row1?.textContent).toContain('Anne')
+
+    const row2 = container.querySelector('[data-debt-id="db_2"]')
+    expect(row2?.textContent).toContain('Zek')
+  })
+
+  it('birden fazla sahip varken düzenleme modalında sahip değiştirilip kaydedilir', async () => {
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    const multiOwnerDataset: Dataset = {
+      ...fixture,
+      people: [
+        { kod: 'ZEK', ad: 'Zek', haneUyesi: true, aktif: true },
+        { kod: 'ANNE', ad: 'Anne', haneUyesi: true, aktif: true },
+      ],
+      personalAccounts: [
+        { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ZEK', aktif: true },
+      ],
+      debts: [
+        {
+          id: 'db_2',
+          tarih: '2026-09-03',
+          yon: 'ALDIM',
+          kisi: 'AYSE',
+          tutar: 800,
+          paraBirimi: 'TRY',
+          aciklama: 'Yemek masrafı',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'telegram',
+          olusturulma: '2026-09-03T14:00:00Z',
+        },
+      ],
+    }
+    await load(store, { id: 'local', load: () => Promise.resolve(multiOwnerDataset) })
+    let savedDebts: Debt[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(multiOwnerDataset),
+      save: async (name: string, data: unknown) => {
+        if (name === 'debts') savedDebts = data as Debt[]
+      },
+    }
+    const { getAllByRole, getByRole, container } = render(Borclar, {
+      props: { dataset: multiOwnerDataset, source, store },
+    })
+
+    const editBtns = getAllByRole('button', { name: /Düzenle/i })
+    await fireEvent.click(editBtns[0])
+
+    const sahipSelect = container.querySelector('#edit-sahip') as HTMLSelectElement
+    expect(sahipSelect).not.toBeNull()
+    expect(sahipSelect.value).toBe('ZEK') // varsayılan sahip ZEK olarak seçili gelmeli
+
+    await fireEvent.change(sahipSelect, { target: { value: 'ANNE' } })
+
+    const saveBtn = getByRole('button', { name: /Kaydet/i })
+    await fireEvent.click(saveBtn)
+
+    expect(savedDebts).toBeDefined()
+    const target = savedDebts!.find((d) => d.id === 'db_2')
+    expect(target?.sahip).toBe('ANNE')
+  })
 })
 

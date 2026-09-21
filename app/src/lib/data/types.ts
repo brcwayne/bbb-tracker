@@ -221,6 +221,8 @@ export interface Debt {
   kapatanKayitlar: string[]
   kaynak: string
   olusturulma: string
+  /** Kimin parasıyla verildiği/alındığı (yalnızca etiket, bakiye etkilemez). */
+  sahip?: string
 }
 
 export interface Dataset {

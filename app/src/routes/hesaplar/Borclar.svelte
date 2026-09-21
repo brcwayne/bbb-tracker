@@ -30,6 +30,21 @@
   const people = $derived(dataset?.people ?? [])
   const personName = (kod: string) => people.find((p) => p.kod === kod)?.ad ?? kod
 
+  function resolveSahip(d: Debt): string {
+    if (d.sahip) return d.sahip
+    const acc = (dataset?.personalAccounts ?? []).find((a) => a.kod === d.hesap)
+    if (acc?.sahip) return acc.sahip
+    return people[0]?.kod ?? ''
+  }
+
+  const distinctOwners = $derived(
+    new Set([
+      ...allDebts.map((d) => resolveSahip(d)).filter(Boolean),
+      ...people.filter((p) => p.aktif !== false).map((p) => p.kod),
+    ]).size,
+  )
+  const showSahip = $derived(distinctOwners >= 2)
+
   const balances = $derived(debtBalances(allDebts))
   const openDebts = $derived(allDebts.filter((d) => d.durum === 'ACIK'))
   const fmtAmount = (n: number, curr: string) => (curr === 'USD' ? usd(n) : tryFmt(n))
@@ -37,6 +52,7 @@
   let editingDebt = $state<Debt | null>(null)
   let editAmount = $state('')
   let editAciklama = $state('')
+  let editSahip = $state('')
   let editSaving = $state(false)
   let editError = $state<string | null>(null)
 
@@ -80,6 +96,7 @@
     editingDebt = debt
     editAmount = String(debt.tutar)
     editAciklama = debt.aciklama
+    editSahip = debt.sahip || resolveSahip(debt)
     editError = null
   }
 
@@ -92,6 +109,7 @@
     }
     editSaving = true
     editError = null
+    const updatedSahip = showSahip ? editSahip : (editingDebt.sahip || editSahip)
     try {
       await updateRecord<Debt>(
         store,
@@ -102,6 +120,7 @@
           ...editingDebt,
           tutar: num,
           aciklama: editAciklama.trim(),
+          ...(updatedSahip ? { sahip: updatedSahip } : {}),
         },
         { allowKaynak: ['telegram', 'manual'] },
       )
@@ -233,6 +252,9 @@
               <tr>
                 <th>Tarih</th>
                 <th>Kişi</th>
+                {#if showSahip}
+                  <th>Kimin Parası</th>
+                {/if}
                 <th>Tür</th>
                 <th>Tutar</th>
                 <th>Açıklama</th>
@@ -246,6 +268,9 @@
                 <tr data-debt-row data-debt-id={d.id}>
                   <td class="num muted">{d.tarih}</td>
                   <td><strong>{personName(d.kisi)}</strong></td>
+                  {#if showSahip}
+                    <td data-col="sahip">{personName(resolveSahip(d))}</td>
+                  {/if}
                   <td>
                     <span class="badge" class:gain={isAlacak} class:loss={!isAlacak}>
                       {isAlacak ? 'Alacak' : 'Borç'}
@@ -320,6 +345,16 @@
             bind:value={editAciklama}
           />
         </div>
+        {#if showSahip}
+          <div class="field">
+            <label for="edit-sahip">Kimin Parası</label>
+            <select id="edit-sahip" bind:value={editSahip}>
+              {#each people.filter((p) => p.aktif !== false) as p}
+                <option value={p.kod}>{p.ad}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
         {#if editError}
           <p class="error-msg">{editError}</p>
         {/if}
@@ -591,7 +626,8 @@
     font-size: 0.78rem;
     color: var(--ink-soft);
   }
-  .field input {
+  .field input,
+  .field select {
     background: var(--surface-2);
     border: 1px solid var(--hairline);
     color: var(--ink);
@@ -599,7 +635,8 @@
     padding: 0.45rem 0.6rem;
     font-size: 0.9rem;
   }
-  .field input:focus {
+  .field input:focus,
+  .field select:focus {
     outline: none;
     border-color: var(--accent-defter);
   }
