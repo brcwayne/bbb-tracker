@@ -1,4 +1,4 @@
-import type { Debt, PaymentPlan, PersonalTx } from './types'
+import type { Debt, PaymentPlan, Person, PersonalAccount, PersonalTx } from './types'
 
 export interface MonthlyTotal {
   ay: string
@@ -241,3 +241,53 @@ export function debtBalances(debts: Debt[]): DebtBalanceItem[] {
   result.sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
   return result
 }
+
+export type OzetDimension = 'kisi' | 'hesap'
+
+export interface DimensionBreakdownGroup {
+  key: string
+  label: string
+  summary: MonthSummary
+  monthly: MonthlyTotal[]
+  categoryBreakdown: CategoryBreakdown[]
+  instalments: InstalmentScheduleItem[]
+}
+
+export function ozetDimensionGroups(
+  rows: PersonalTx[],
+  dimension: OzetDimension,
+  people: Person[],
+  accounts: PersonalAccount[],
+  today: string,
+  year: number,
+  month: number,
+): DimensionBreakdownGroup[] {
+  if (dimension === 'kisi') {
+    const list = people.filter((p) => p.aktif !== false)
+    return list.map((p) => {
+      const pRows = rows.filter((r) => r.sahip === p.kod)
+      return {
+        key: p.kod,
+        label: p.ad,
+        summary: monthSummary(pRows, year, month, today),
+        monthly: monthlyTotals(pRows, today, 12),
+        categoryBreakdown: categoryBreakdown(pRows, year, month, today, 'TRY'),
+        instalments: instalmentSchedule(pRows, today, 3),
+      }
+    })
+  } else {
+    const list = accounts.filter((a) => a.aktif !== false)
+    return list.map((a) => {
+      const aRows = rows.filter((r) => r.hesap === a.kod)
+      return {
+        key: a.kod,
+        label: a.ad,
+        summary: monthSummary(aRows, year, month, today),
+        monthly: monthlyTotals(aRows, today, 12),
+        categoryBreakdown: categoryBreakdown(aRows, year, month, today, 'TRY'),
+        instalments: instalmentSchedule(aRows, today, 3),
+      }
+    })
+  }
+}
+

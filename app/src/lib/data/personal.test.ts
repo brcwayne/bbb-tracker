@@ -6,8 +6,9 @@ import {
   instalmentSchedule,
   monthlyTotals,
   monthSummary,
+  ozetDimensionGroups,
 } from './personal'
-import type { Debt, PaymentPlan, PersonalTx } from './types'
+import type { Debt, PaymentPlan, Person, PersonalAccount, PersonalTx } from './types'
 
 const tx = (o: Partial<PersonalTx>): PersonalTx => ({
   id: 'px_1', tarih: '2026-09-02', tur: 'GIDER', tutar: 100, paraBirimi: 'TRY',
@@ -168,4 +169,42 @@ describe('yeni tur değerleri harcama figürlerine sızmaz', () => {
     expect(categoryBreakdown(rows, 2026, 9, TODAY, 'TRY')).toEqual([{ kod: 'market', toplam: 100 }])
   })
 })
+
+describe('ozetDimensionGroups (Görev 3)', () => {
+  const people: Person[] = [
+    { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+    { kod: 'ZEK', ad: 'Zek', haneUyesi: false, aktif: true },
+  ]
+  const accounts: PersonalAccount[] = [
+    { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true },
+    { kod: 'KART', ad: 'Bonus Kart', tur: 'KREDI_KARTI', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true },
+  ]
+  const rows = [
+    tx({ id: '1', tarih: '2026-09-02', tutar: 100, sahip: 'ENIS', hesap: 'NAKIT', kategori: 'market' }),
+    tx({ id: '2', tarih: '2026-09-03', tutar: 250, sahip: 'ZEK', hesap: 'KART', kategori: 'kira' }),
+  ]
+
+  it('kişi boyutunda her kişi için özet ve kırılımları ayırır', () => {
+    const groups = ozetDimensionGroups(rows, 'kisi', people, accounts, TODAY, 2026, 9)
+    expect(groups).toHaveLength(2)
+    const enis = groups.find((g) => g.key === 'ENIS')!
+    const zek = groups.find((g) => g.key === 'ZEK')!
+    expect(enis.label).toBe('Enis')
+    expect(enis.summary.gider['TRY']).toBe(100)
+    expect(zek.label).toBe('Zek')
+    expect(zek.summary.gider['TRY']).toBe(250)
+  })
+
+  it('hesap boyutunda her hesap için özet ve kırılımları ayırır', () => {
+    const groups = ozetDimensionGroups(rows, 'hesap', people, accounts, TODAY, 2026, 9)
+    expect(groups).toHaveLength(2)
+    const nakit = groups.find((g) => g.key === 'NAKIT')!
+    const kart = groups.find((g) => g.key === 'KART')!
+    expect(nakit.label).toBe('Nakit')
+    expect(nakit.summary.gider['TRY']).toBe(100)
+    expect(kart.label).toBe('Bonus Kart')
+    expect(kart.summary.gider['TRY']).toBe(250)
+  })
+})
+
 
