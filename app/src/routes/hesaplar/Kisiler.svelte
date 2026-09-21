@@ -103,7 +103,7 @@
       <h3 class="section-title">Kişi Bakiyeleri</h3>
       <div class="balances-grid">
         {#each ownerKods as kod (kod)}
-          <div class="balance-card" data-testid="owner-card">
+          <a href="#/h/kisiler/{encodeURIComponent(kod)}" class="balance-card" data-testid="owner-card">
             <span class="person-name">{nameOf(kod)}</span>
             <div class="amounts">
               {#each Object.entries(ledger.owners[kod]) as [cur, v] (cur)}
@@ -112,7 +112,7 @@
                 <span class="fig-val num muted">0</span>
               {/each}
             </div>
-          </div>
+          </a>
         {/each}
       </div>
 
@@ -228,6 +228,12 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease;
+  }
+  .balance-card:hover {
+    border-color: var(--gold);
   }
   .person-name {
     font-size: 1.05rem;

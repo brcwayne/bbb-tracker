@@ -86,4 +86,10 @@ describe('App — iki cilt ve kabuk', () => {
     expect(queryByTestId('app-local-badge')).toBeInTheDocument()
     expect(queryByTestId('app-local-badge')?.textContent).toContain('⚠ yerel kopya — canlı veri olmayabilir')
   })
+
+  it('#/h/kisiler/<kod> rotasında başlık Kişi olarak çözülür', () => {
+    window.location.hash = '#/h/kisiler/ENIS'
+    const { getByText } = render(App)
+    expect(getByText('Kişi')).toBeInTheDocument()
+  })
 })

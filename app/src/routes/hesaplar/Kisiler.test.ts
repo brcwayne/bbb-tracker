@@ -104,4 +104,12 @@ describe('Kişiler sayfası', () => {
     expect(save).not.toHaveBeenCalled()
     expect(container.textContent).toMatch(/zaten var/i)
   })
+
+  it('kişi kartları #/h/kisiler/<kod> detay linki taşır', () => {
+    const { getAllByTestId } = render(Kisiler, { dataset: ds })
+    const cards = getAllByTestId('owner-card') as HTMLAnchorElement[]
+    expect(cards[0].tagName.toLowerCase()).toBe('a')
+    expect(cards.some((c) => c.getAttribute('href')?.includes('#/h/kisiler/ANNE'))).toBe(true)
+    expect(cards.some((c) => c.getAttribute('href')?.includes('#/h/kisiler/ENIS'))).toBe(true)
+  })
 })

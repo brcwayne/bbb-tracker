@@ -49,6 +49,7 @@
   import Taksitler from './routes/hesaplar/Taksitler.svelte'
   import Borclar from './routes/hesaplar/Borclar.svelte'
   import Kisiler from './routes/hesaplar/Kisiler.svelte'
+  import KisiDetay from './routes/hesaplar/KisiDetay.svelte'
   import Tekrarlayanlar from './routes/hesaplar/Tekrarlayanlar.svelte'
   import Hesaplar from './routes/hesaplar/Hesaplar.svelte'
   import HesapDetay from './routes/hesaplar/HesapDetay.svelte'
@@ -86,11 +87,15 @@
     'h-kisiler': Kisiler,
     'h-hesap': HesapDetay,
   }
-  const Active = $derived(pages[route])
   const param = $derived(cur.param)
+  const Active = $derived(
+    route === 'h-kisiler' && param ? KisiDetay : pages[route],
+  )
   const title = $derived(
     route === 'h-hesap'
       ? ($store.dataset?.personalAccounts?.find((a) => a.kod === param)?.ad ?? 'Hesap')
+      : route === 'h-kisiler' && param
+      ? ($store.dataset?.people?.find((p) => p.kod === param)?.ad ?? 'Kişi')
       : ([...ROUTES, ...HESAP_ROUTES, KISILER_ROUTE].find((r) => r.id === route)?.label ?? 'BBB'),
   )
 

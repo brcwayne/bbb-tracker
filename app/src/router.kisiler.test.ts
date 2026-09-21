@@ -10,6 +10,10 @@ describe('Kişiler tab', () => {
     location.hash = '#/h/kisiler'
     expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-kisiler' })
   })
+  it('#/h/kisiler/<kod> resolves to the Kişiler detail with param', () => {
+    location.hash = '#/h/kisiler/ZEK'
+    expect(currentRoute()).toEqual({ volume: 'hesaplar', route: 'h-kisiler', param: 'ZEK' })
+  })
   it('is hidden with fewer than two active people', () => {
     expect(visibleRoutes('hesaplar', [{ aktif: true }]).some((r) => r.id === 'h-kisiler')).toBe(false)
     expect(visibleRoutes('hesaplar', []).some((r) => r.id === 'h-kisiler')).toBe(false)
