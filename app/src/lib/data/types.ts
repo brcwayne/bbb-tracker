@@ -206,6 +206,7 @@ export interface Person {
   ad: string
   haneUyesi: boolean
   aktif: boolean
+  kaynak?: string
 }
 
 export interface Debt {

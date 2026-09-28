@@ -144,4 +144,116 @@ describe('KisiDetay sayfası', () => {
     const { container } = render(KisiDetay, { dataset: emptyDataset, param: 'YENI', today: '2026-09-20' })
     expect(container.textContent).toMatch(/hareket yok|işlem yok|kayıt yok/i)
   })
+
+  it('isim düzenleme butonuna tıklayınca düzenleme formunu açar ve adı günceller', async () => {
+    const { fireEvent } = await import('@testing-library/svelte')
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+
+    let savedPeople: any[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (name: string, data: unknown) => {
+        if (name === 'people') savedPeople = data as any[]
+      },
+    }
+
+    const { getByRole, getByLabelText } = render(KisiDetay, {
+      props: { dataset: ds, source, store, param: 'ZEK', today: '2026-09-20' },
+    })
+
+    const editBtn = getByRole('button', { name: /Düzenle/i })
+    await fireEvent.click(editBtn)
+
+    const input = getByLabelText(/Kişi Adı/i)
+    await fireEvent.input(input, { target: { value: 'Zekeriya' } })
+
+    const saveBtn = getByRole('button', { name: /Kaydet/i })
+    await fireEvent.click(saveBtn)
+
+    expect(savedPeople).toBeDefined()
+    const updated = savedPeople!.find((p) => p.kod === 'ZEK')
+    expect(updated).toBeDefined()
+    expect(updated.ad).toBe('Zekeriya')
+    expect(updated.kod).toBe('ZEK')
+  })
+
+  it('ilişkili kaydı olan kişi silinmek istendiğinde uyarı verir ve pasife alma sunar', async () => {
+    const { fireEvent } = await import('@testing-library/svelte')
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+
+    let savedPeople: any[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (name: string, data: unknown) => {
+        if (name === 'people') savedPeople = data as any[]
+      },
+    }
+
+    const { getByRole, container } = render(KisiDetay, {
+      props: { dataset: ds, source, store, param: 'ZEK', today: '2026-09-20' },
+    })
+
+    const deleteBtn = getByRole('button', { name: /Kişiyi Sil/i })
+    await fireEvent.click(deleteBtn)
+
+    expect(container.textContent).toMatch(/silinemez|kayıt.*bulunuyor/i)
+
+    const pasifBtn = getByRole('button', { name: /Pasife Al/i })
+    await fireEvent.click(pasifBtn)
+
+    expect(savedPeople).toBeDefined()
+    const updated = savedPeople!.find((p) => p.kod === 'ZEK')
+    expect(updated.aktif).toBe(false)
+  })
+
+  it('hiçbir kaydı olmayan kişiyi iki adımlı onayla siler', async () => {
+    const { fireEvent } = await import('@testing-library/svelte')
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const emptyPersonDs: Dataset = {
+      ...fixture,
+      people: [
+        { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+        { kod: 'BOS', ad: 'Boş Kişi', haneUyesi: false, aktif: true },
+      ],
+      personalTx: [],
+      paymentPlans: [],
+      recurringRules: [],
+      personalAccounts: [],
+      debts: [],
+      brokers: [],
+    }
+
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(emptyPersonDs) })
+
+    let savedPeople: any[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(emptyPersonDs),
+      save: async (name: string, data: unknown) => {
+        if (name === 'people') savedPeople = data as any[]
+      },
+    }
+
+    const { getByRole, container } = render(KisiDetay, {
+      props: { dataset: emptyPersonDs, source, store, param: 'BOS', today: '2026-09-20' },
+    })
+
+    const deleteBtn = getByRole('button', { name: /Kişiyi Sil/i })
+    await fireEvent.click(deleteBtn)
+
+    expect(container.textContent).toMatch(/silmek istediğin/i)
+
+    const confirmBtn = getByRole('button', { name: /Evet, Sil/i })
+    await fireEvent.click(confirmBtn)
+
+    expect(savedPeople).toBeDefined()
+    expect(savedPeople!.some((p) => p.kod === 'BOS')).toBe(false)
+  })
 })

@@ -1,8 +1,10 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, PaymentPlan, PersonalTx, RecurringRule } from '../../lib/data/types'
+  import type { Dataset, PaymentPlan, PersonalTx, RecurringRule, Person } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
+  import { updateRecord, deleteRecord, load } from '../../lib/data/store'
+  import { ConflictError } from '../../lib/data/drive'
   import { ownerLedger, SAHIPSIZ } from '../../lib/data/owners'
   import { tryFmt, usd } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
@@ -20,6 +22,16 @@
     param?: string
     today?: string
   } = $props()
+
+  const isDrive = $derived(Boolean(source?.save))
+  let duzenlemeAcik = $state(false)
+  let yeniAd = $state('')
+  let editError = $state<string | null>(null)
+  let editSaving = $state(false)
+
+  let silmeAcik = $state(false)
+  let deleteError = $state<string | null>(null)
+  let deleteSaving = $state(false)
 
   const kod = $derived(param ?? '')
   const people = $derived(dataset?.people ?? [])
@@ -63,6 +75,99 @@
   const personRules = $derived<RecurringRule[]>(
     (dataset?.recurringRules ?? []).filter((r) => r.sahip === kod)
   )
+
+  const hasAccounts = $derived((dataset?.personalAccounts ?? []).some((a) => a.sahip === kod))
+  const hasBrokers = $derived((dataset?.brokers ?? []).some((b) => b.sahip === kod))
+  const hasDebts = $derived((dataset?.debts ?? []).some((d) => d.sahip === kod))
+  const relatedCount = $derived(
+    personRows.length +
+    personPlans.length +
+    personRules.length +
+    (hasAccounts ? 1 : 0) +
+    (hasBrokers ? 1 : 0) +
+    (hasDebts ? 1 : 0)
+  )
+
+  function startEdit() {
+    duzenlemeAcik = true
+    yeniAd = person?.ad ?? ''
+    editError = null
+  }
+
+  async function saveName() {
+    const ad = yeniAd.trim()
+    if (!ad) {
+      editError = 'Bir isim yaz.'
+      return
+    }
+    if (!source || !store || !person) return
+    editSaving = true
+    editError = null
+    try {
+      await updateRecord<Person>(
+        store,
+        source,
+        'people',
+        (p) => p.kod === kod,
+        { ...person, ad },
+        { allowImported: true },
+      )
+      duzenlemeAcik = false
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        try {
+          await load(store, source)
+        } catch {}
+        editError = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — tekrar dener misin?'
+      } else {
+        editError = e instanceof Error ? e.message : String(e)
+      }
+    } finally {
+      editSaving = false
+    }
+  }
+
+  async function pasifeAl(aktif: boolean) {
+    if (!source || !store || !person) return
+    deleteSaving = true
+    deleteError = null
+    try {
+      await updateRecord<Person>(
+        store,
+        source,
+        'people',
+        (p) => p.kod === kod,
+        { ...person, aktif },
+        { allowImported: true },
+      )
+      silmeAcik = false
+    } catch (e: any) {
+      deleteError = e instanceof Error ? e.message : String(e)
+    } finally {
+      deleteSaving = false
+    }
+  }
+
+  async function gercektenSil() {
+    if (!source || !store || !person) return
+    if (relatedCount > 0) return
+    deleteSaving = true
+    deleteError = null
+    try {
+      await deleteRecord<Person>(
+        store,
+        source,
+        'people',
+        (p) => p.kod === kod,
+        { allowImported: true },
+      )
+      window.location.hash = '#/h/kisiler'
+    } catch (e: any) {
+      deleteError = e instanceof Error ? e.message : String(e)
+    } finally {
+      deleteSaving = false
+    }
+  }
 
   function rowEffect(r: PersonalTx): { isaret: number; metin: string; label: string; sub: string } {
     if (r.tur === 'SAHIP_AKTARIM') {
@@ -150,8 +255,51 @@
 
   <div class="header-card">
     <div class="header-main">
-      <h2 class="person-title">{personName}</h2>
-      <span class="person-code">{kod}</span>
+      {#if duzenlemeAcik}
+        <form
+          class="edit-name-form"
+          onsubmit={(e) => {
+            e.preventDefault()
+            saveName()
+          }}
+        >
+          <input
+            bind:value={yeniAd}
+            aria-label="Kişi Adı"
+            placeholder="İsim"
+            disabled={editSaving}
+          />
+          <button type="submit" class="btn-primary-sm" disabled={editSaving || !yeniAd.trim()}>
+            Kaydet
+          </button>
+          <button
+            type="button"
+            class="btn-subtle"
+            disabled={editSaving}
+            onclick={() => (duzenlemeAcik = false)}
+          >
+            Vazgeç
+          </button>
+        </form>
+        {#if editError}<div class="error-msg">{editError}</div>{/if}
+      {:else}
+        <div class="title-row">
+          <h2 class="person-title">{personName}</h2>
+          {#if person?.aktif === false}
+            <span class="badge-pasif">Pasif</span>
+          {/if}
+          {#if isDrive && kod !== SAHIPSIZ}
+            <button
+              type="button"
+              class="btn-subtle"
+              onclick={startEdit}
+            >
+              Düzenle
+            </button>
+          {/if}
+        </div>
+        <span class="person-code">{kod}</span>
+      {/if}
     </div>
     <div class="bakiye-box">
       <span class="bakiye-label">Toplam Varlık</span>
@@ -166,6 +314,81 @@
       </div>
     </div>
   </div>
+
+  {#if isDrive && kod !== SAHIPSIZ && person}
+    <div class="person-actions-card">
+      {#if !silmeAcik}
+        <button
+          type="button"
+          class="btn-danger-ghost"
+          onclick={() => { silmeAcik = true; deleteError = null }}
+        >
+          Kişiyi Sil
+        </button>
+      {:else}
+        <div class="delete-confirm-box" role="alert">
+          {#if relatedCount > 0}
+            <p class="delete-warning">
+              Bu kişiye ait {relatedCount} ilişkili kayıt (işlem / hesap / taksit) bulunuyor.
+              Veri tutarlılığı için bu kayıtlar silinmeden kişi <strong>silinemez</strong>.
+            </p>
+            <div class="delete-btn-row">
+              {#if person.aktif !== false}
+                <button
+                  type="button"
+                  class="btn-warning-sm"
+                  disabled={deleteSaving}
+                  onclick={() => pasifeAl(false)}
+                >
+                  Pasife Al
+                </button>
+              {:else}
+                <button
+                  type="button"
+                  class="btn-primary-sm"
+                  disabled={deleteSaving}
+                  onclick={() => pasifeAl(true)}
+                >
+                  Aktifleştir
+                </button>
+              {/if}
+              <button
+                type="button"
+                class="btn-subtle"
+                disabled={deleteSaving}
+                onclick={() => (silmeAcik = false)}
+              >
+                Kapat
+              </button>
+            </div>
+          {:else}
+            <p class="delete-warning">
+              "{personName}" kişisini kalıcı olarak <strong>silmek istediğinden emin misin?</strong>
+            </p>
+            <div class="delete-btn-row">
+              <button
+                type="button"
+                class="btn-danger-sm"
+                disabled={deleteSaving}
+                onclick={gercektenSil}
+              >
+                Evet, Sil
+              </button>
+              <button
+                type="button"
+                class="btn-subtle"
+                disabled={deleteSaving}
+                onclick={() => (silmeAcik = false)}
+              >
+                Vazgeç
+              </button>
+            </div>
+          {/if}
+          {#if deleteError}<div class="error-msg">{deleteError}</div>{/if}
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Para Hareketleri Bölümü -->
   <section class="section-card">
@@ -382,5 +605,132 @@
   }
   .muted {
     color: var(--ink-soft);
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .badge-pasif {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+  }
+  .btn-subtle {
+    background: transparent;
+    border: 1px solid var(--hairline);
+    color: var(--ink-soft);
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-subtle:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--ink-soft);
+  }
+  .edit-name-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .edit-name-form input {
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    color: var(--ink);
+    padding: 0.4rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+    min-width: 160px;
+  }
+  .btn-primary-sm {
+    background: #238636;
+    color: #ffffff;
+    border: 1px solid rgba(240, 246, 252, 0.1);
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-primary-sm:hover:not(:disabled) {
+    background: #2ea043;
+  }
+  .person-actions-card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 0.9rem 1.25rem;
+  }
+  .btn-danger-ghost {
+    background: transparent;
+    color: var(--loss);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 0.35rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-danger-ghost:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--loss);
+  }
+  .delete-confirm-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .delete-warning {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--ink);
+    line-height: 1.4;
+  }
+  .delete-btn-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .btn-danger-sm {
+    background: var(--loss);
+    color: #ffffff;
+    border: 1px solid rgba(240, 246, 252, 0.1);
+    padding: 0.35rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-danger-sm:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .btn-warning-sm {
+    background: #d97706;
+    color: #ffffff;
+    border: 1px solid rgba(240, 246, 252, 0.1);
+    padding: 0.35rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-warning-sm:hover:not(:disabled) {
+    background: #b45309;
+  }
+  .error-msg {
+    font-size: 0.8rem;
+    color: var(--loss);
+    margin-top: 0.25rem;
   }
 </style>

@@ -34,6 +34,7 @@
       (k) => k !== SAHIPSIZ || Object.values(ledger.owners[k]).some((v) => v !== 0),
     ),
   )
+  const pasifPeople = $derived(people.filter((p) => p.aktif === false && !ownerKods.includes(p.kod)))
   const gaps = $derived(Object.entries(ledger.gap).filter(([, v]) => v !== 0))
 
   let aktarimAcik = $state(false)
@@ -103,8 +104,19 @@
       <h3 class="section-title">Kişi Bakiyeleri</h3>
       <div class="balances-grid">
         {#each ownerKods as kod (kod)}
-          <a href="#/h/kisiler/{encodeURIComponent(kod)}" class="balance-card" data-testid="owner-card">
-            <span class="person-name">{nameOf(kod)}</span>
+          {@const p = people.find((item) => item.kod === kod)}
+          <a
+            href="#/h/kisiler/{encodeURIComponent(kod)}"
+            class="balance-card"
+            class:pasif={p?.aktif === false}
+            data-testid="owner-card"
+          >
+            <div class="card-head">
+              <span class="person-name">{nameOf(kod)}</span>
+              {#if p?.aktif === false}
+                <span class="badge-pasif">Pasif</span>
+              {/if}
+            </div>
             <div class="amounts">
               {#each Object.entries(ledger.owners[kod]) as [cur, v] (cur)}
                 <span class="fig-val num" class:loss={v < 0} class:gain={v > 0}>{fmt(v, cur)}</span>
@@ -115,6 +127,29 @@
           </a>
         {/each}
       </div>
+
+      {#if pasifPeople.length > 0}
+        <div class="pasif-section">
+          <h4 class="pasif-title">Pasif Kişiler</h4>
+          <div class="balances-grid">
+            {#each pasifPeople as p (p.kod)}
+              <a
+                href="#/h/kisiler/{encodeURIComponent(p.kod)}"
+                class="balance-card pasif"
+                data-testid="owner-card"
+              >
+                <div class="card-head">
+                  <span class="person-name">{p.ad}</span>
+                  <span class="badge-pasif">Pasif</span>
+                </div>
+                <div class="amounts">
+                  <span class="fig-val num muted">0 ₺</span>
+                </div>
+              </a>
+            {/each}
+          </div>
+        </div>
+      {/if}
 
       {#if gaps.length}
         <div class="error-banner" role="alert">
@@ -234,6 +269,34 @@
   }
   .balance-card:hover {
     border-color: var(--gold);
+  }
+  .balance-card.pasif {
+    opacity: 0.65;
+  }
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .badge-pasif {
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+  }
+  .pasif-section {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px dashed var(--hairline);
+  }
+  .pasif-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin: 0 0 0.8rem 0;
   }
   .person-name {
     font-size: 1.05rem;
