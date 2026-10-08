@@ -181,12 +181,13 @@ describe('Portfoyler', () => {
 
   it('displays — for Yıllık ≈ % when gunSayisi < 30', async () => {
     const ds = structuredClone(fixture)
+    const todayIso = new Date().toISOString().slice(0, 10)
     // Create a new portfolio whose trades are less than 30 days old
     ds.portfolios.push({ kod: 'BETA', ad: 'Beta Yeni', aktif: true })
     ds.transactions.push(
       {
         id: 't_b1',
-        tarih: '2026-09-01',
+        tarih: todayIso,
         hesap: 'MIDAS',
         portfoy: 'BETA',
         enstruman: 'ASTOR',
@@ -205,7 +206,7 @@ describe('Portfoyler', () => {
       },
       {
         id: 't_b2',
-        tarih: '2026-09-05',
+        tarih: todayIso,
         hesap: 'MIDAS',
         portfoy: 'BETA',
         enstruman: 'ASTOR',

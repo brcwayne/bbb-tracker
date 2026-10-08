@@ -108,4 +108,28 @@ describe('LocalFileSource', () => {
     await source.load()
     expect(source.lastModified).toBe(new Date('Sat, 12 Sep 2026 11:20:00 GMT').toISOString())
   })
+
+  it('geliştirme modunda save POST isteği atar', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200 } as Response))
+    vi.stubGlobal('fetch', fetchMock)
+    const source = new LocalFileSource('./data')
+    expect(source.save).toBeDefined()
+    await source.save!('personal_tx', [{ id: 'pt_1' }])
+    expect(fetchMock).toHaveBeenCalledWith(
+      './data/personal_tx.json',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([{ id: 'pt_1' }], null, 2),
+      }),
+    )
+    expect(source.lastModified).toBeTruthy()
+  })
+
+  it('save başarısız olursa hata atar', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: false, status: 500 } as Response)))
+    const source = new LocalFileSource('./data')
+    await expect(source.save!('personal_tx', [])).rejects.toThrow(/kaydedilemedi \(500\)/)
+  })
 })
+

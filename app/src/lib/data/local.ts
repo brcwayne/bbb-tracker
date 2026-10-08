@@ -4,7 +4,21 @@ import { type DataSource, NAMES, PERSONAL_NAMES, PERSONAL_KEY_MAP } from './sour
 export class LocalFileSource implements DataSource {
   readonly id = 'local' as const
   lastModified: string | null = null
-  constructor(private base = './data') {}
+  save?: (name: string, data: unknown) => Promise<void>
+
+  constructor(private base = './data') {
+    if (import.meta.env?.DEV) {
+      this.save = async (name: string, data: unknown): Promise<void> => {
+        const res = await fetch(`${this.base}/${name}.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data, null, 2),
+        })
+        if (!res.ok) throw new Error(`data/${name}.json kaydedilemedi (${res.status})`)
+        this.lastModified = new Date().toISOString()
+      }
+    }
+  }
 
   async load(): Promise<Dataset> {
     let latestMtime: number | null = null

@@ -162,13 +162,13 @@
             <th>Yön</th>
             <th>Varlık</th>
             <th>Kurum</th>
-            <th>Portföy</th>
+            <th class="col-portfoy">Portföy</th>
             <th class="r">Adet</th>
             <th class="r">Fiyat</th>
             <th class="r">Tutar ₺</th>
             <th class="r">Tutar $</th>
             <th class="r">K/Z</th>
-            <th aria-label="işlemler"></th>
+            <th class="act" aria-label="işlemler"></th>
           </tr>
         </thead>
         <tbody>
@@ -177,12 +177,17 @@
             <tr class:editing={editing?.id === t.id} class:deleting={deleteTarget?.id === t.id}>
               <td class="nowrap">{dateShort(t.tarih)}</td>
               <td class:pos={t.yon === 'AL'} class:neg={t.yon === 'SAT'}>{t.yon}</td>
-              <td>
-                {instName(t.enstruman)}
+              <td class="col-varlik">
+                <span class="varlik-kod">{instName(t.enstruman)}</span>
                 {#if instName(t.enstruman) !== t.enstruman}<span class="sub">{t.enstruman}</span>{/if}
               </td>
-              <td>{t.hesap || DASH}</td>
-              <td>{t.portfoy || DASH}</td>
+              <td class="col-kurum">
+                <span>{t.hesap || DASH}</span>
+                {#if t.portfoy && t.portfoy !== t.hesap}
+                  <span class="sub-portfoy">{t.portfoy}</span>
+                {/if}
+              </td>
+              <td class="col-portfoy">{t.portfoy || DASH}</td>
               <td class="r num">{lot(t.lot)}</td>
               <td class="r num">{fiyatStr(t)}</td>
               <td class="r num">
@@ -279,9 +284,12 @@
 
 <style>
   .log {
-    padding: 1.25rem 1.25rem 2rem;
-    max-width: min(1100px, 96vw);
+    padding: 1rem 1rem 3rem;
+    max-width: min(1440px, 98vw);
+    width: 100%;
     margin: 0 auto;
+    box-sizing: border-box;
+    min-width: 0;
   }
   .ok {
     color: var(--gain);
@@ -435,28 +443,39 @@
     gap: 0.5rem;
   }
   .tbl-wrap {
+    width: 100%;
+    max-width: 100%;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    background: var(--surface);
+    box-sizing: border-box;
   }
   table {
     width: 100%;
     border-collapse: collapse;
     color: var(--ink);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
   }
   th,
   td {
-    padding: 0.5rem 0.7rem;
+    padding: 0.4rem 0.55rem;
     border-bottom: 1px solid var(--hairline);
     text-align: left;
     white-space: nowrap;
     transition: background-color 120ms ease;
   }
   thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-2);
+    z-index: 2;
     color: var(--ink-soft);
     font-weight: 600;
-    font-size: 0.8125rem;
+    font-size: 0.8rem;
     letter-spacing: 0.02em;
-    border-bottom-color: var(--ink-soft);
+    border-bottom: 2px solid var(--hairline);
   }
   th.r,
   td.r {
@@ -492,20 +511,21 @@
   }
   td .sub {
     color: var(--ink-soft);
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     margin-left: 0.35rem;
   }
   td .kur {
     display: block;
     color: var(--ink-soft);
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     font-weight: 400;
+    line-height: 1.1;
   }
   .kz-cell {
     white-space: nowrap;
   }
   .kz-pct {
-    font-size: 0.8125rem;
+    font-size: 0.78rem;
     margin-left: 0.25rem;
     opacity: 0.85;
   }
@@ -523,10 +543,10 @@
     background: var(--surface);
     color: var(--ink);
     font: inherit;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     line-height: 1;
-    padding: 0.25rem 0.45rem;
-    margin-left: 0.3rem;
+    padding: 0.2rem 0.4rem;
+    margin-left: 0.25rem;
     cursor: pointer;
   }
   .icon.danger {
@@ -534,6 +554,55 @@
   }
   .lock {
     color: var(--ink-soft);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
+  }
+  .sub-portfoy {
+    display: none;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    background: var(--surface-2);
+    padding: 0.05rem 0.3rem;
+    border-radius: 3px;
+    margin-left: 0.3rem;
+    border: 1px solid var(--hairline);
+  }
+
+  @media (max-width: 1024px) {
+    .log {
+      padding: 0.75rem 0.75rem 2.5rem;
+    }
+    table {
+      font-size: 0.8125rem;
+    }
+    th,
+    td {
+      padding: 0.35rem 0.45rem;
+    }
+    .col-portfoy {
+      display: none;
+    }
+    .sub-portfoy {
+      display: inline-block;
+    }
+    .filters {
+      gap: 0.6rem;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .log {
+      padding: 0.5rem 0.5rem 2.5rem;
+    }
+    table {
+      font-size: 0.775rem;
+    }
+    th,
+    td {
+      padding: 0.3rem 0.35rem;
+    }
+    .icon {
+      padding: 0.15rem 0.3rem;
+      font-size: 0.75rem;
+    }
   }
 </style>

@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, PersonalTx } from '../../lib/data/types'
+  import type { Dataset, PersonalTx, Cashflow } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord, updateRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
-  import { newPersonalId } from '../../lib/data/ids'
+  import { newPersonalId, newCashflowId } from '../../lib/data/ids'
+  import { settings } from '../../lib/settings.svelte'
 
   let {
     dataset,
@@ -43,9 +44,32 @@
   const accounts = $derived(
     (dataset?.personalAccounts ?? []).filter((a) => a.aktif !== false),
   )
+  const nakitAccounts = $derived(
+    accounts.filter((a) => a.tur === 'NAKIT'),
+  )
+  const bankaAccounts = $derived(
+    accounts.filter((a) => a.tur === 'BANKA'),
+  )
+  const kartAccounts = $derived(
+    accounts.filter((a) => a.tur === 'KREDI_KARTI'),
+  )
+  const otherAccounts = $derived(
+    accounts.filter((a) => a.tur !== 'NAKIT' && a.tur !== 'BANKA' && a.tur !== 'KREDI_KARTI'),
+  )
+  const brokers = $derived(
+    (dataset?.brokers ?? []).filter((b) => b.aktif !== false),
+  )
+
+  function isBroker(kod: string): boolean {
+    return brokers.some((b) => b.kod === kod)
+  }
 
   function accName(kod: string): string {
-    return accounts.find((a) => a.kod === kod)?.ad ?? kod
+    const acc = accounts.find((a) => a.kod === kod)
+    if (acc) return acc.ad
+    const brk = brokers.find((b) => b.kod === kod)
+    if (brk) return brk.ad
+    return kod
   }
 
   function dogrula(): string | null {
@@ -53,10 +77,19 @@
     if (kaynak === hedef) return 'Kaynak ve hedef aynı hesap olamaz.'
     const t = Number(tutarText)
     if (!Number.isFinite(t) || t <= 0) return 'Tutar sıfırdan büyük olmalı.'
-    const k = accounts.find((a) => a.kod === kaynak)
-    const h = accounts.find((a) => a.kod === hedef)
-    if (k && h && k.paraBirimi !== h.paraBirimi)
-      return 'İki hesabın para birimi farklı — bu transfer tek satırla yazılamaz.'
+
+    const kIsBroker = isBroker(kaynak)
+    const hIsBroker = isBroker(hedef)
+    if (kIsBroker && hIsBroker) {
+      return 'Yatırım kurumları arası nakit transferi için Yatırım > Nakit Hareketi formunu kullanın.'
+    }
+
+    if (!kIsBroker && !hIsBroker) {
+      const k = accounts.find((a) => a.kod === kaynak)
+      const h = accounts.find((a) => a.kod === hedef)
+      if (k && h && k.paraBirimi !== h.paraBirimi)
+        return 'İki hesabın para birimi farklı — bu transfer tek satırla yazılamaz.'
+    }
     return null
   }
 
@@ -83,17 +116,28 @@
           allowKaynak: ['telegram', 'manual'],
         })
       } else {
+        const kIsBroker = isBroker(kaynak)
+        const hIsBroker = isBroker(hedef)
+        const owner =
+          (!kIsBroker ? accounts.find((a) => a.kod === kaynak)?.sahip : null) ??
+          (!hIsBroker ? accounts.find((a) => a.kod === hedef)?.sahip : null) ??
+          'ENIS'
+        const currency =
+          (!kIsBroker ? accounts.find((a) => a.kod === kaynak)?.paraBirimi : null) ??
+          (!hIsBroker ? accounts.find((a) => a.kod === hedef)?.paraBirimi : null) ??
+          'TRY'
+
         const satir: PersonalTx = {
           id: newPersonalId(),
           tarih: tarihText,
           tur: 'TRANSFER',
           tutar: Number(tutarText),
-          paraBirimi: (accounts.find((a) => a.kod === kaynak)?.paraBirimi ?? 'TRY') as 'TRY' | 'USD',
+          paraBirimi: currency as 'TRY' | 'USD',
           kategori: 'transfer',
           aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
           hesap: kaynak,
           karsiHesap: hedef,
-          sahip: accounts.find((a) => a.kod === kaynak)?.sahip ?? 'ENIS',
+          sahip: owner,
           taksitPlaniId: null,
           taksitNo: null,
           taksitToplam: null,
@@ -102,6 +146,45 @@
           olusturulma: new Date().toISOString(),
         }
         await appendRecord<PersonalTx>(store, source, 'personal_tx', satir)
+
+        // Köprü transfer: Harcama hesabı <-> Yatırım kurumu
+        if (!kIsBroker && hIsBroker) {
+          // Sermaye girişi (YATIRMA)
+          const tutarVal = Number(tutarText)
+          const rate = settings.rate && settings.rate > 0 ? settings.rate : 1
+          const cf: Cashflow = {
+            id: newCashflowId(),
+            tarih: tarihText,
+            hesap: hedef,
+            portfoy: null,
+            tur: 'YATIRMA',
+            enstruman: null,
+            tutar_tl: currency === 'TRY' ? tutarVal : null,
+            kur: currency === 'TRY' ? rate : null,
+            tutar_usd: currency === 'USD' ? tutarVal : Number((tutarVal / rate).toFixed(2)),
+            aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
+            kaynak: 'manual',
+          }
+          await appendRecord<Cashflow>(store, source, 'cashflows', cf)
+        } else if (kIsBroker && !hIsBroker) {
+          // Sermaye çıkışı (ÇEKME)
+          const tutarVal = Number(tutarText)
+          const rate = settings.rate && settings.rate > 0 ? settings.rate : 1
+          const cf: Cashflow = {
+            id: newCashflowId(),
+            tarih: tarihText,
+            hesap: kaynak,
+            portfoy: null,
+            tur: 'CEKME',
+            enstruman: null,
+            tutar_tl: currency === 'TRY' ? tutarVal : null,
+            kur: currency === 'TRY' ? rate : null,
+            tutar_usd: currency === 'USD' ? tutarVal : Number((tutarVal / rate).toFixed(2)),
+            aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
+            kaynak: 'manual',
+          }
+          await appendRecord<Cashflow>(store, source, 'cashflows', cf)
+        }
       }
       onSaved?.()
     } catch (e: any) {
@@ -139,9 +222,41 @@
         <label for="t-kaynak">Kaynak Hesap</label>
         <select id="t-kaynak" aria-label="Kaynak Hesap" bind:value={kaynak}>
           <option value="">Seçiniz</option>
-          {#each accounts as a}
-            <option value={a.kod}>{a.ad} ({a.paraBirimi})</option>
-          {/each}
+          {#if nakitAccounts.length > 0}
+            <optgroup label="── 💵 Nakit Hesapları ──">
+              {#each nakitAccounts as a}
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+              {/each}
+            </optgroup>
+          {/if}
+          {#if bankaAccounts.length > 0}
+            <optgroup label="── 🏦 Banka Hesapları ──">
+              {#each bankaAccounts as a}
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+              {/each}
+            </optgroup>
+          {/if}
+          {#if kartAccounts.length > 0}
+            <optgroup label="── 💳 Kredi Kartları ──">
+              {#each kartAccounts as a}
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+              {/each}
+            </optgroup>
+          {/if}
+          {#if otherAccounts.length > 0}
+            <optgroup label="── Diğer Hesaplar ──">
+              {#each otherAccounts as a}
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+              {/each}
+            </optgroup>
+          {/if}
+          {#if brokers.length > 0}
+            <optgroup label="── 📈 Yatırım Hesapları (Aracı Kurumlar) ──">
+              {#each brokers as b}
+                <option value={b.kod}>📈 {b.ad}</option>
+              {/each}
+            </optgroup>
+          {/if}
         </select>
       </div>
 
@@ -149,12 +264,55 @@
         <label for="t-hedef">Hedef Hesap</label>
         <select id="t-hedef" aria-label="Hedef Hesap" bind:value={hedef}>
           <option value="">Seçiniz</option>
-          {#each accounts as a}
-            <option value={a.kod}>{a.ad} ({a.paraBirimi})</option>
-          {/each}
+          {#if nakitAccounts.length > 0}
+            <optgroup label="── 💵 Nakit Hesapları ──">
+              {#each nakitAccounts as a}
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+              {/each}
+            </optgroup>
+          {/if}
+          {#if bankaAccounts.length > 0}
+            <optgroup label="── 🏦 Banka Hesapları ──">
+              {#each bankaAccounts as a}
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+              {/each}
+            </optgroup>
+          {/if}
+          {#if kartAccounts.length > 0}
+            <optgroup label="── 💳 Kredi Kartları ──">
+              {#each kartAccounts as a}
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+              {/each}
+            </optgroup>
+          {/if}
+          {#if otherAccounts.length > 0}
+            <optgroup label="── Diğer Hesaplar ──">
+              {#each otherAccounts as a}
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+              {/each}
+            </optgroup>
+          {/if}
+          {#if brokers.length > 0}
+            <optgroup label="── 📈 Yatırım Hesapları (Aracı Kurumlar) ──">
+              {#each brokers as b}
+                <option value={b.kod}>📈 {b.ad}</option>
+              {/each}
+            </optgroup>
+          {/if}
         </select>
       </div>
     </div>
+
+    {#if isBroker(kaynak) || isBroker(hedef)}
+      <div class="alert-info">
+        📈 <strong>Köprü Transfer:</strong>
+        {#if isBroker(hedef)}
+          <span><strong>{accName(hedef)}</strong> yatırım hesabınıza otomatik <em>sermaye girişi (YATIRMA)</em> kaydı eklenecektir.</span>
+        {:else}
+          <span><strong>{accName(kaynak)}</strong> yatırım hesabınızdan otomatik <em>sermaye çıkışı (ÇEKME)</em> kaydı eklenecektir.</span>
+        {/if}
+      </div>
+    {/if}
 
     <div class="row">
       <div class="field flex-2">
@@ -243,6 +401,16 @@
     padding: 0.6rem 0.8rem;
     border-radius: 6px;
     font-size: 0.85rem;
+  }
+
+  .alert-info {
+    background: rgba(56, 139, 253, 0.12);
+    border: 1px solid rgba(56, 139, 253, 0.35);
+    color: #58a6ff;
+    padding: 0.65rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    line-height: 1.4;
   }
 
   form {

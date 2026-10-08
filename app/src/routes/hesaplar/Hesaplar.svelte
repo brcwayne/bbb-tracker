@@ -7,6 +7,7 @@
   import { tryFmt, usd } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HesapFormu from './HesapFormu.svelte'
+  import TransferFormu from './TransferFormu.svelte'
 
   let {
     dataset,
@@ -25,6 +26,7 @@
   let pasifDahil = $state(false)
   let duzenlemeModu = $state(false)
   let yeniHesapAcik = $state(false)
+  let transferAcik = $state(false)
   let duzenlenenHesap = $state<PersonalAccount | null>(null)
 
   const accounts = $derived(dataset?.personalAccounts ?? [])
@@ -53,6 +55,15 @@
       <button
         type="button"
         class="head-btn"
+        class:active={transferAcik}
+        aria-label="Transfer yap"
+        title="Hesaplar Arası Transfer"
+        disabled={!isDrive}
+        onclick={() => { transferAcik = !transferAcik; yeniHesapAcik = false; duzenlenenHesap = null }}
+      >⇄</button>
+      <button
+        type="button"
+        class="head-btn"
         class:active={duzenlemeModu}
         aria-label="Hesapları düzenle"
         disabled={!isDrive}
@@ -63,10 +74,22 @@
         class="head-btn add"
         aria-label="Hesap ekle"
         disabled={!isDrive}
-        onclick={() => { yeniHesapAcik = true }}
+        onclick={() => { yeniHesapAcik = true; transferAcik = false }}
       >+</button>
     </div>
   </header>
+
+  {#if transferAcik && dataset}
+    <div class="form-modal">
+      <TransferFormu
+        {dataset}
+        {source}
+        {store}
+        onSaved={() => { transferAcik = false }}
+        onCancel={() => { transferAcik = false }}
+      />
+    </div>
+  {/if}
 
   {#if (yeniHesapAcik || duzenlenenHesap) && dataset}
     <div class="form-modal">

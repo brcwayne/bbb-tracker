@@ -176,4 +176,127 @@ describe('TransferFormu', () => {
     ;(getByText(/vazgeç/i) as HTMLButtonElement).click()
     expect(onCancel).toHaveBeenCalled()
   })
+
+  it('aracı kurum hedef seçildiğinde hem personal_tx hem de cashflows YATIRMA satırı yazar', async () => {
+    const calls: Record<string, any> = {}
+    const save = vi.fn(async (name: string, data: unknown) => {
+      calls[name] = data
+    })
+    const onSaved = vi.fn()
+    const dsWithBroker = {
+      ...fixture,
+      brokers: [{ kod: 'MIDAS', ad: 'Midas', tur: 'BROKER', sahip: 'ENIS', aktif: true }],
+    }
+    const store = writable<AppState>({ status: 'ready', dataset: dsWithBroker })
+    const { container, getByText } = render(TransferFormu, {
+      dataset: dsWithBroker,
+      store,
+      source: { id: 'drive', load: async () => dsWithBroker, save },
+      kaynakHesap: 'GARANTI-BANKA',
+      hedefHesap: 'MIDAS',
+      tarih: '2026-09-08',
+      onSaved,
+    })
+
+    expect(container.textContent).toMatch(/Köprü Transfer/i)
+    const tutar = container.querySelector('#t-tutar') as HTMLInputElement
+    tutar.value = '48000'
+    tutar.dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+
+    ;(getByText(/kaydet/i) as HTMLButtonElement).click()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(save).toHaveBeenCalledWith('personal_tx', expect.anything())
+    expect(save).toHaveBeenCalledWith('cashflows', expect.anything())
+
+    const ptxList = calls['personal_tx']
+    const eklenenPtx = ptxList[ptxList.length - 1]
+    expect(eklenenPtx).toMatchObject({
+      tur: 'TRANSFER',
+      tutar: 48000,
+      hesap: 'GARANTI-BANKA',
+      karsiHesap: 'MIDAS',
+    })
+
+    const cfList = calls['cashflows']
+    const eklenenCf = cfList[cfList.length - 1]
+    expect(eklenenCf).toMatchObject({
+      tur: 'YATIRMA',
+      hesap: 'MIDAS',
+      tutar_tl: 48000,
+    })
+    expect(eklenenCf.id).toMatch(/^c_[0-9a-f]{16}$/)
+    expect(onSaved).toHaveBeenCalled()
+  })
+
+  it('aracı kurum kaynak seçildiğinde hem personal_tx hem de cashflows CEKME satırı yazar', async () => {
+    const calls: Record<string, any> = {}
+    const save = vi.fn(async (name: string, data: unknown) => {
+      calls[name] = data
+    })
+    const dsWithBroker = {
+      ...fixture,
+      brokers: [{ kod: 'MIDAS', ad: 'Midas', tur: 'BROKER', sahip: 'ENIS', aktif: true }],
+    }
+    const store = writable<AppState>({ status: 'ready', dataset: dsWithBroker })
+    const { container, getByText } = render(TransferFormu, {
+      dataset: dsWithBroker,
+      store,
+      source: { id: 'drive', load: async () => dsWithBroker, save },
+      kaynakHesap: 'MIDAS',
+      hedefHesap: 'GARANTI-BANKA',
+      tarih: '2026-09-08',
+    })
+
+    expect(container.textContent).toMatch(/Köprü Transfer/i)
+    const tutar = container.querySelector('#t-tutar') as HTMLInputElement
+    tutar.value = '10000'
+    tutar.dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+
+    ;(getByText(/kaydet/i) as HTMLButtonElement).click()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(save).toHaveBeenCalledWith('personal_tx', expect.anything())
+    expect(save).toHaveBeenCalledWith('cashflows', expect.anything())
+
+    const cfList = calls['cashflows']
+    const eklenenCf = cfList[cfList.length - 1]
+    expect(eklenenCf).toMatchObject({
+      tur: 'CEKME',
+      hesap: 'MIDAS',
+      tutar_tl: 10000,
+    })
+  })
+
+  it('iki aracı kurum seçildiğinde uyarır ve kaydetmez', async () => {
+    const save = vi.fn()
+    const dsWithBrokers = {
+      ...fixture,
+      brokers: [
+        { kod: 'MIDAS', ad: 'Midas', tur: 'BROKER', sahip: 'ENIS', aktif: true },
+        { kod: 'GARAN', ad: 'Garanti Yatırım', tur: 'BROKER', sahip: 'ENIS', aktif: true },
+      ],
+    }
+    const store = writable<AppState>({ status: 'ready', dataset: dsWithBrokers })
+    const { container, getByText } = render(TransferFormu, {
+      dataset: dsWithBrokers,
+      store,
+      source: { id: 'drive', load: async () => dsWithBrokers, save },
+      kaynakHesap: 'MIDAS',
+      hedefHesap: 'GARAN',
+    })
+
+    const tutar = container.querySelector('#t-tutar') as HTMLInputElement
+    tutar.value = '5000'
+    tutar.dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+
+    ;(getByText(/kaydet/i) as HTMLButtonElement).click()
+    await Promise.resolve()
+
+    expect(save).not.toHaveBeenCalled()
+    expect(container.textContent).toMatch(/kurumları arası/i)
+  })
 })

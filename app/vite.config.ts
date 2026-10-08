@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
@@ -22,6 +22,29 @@ const serveRepoData = {
     server.middlewares.use((req, res, next) => {
       if (!req.url?.startsWith('/data/')) return next()
       const f = resolve(__dirname, '..', req.url.slice(1).split('?')[0])
+
+      if (req.method === 'POST' || req.method === 'PUT') {
+        let body = ''
+        req.on('data', (chunk: Buffer | string) => {
+          body += chunk
+        })
+        req.on('end', () => {
+          try {
+            const parsed = JSON.parse(body)
+            mkdirSync(dirname(f), { recursive: true })
+            writeFileSync(f, JSON.stringify(parsed, null, 2) + '\n', 'utf8')
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: true }))
+          } catch (e: any) {
+            res.statusCode = 400
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: e.message || 'invalid json' }))
+          }
+        })
+        return
+      }
+
       if (!existsSync(f)) {
         res.statusCode = 404
         return res.end('not found')

@@ -98,4 +98,15 @@ describe('Hesaplar listesi', () => {
     const kisiGroup = container.querySelector('[data-group="KISI"]')!
     expect(kisiGroup.querySelector('.row-edit-btn')).toBeFalsy()
   })
+
+  it('Drive varsa transfer düğmesi transfer formunu açar', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { getByLabelText, container } = render(Hesaplar, { dataset: fixture, today: TODAY, source })
+    const btn = getByLabelText(/transfer yap/i) as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+    btn.click()
+    await Promise.resolve()
+    expect(container.textContent).toContain('Kaynak Hesap')
+    expect(container.textContent).toContain('Hedef Hesap')
+  })
 })

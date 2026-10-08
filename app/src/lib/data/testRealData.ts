@@ -15,6 +15,15 @@ export function hasRealData(): boolean {
 }
 
 function readJson<T>(name: string): T {
+  const canonicalName = name.replace('.json', '_canonical.json')
+  const fixturePath = path.resolve(process.cwd(), '../bbb-telegram-bot/tests/fixtures', canonicalName)
+  if (fs.existsSync(fixturePath)) {
+    return JSON.parse(fs.readFileSync(fixturePath, 'utf-8')) as T
+  }
+  const canonicalPath = path.join(DATA_DIR, canonicalName)
+  if (fs.existsSync(canonicalPath)) {
+    return JSON.parse(fs.readFileSync(canonicalPath, 'utf-8')) as T
+  }
   return JSON.parse(fs.readFileSync(path.join(DATA_DIR, name), 'utf-8')) as T
 }
 

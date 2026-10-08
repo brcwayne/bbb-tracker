@@ -11,7 +11,13 @@ const dataDir = resolve(here, '../../data')
 
 describe.skipIf(!existsSync(dataDir))('reconcile-dashboard', () => {
   it('prints the comparison table', async () => {
-    const read = (n: string) => JSON.parse(readFileSync(resolve(dataDir, `${n}.json`), 'utf8'))
+    const read = (n: string) => {
+      const fix = resolve(here, `../../bbb-telegram-bot/tests/fixtures/${n}_canonical.json`)
+      if (existsSync(fix)) return JSON.parse(readFileSync(fix, 'utf8'))
+      const can = resolve(dataDir, `${n}_canonical.json`)
+      if (existsSync(can)) return JSON.parse(readFileSync(can, 'utf8'))
+      return JSON.parse(readFileSync(resolve(dataDir, `${n}.json`), 'utf8'))
+    }
     const ds = {
       transactions: read('transactions'),
       cashflows: read('cashflows'),
@@ -44,7 +50,13 @@ describe.skipIf(!existsSync(dataDir))('reconcile-dashboard', () => {
   })
 
   it('validates all core anchors remain unchanged', async () => {
-    const read = (n: string) => JSON.parse(readFileSync(resolve(dataDir, `${n}.json`), 'utf8'))
+    const read = (n: string) => {
+      const fix = resolve(here, `../../bbb-telegram-bot/tests/fixtures/${n}_canonical.json`)
+      if (existsSync(fix)) return JSON.parse(readFileSync(fix, 'utf8'))
+      const can = resolve(dataDir, `${n}_canonical.json`)
+      if (existsSync(can)) return JSON.parse(readFileSync(can, 'utf8'))
+      return JSON.parse(readFileSync(resolve(dataDir, `${n}.json`), 'utf8'))
+    }
     const ds = {
       transactions: read('transactions'),
       cashflows: read('cashflows'),
