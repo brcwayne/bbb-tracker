@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest'
-import { accountBalances, accountGroups, cardStatement, monthMovements, netWorthBand, txDelta } from './accounts'
+import {
+  accountBalances,
+  accountGroups,
+  calculateDueDate,
+  cardStatement,
+  monthMovements,
+  netWorthBand,
+  shiftWeekend,
+  txDelta,
+} from './accounts'
 import type { Debt, PersonalAccount, PersonalTx } from './types'
 
 const tx = (o: Partial<PersonalTx>): PersonalTx => ({
@@ -256,7 +264,7 @@ describe('accountGroups', () => {
       tx({ id: 'a', hesap: 'GARANTI-DIJI', tutar: 1800, tarih: '2026-09-03' }),
     ], accounts, [], TODAY)
     const kart = g.find((x) => x.tur === 'KREDI_KARTI')!.satirlar[0]
-    expect(kart.kart).toEqual({ buAy: 1800, gelecekAy: 0, toplamBorc: -1800 })
+    expect(kart.kart).toMatchObject({ buAy: 1800, gelecekAy: 0, toplamBorc: -1800 })
   })
 
   it('hesap satırı detay adresine bağlanır', () => {
@@ -391,6 +399,59 @@ describe('monthMovements', () => {
     expect(out.kayitlar.find((r) => r.id === 'b')?.durum).toBe('planlandi')
     expect(out).toMatchObject({ giris: 0, cikis: 620, net: -620 })
     expect(out.gunler.has(5)).toBe(false)
+  })
+})
+
+describe('Haftasonu ve Son Ödeme Tarihi', () => {
+  it('hafta sonuna denk gelen son ödeme tarihini Pazartesiye öteler', () => {
+    // 2026-11-14 Cumartesi → 2026-11-16 Pazartesi
+    expect(shiftWeekend('2026-11-14')).toBe('2026-11-16')
+    // 2026-11-15 Pazar → 2026-11-16 Pazartesi
+    expect(shiftWeekend('2026-11-15')).toBe('2026-11-16')
+    // 2026-10-14 Çarşamba → değişmez
+    expect(shiftWeekend('2026-10-14')).toBe('2026-10-14')
+  })
+
+  it('calculateDueDate kesim ve son ödeme gününü birleştirir ve hafta sonunu kaydırır', () => {
+    // Kesim: 1, Son ödeme: 14. 2026-10-01 kesimi için son ödeme: 2026-10-14 (hafta içi)
+    expect(calculateDueDate('2026-10-01', 14, 1)).toBe('2026-10-14')
+    // 2026-11-01 kesimi için son ödeme: 2026-11-14 (Cumartesi) → 2026-11-16
+    expect(calculateDueDate('2026-11-01', 14, 1)).toBe('2026-11-16')
+  })
+
+  it('cardStatement ödenecek ekstre ve dönem içi harcamaları kişi bazında kırar', () => {
+    const sanalKart = {
+      kod: 'GARANTI-SANAL',
+      ad: 'Garanti Sanal',
+      tur: 'KREDI_KARTI' as const,
+      paraBirimi: 'TRY',
+      sahip: 'ENIS',
+      aktif: true,
+      hesapKesim: 1,
+      sonOdeme: 14,
+    }
+    const islemler = [
+      tx({ id: 'tx1', tarih: '2026-09-01', tutar: 803.66, hesap: 'GARANTI-SANAL', sahip: 'SELCUK' }),
+      tx({ id: 'tx2', tarih: '2026-09-01', tutar: 814.71, hesap: 'GARANTI-SANAL', sahip: 'SELCUK' }),
+      tx({ id: 'tx3', tarih: '2026-10-08', tutar: 1514.07, hesap: 'GARANTI-SANAL', sahip: 'SELCUK' }),
+    ]
+    const res = cardStatement(islemler, sanalKart, '2026-10-08')
+
+    // Ödenecek Ekstre (1 Eyl - 1 Eki arası, son ödeme 14 Ekim)
+    expect(res.odenecekEkstre).toBeDefined()
+    expect(res.odenecekEkstre!.kesimTarihi).toBe('2026-10-01')
+    expect(res.odenecekEkstre!.sonOdemeTarihi).toBe('2026-10-14')
+    expect(res.odenecekEkstre!.toplam).toBe(1618.37)
+    expect(res.odenecekEkstre!.sahipToplami['SELCUK']).toBe(1618.37)
+    expect(res.odenecekEkstre!.kayitlar.length).toBe(2)
+
+    // Dönem İçi (1 Eki - 1 Kas arası, son ödeme 16 Kasım)
+    expect(res.donemIci).toBeDefined()
+    expect(res.donemIci!.kesimTarihi).toBe('2026-11-01')
+    expect(res.donemIci!.sonOdemeTarihi).toBe('2026-11-16')
+    expect(res.donemIci!.toplam).toBe(1514.07)
+    expect(res.donemIci!.sahipToplami['SELCUK']).toBe(1514.07)
+    expect(res.donemIci!.kayitlar.length).toBe(1)
   })
 })
 

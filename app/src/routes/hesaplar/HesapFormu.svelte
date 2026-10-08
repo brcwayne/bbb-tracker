@@ -336,12 +336,14 @@
         <div class="row">
           <div class="field">
             <label for="h-kesim">Hesap Kesim Günü (1-31)</label>
-            <input id="h-kesim" aria-label="Hesap Kesim Günü" type="number" min="1" max="31" bind:value={kesim} />
+            <input id="h-kesim" aria-label="Hesap Kesim Günü" type="number" min="1" max="31" bind:value={kesim} placeholder="örn. 1" />
+            <small class="helper-text">Ekstrenin kapandığı gün</small>
           </div>
 
           <div class="field">
             <label for="h-sonodeme">Son Ödeme Günü (1-31)</label>
-            <input id="h-sonodeme" aria-label="Son Ödeme Günü" type="number" min="1" max="31" bind:value={sonOdemeText} />
+            <input id="h-sonodeme" aria-label="Son Ödeme Günü" type="number" min="1" max="31" bind:value={sonOdemeText} placeholder="örn. 14" />
+            <small class="helper-text">Hafta sonuna denk gelirse otomatik Pazartesi'ye sarkar</small>
           </div>
         </div>
       {/if}

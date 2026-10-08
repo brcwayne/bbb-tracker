@@ -59,33 +59,155 @@ function lastDayOf(y: number, m: number): number {
 
 /** An ISO date for `day` in month `m`, clamped to the month's real length —
  *  a cut day of 31 lands on the 30th in November and the 28th in February. */
-function clampedDate(y: number, m: number, day: number): string {
+export function clampedDate(y: number, m: number, day: number): string {
   const d = Math.min(day, lastDayOf(y, m))
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
-function shiftMonth(y: number, m: number, delta: number): [number, number] {
+export function shiftMonth(y: number, m: number, delta: number): [number, number] {
   const i = y * 12 + (m - 1) + delta
   return [Math.floor(i / 12), (i % 12) + 1]
 }
 
+/** If an ISO date (YYYY-MM-DD) lands on Saturday, roll to Monday (+2 days); if Sunday, roll to Monday (+1 day). */
+export function shiftWeekend(isoDate: string): string {
+  const dt = new Date(isoDate + 'T00:00:00Z')
+  const day = dt.getUTCDay() // 0 = Sun, 6 = Sat
+  if (day === 6) {
+    dt.setUTCDate(dt.getUTCDate() + 2)
+  } else if (day === 0) {
+    dt.setUTCDate(dt.getUTCDate() + 1)
+  }
+  return dt.toISOString().slice(0, 10)
+}
+
 /**
- * The card's two statement windows and its overall debt (spec §4.1).
+ * Calculates due date for a given cutoff date.
+ * If due day is on or after cut day, it stays in the cut month;
+ * otherwise it falls in the following month. Automatically rolls to Monday if weekend.
+ */
+export function calculateDueDate(cutDate: string, sonOdemeDay: number, kesimDay: number): string {
+  const cy = Number(cutDate.slice(0, 4))
+  const cm = Number(cutDate.slice(5, 7))
+  const [dy, dm] = sonOdemeDay >= kesimDay ? [cy, cm] : shiftMonth(cy, cm, 1)
+  const rawDue = clampedDate(dy, dm, sonOdemeDay)
+  return shiftWeekend(rawDue)
+}
+
+const TR_MONTHS = [
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+]
+
+export interface StatementPeriodInfo {
+  etiket: string
+  baslangicTarihi: string
+  kesimTarihi: string
+  sonOdemeTarihi?: string
+  toplam: number
+  odenen: number
+  kalan: number
+  sahipToplami: Record<string, number>
+  kayitlar: PersonalTx[]
+}
+
+export interface CardStatementResult {
+  buAy: number
+  gelecekAy: number
+  toplamBorc: number
+  odenecekEkstre?: StatementPeriodInfo
+  donemIci?: StatementPeriodInfo
+  ekstreler: StatementPeriodInfo[]
+}
+
+function buildPeriod(
+  rows: PersonalTx[],
+  account: PersonalAccount,
+  fromDate: string,
+  toDate: string,
+  kesim: number,
+  sonOdeme?: number,
+  etiket?: string,
+): StatementPeriodInfo {
+  const inPeriod = (t: string) => {
+    if (kesim === 1) return t >= fromDate && t < toDate
+    return t > fromDate && t <= toDate
+  }
+
+  const kayitlar: PersonalTx[] = []
+  let expenseSum = 0
+  let paymentSum = 0
+  const sahipToplami: Record<string, number> = {}
+
+  for (const r of rows) {
+    if (r.durum === 'planlandi') continue
+    const matchThis = r.hesap === account.kod
+    const isPayment = r.tur === 'TRANSFER' && r.karsiHesap === account.kod
+
+    if (!matchThis && !isPayment) continue
+    if (!inPeriod(r.tarih)) continue
+
+    kayitlar.push(r)
+
+    if (r.paraBirimi !== account.paraBirimi) continue
+
+    if (matchThis) {
+      if (r.tur === 'GIDER') {
+        expenseSum = round2(expenseSum + r.tutar)
+        const s = r.sahip || 'Diğer'
+        sahipToplami[s] = round2((sahipToplami[s] ?? 0) + r.tutar)
+      } else if (r.tur === 'GELIR') {
+        expenseSum = round2(expenseSum - r.tutar)
+        const s = r.sahip || 'Diğer'
+        sahipToplami[s] = round2((sahipToplami[s] ?? 0) - r.tutar)
+      } else if (r.tur === 'TRANSFER') {
+        expenseSum = round2(expenseSum + r.tutar)
+        const s = r.sahip || 'Diğer'
+        sahipToplami[s] = round2((sahipToplami[s] ?? 0) + r.tutar)
+      }
+    }
+
+    if (isPayment) {
+      paymentSum = round2(paymentSum + r.tutar)
+    }
+  }
+
+  kayitlar.sort((a, b) => b.tarih.localeCompare(a.tarih) || (b.olusturulma || '').localeCompare(a.olusturulma || ''))
+
+  const sonOdemeTarihi = sonOdeme != null ? calculateDueDate(toDate, sonOdeme, kesim) : undefined
+
+  const mIdx = Number(fromDate.slice(5, 7)) - 1
+  const defaultLabel = `${TR_MONTHS[mIdx] ?? ''} Ekstresi`
+
+  return {
+    etiket: etiket ?? defaultLabel,
+    baslangicTarihi: fromDate,
+    kesimTarihi: toDate,
+    sonOdemeTarihi,
+    toplam: round2(expenseSum),
+    odenen: round2(paymentSum),
+    kalan: round2(Math.max(0, expenseSum - paymentSum)),
+    sahipToplami,
+    kayitlar,
+  }
+}
+
+/**
+ * The card's statement windows, debt, and full statement breakdown.
  *
  * `toplamBorc` is the raw balance and is negative when money is owed.
  * `buAy` / `gelecekAy` are positive magnitudes of the amount to pay, which is
  * why the window sums are negated.
- *
- * With no `hesapKesim`, a cut day of 31 clamps to the last day of every month,
- * making the windows the calendar months exactly — the fallback needs no
- * separate branch.
+ * `odenecekEkstre` is the recently cut statement whose payment is due / pending.
+ * `donemIci` is the current open cycle cut in the next period.
  */
 export function cardStatement(
   rows: PersonalTx[],
   account: PersonalAccount,
   today: string,
-): { buAy: number; gelecekAy: number; toplamBorc: number } {
+): CardStatementResult {
   const kesim = account.hesapKesim ?? 31
+  const sonOdeme = account.sonOdeme
   const y = Number(today.slice(0, 4))
   const m = Number(today.slice(5, 7))
 
@@ -96,8 +218,13 @@ export function cardStatement(
     c0 = clampedDate(ny, nm, kesim)
   }
   const [py, pm] = shiftMonth(Number(c0.slice(0, 4)), Number(c0.slice(5, 7)), -1)
+  const [p2y, p2m] = shiftMonth(py, pm, -1)
+  const [p3y, p3m] = shiftMonth(p2y, p2m, -1)
   const [ny, nm] = shiftMonth(Number(c0.slice(0, 4)), Number(c0.slice(5, 7)), 1)
+
   const cPrev = clampedDate(py, pm, kesim)
+  const cPrev2 = clampedDate(p2y, p2m, kesim)
+  const cPrev3 = clampedDate(p3y, p3m, kesim)
   const cNext = clampedDate(ny, nm, kesim)
 
   const window = (from: string, to: string) => {
@@ -117,10 +244,23 @@ export function cardStatement(
     borc += txDelta(r, account.kod, account.paraBirimi)
   }
 
+  // Statements:
+  // donemIci: current open cycle (cPrev -> c0)
+  // odenecekEkstre: most recently closed statement (cPrev2 -> cPrev)
+  // oncekiEkstre: statement before that (cPrev3 -> cPrev2)
+  const donemIci = buildPeriod(rows, account, cPrev, c0, kesim, sonOdeme, 'Dönem İçi (Gelecek Ekstre)')
+  const odenecekEkstre = buildPeriod(rows, account, cPrev2, cPrev, kesim, sonOdeme, 'Ödenecek Ekstre')
+  const oncekiEkstre = buildPeriod(rows, account, cPrev3, cPrev2, kesim, sonOdeme)
+
+  const ekstreler = [odenecekEkstre, donemIci, oncekiEkstre]
+
   return {
     buAy: window(cPrev, c0),
     gelecekAy: window(c0, cNext),
     toplamBorc: round2(borc),
+    odenecekEkstre,
+    donemIci,
+    ekstreler,
   }
 }
 
@@ -132,7 +272,7 @@ export interface AccountRow {
   banka?: string
   bakiye: number
   /** Present only on credit cards. */
-  kart?: { buAy: number; gelecekAy: number; toplamBorc: number }
+  kart?: CardStatementResult
   href?: string
   pasif?: boolean
 }

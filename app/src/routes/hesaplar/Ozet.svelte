@@ -11,7 +11,8 @@
     type CategoryBreakdown,
     type InstalmentScheduleItem,
   } from '../../lib/data/personal'
-  import { tryFmt, usd, monthLabel, monthShort } from '../../lib/format'
+  import { cardStatement } from '../../lib/data/accounts'
+  import { fmtCurrency, tryFmt, usd, monthLabel, monthShort } from '../../lib/format'
   import BarChart from '../../lib/charts/BarChart.svelte'
   import Donut from '../../lib/charts/Donut.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
@@ -127,6 +128,62 @@
         value: s.toplam,
       }))
   }
+
+  interface PersonCardDebt {
+    kartKod: string
+    kartAd: string
+    paraBirimi: string
+    tip: 'ODENECEK' | 'DONEM_ICI'
+    etiket: string
+    tutar: number
+    sonOdeme?: string
+    kesim?: string
+  }
+
+  function getPersonCardDebts(personKod: string): PersonCardDebt[] {
+    const list: PersonCardDebt[] = []
+    const creditCards = accounts.filter((a) => a.tur === 'KREDI_KARTI')
+
+    for (const card of creditCards) {
+      const stmt = cardStatement(rows, card, today)
+
+      // Ödenecek Ekstre
+      if (stmt.odenecekEkstre) {
+        const tutar = stmt.odenecekEkstre.sahipToplami[personKod] ?? 0
+        if (tutar > 0) {
+          list.push({
+            kartKod: card.kod,
+            kartAd: card.ad,
+            paraBirimi: card.paraBirimi,
+            tip: 'ODENECEK',
+            etiket: stmt.odenecekEkstre.etiket,
+            tutar,
+            sonOdeme: stmt.odenecekEkstre.sonOdemeTarihi,
+            kesim: stmt.odenecekEkstre.kesimTarihi,
+          })
+        }
+      }
+
+      // Dönem İçi
+      if (stmt.donemIci) {
+        const tutar = stmt.donemIci.sahipToplami[personKod] ?? 0
+        if (tutar > 0) {
+          list.push({
+            kartKod: card.kod,
+            kartAd: card.ad,
+            paraBirimi: card.paraBirimi,
+            tip: 'DONEM_ICI',
+            etiket: 'Dönem İçi (Gelecek Ekstre)',
+            tutar,
+            sonOdeme: stmt.donemIci.sonOdemeTarihi,
+            kesim: stmt.donemIci.kesimTarihi,
+          })
+        }
+      }
+    }
+
+    return list
+  }
 </script>
 
 <div class="ozet-container">
@@ -206,6 +263,31 @@
                 </div>
               {/if}
             </div>
+
+            {#if dimension === 'kisi'}
+              {@const cardDebts = getPersonCardDebts(g.key)}
+              {#if cardDebts.length > 0}
+                <div class="card-debt-alerts">
+                  <span class="alerts-title">💳 Kredi Kartı Ekstre Borçları:</span>
+                  <div class="debt-pills">
+                    {#each cardDebts as cd}
+                      <div class="debt-pill" class:due={cd.tip === 'ODENECEK'}>
+                        <div class="pill-info">
+                          <strong>{cd.kartAd}</strong>
+                          <span class="pill-type">
+                            {cd.tip === 'ODENECEK' ? 'Ödenecek Ekstre' : 'Dönem İçi'}
+                            {#if cd.sonOdeme} · Son Ödeme: <b>{cd.sonOdeme}</b>{/if}
+                          </span>
+                        </div>
+                        <span class="pill-amount num loss">
+                          {fmtCurrency(cd.tutar, cd.paraBirimi)}
+                        </span>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            {/if}
 
             <!-- Aylık Seyir -->
             {#if gTryMonthly.some(b => b.value > 0) || gUsdMonthly.some(b => b.value > 0)}
@@ -484,5 +566,54 @@
   .num {
     font-family: var(--font-num);
     font-variant-numeric: tabular-nums;
+  }
+
+  .card-debt-alerts {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .alerts-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .debt-pills {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .debt-pill {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+  .debt-pill.due {
+    border-color: rgba(220, 53, 69, 0.4);
+    background: rgba(220, 53, 69, 0.05);
+  }
+  .pill-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+  }
+  .pill-type {
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+  }
+  .pill-amount {
+    font-size: 0.92rem;
+    font-weight: 600;
   }
 </style>

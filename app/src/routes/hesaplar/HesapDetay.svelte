@@ -3,7 +3,7 @@
   import type { Dataset, PersonalTx } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { accountBalances, cardStatement, monthMovements } from '../../lib/data/accounts'
+  import { accountBalances, cardStatement, monthMovements, type StatementPeriodInfo } from '../../lib/data/accounts'
   import { deleteRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd } from '../../lib/format'
@@ -12,6 +12,7 @@
   import HarcamaFormu from './HarcamaFormu.svelte'
   import TransferFormu from './TransferFormu.svelte'
   import BakiyeDuzeltme from './BakiyeDuzeltme.svelte'
+  import HesapFormu from './HesapFormu.svelte'
 
   let {
     dataset,
@@ -51,14 +52,21 @@
   let transferKaynak = $state<string | undefined>(undefined)
   let transferHedef = $state<string | undefined>(undefined)
   let transferBasligi = $state('Transfer')
+  let transferTutar = $state<number | undefined>(undefined)
   let duzenlenenTransfer = $state<PersonalTx | null>(null)
   let duzeltmeAcik = $state(false)
+  let hesapDuzenleAcik = $state(false)
+
+  let gorunumModu = $state<'EKSTRE' | 'TAKVIM'>('EKSTRE')
+  let seciliEkstreIndex = $state(0)
+  let kopyalandi = $state(false)
 
   function acTransfer() {
     if (!account) return
     transferKaynak = account.kod
     transferHedef = undefined
     transferBasligi = 'Transfer'
+    transferTutar = undefined
     duzenlenenTransfer = null
     transferAcik = true
   }
@@ -68,6 +76,9 @@
     transferKaynak = undefined
     transferHedef = account.kod
     transferBasligi = 'Kart Ödemesi'
+    transferTutar = kart?.odenecekEkstre?.kalan && kart.odenecekEkstre.kalan > 0
+      ? kart.odenecekEkstre.kalan
+      : (kart?.toplamBorc && kart.toplamBorc < 0 ? Math.abs(kart.toplamBorc) : undefined)
     duzenlenenTransfer = null
     transferAcik = true
   }
@@ -81,13 +92,62 @@
   const hareket = $derived(
     account ? monthMovements(rows, account, yil, ay) : null,
   )
-  const gorunenKayitlar = $derived(
-    !hareket
-      ? []
-      : seciliGun === null
-        ? hareket.kayitlar
-        : hareket.kayitlar.filter((r) => Number(r.tarih.slice(8, 10)) === seciliGun),
-  )
+
+  const isKart = $derived(account?.tur === 'KREDI_KARTI')
+  const activeStatement = $derived(kart?.ekstreler?.[seciliEkstreIndex])
+
+  const gorunenKayitlar = $derived.by(() => {
+    if (isKart && gorunumModu === 'EKSTRE') {
+      return activeStatement?.kayitlar ?? []
+    }
+    if (!hareket) return []
+    return seciliGun === null
+      ? hareket.kayitlar
+      : hareket.kayitlar.filter((r) => Number(r.tarih.slice(8, 10)) === seciliGun)
+  })
+
+  async function kopyalaEkstre(st: StatementPeriodInfo) {
+    if (!account) return
+    const lines: string[] = [
+      `💳 ${account.ad} Ekstresi`,
+      st.sonOdemeTarihi ? `Son Ödeme Tarihi: ${st.sonOdemeTarihi}` : '',
+      `Dönem: ${st.baslangicTarihi} – ${st.kesimTarihi}`,
+      '',
+    ].filter(Boolean)
+
+    if (Object.keys(st.sahipToplami).length > 0) {
+      for (const [sahipKod, tutar] of Object.entries(st.sahipToplami)) {
+        const kisiAd = dataset?.people?.find(p => p.kod === sahipKod)?.ad ?? sahipKod
+        lines.push(`👤 ${kisiAd}: ${fmt(tutar)}`)
+      }
+      lines.push('')
+    }
+
+    lines.push('Harcamalar:')
+    const giderler = st.kayitlar.filter(x => x.tur === 'GIDER')
+    if (giderler.length === 0) {
+      lines.push('Bu dönemde harcama bulunmuyor.')
+    } else {
+      for (const r of giderler) {
+        const dt = `${r.tarih.slice(8, 10)}.${r.tarih.slice(5, 7)}`
+        const kisi = r.sahip && r.sahip !== 'ENIS' ? ` (${dataset?.people?.find(p => p.kod === r.sahip)?.ad ?? r.sahip})` : ''
+        lines.push(`• ${dt} ${r.aciklama || catName(r.kategori)}: ${fmt(r.tutar)}${kisi}`)
+      }
+    }
+
+    lines.push('')
+    lines.push(`Toplam Borç: ${fmt(st.toplam)}`)
+    if (st.odenen > 0) {
+      lines.push(`Ödenen: ${fmt(st.odenen)}`)
+      lines.push(`Kalan: ${fmt(st.kalan)}`)
+    }
+
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'))
+      kopyalandi = true
+      setTimeout(() => (kopyalandi = false), 2500)
+    } catch {}
+  }
 
   const AY_ADI = [
     'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
@@ -168,19 +228,60 @@
     <header class="hesap-head">
       <a class="geri" href="#/h/hesaplar" aria-label="Hesaplar listesine dön">‹</a>
       <div class="baslik">
-        <h2>{#if account.simge}<span class="simge">{account.simge}</span>{/if}{account.ad}</h2>
+        <h2>
+          {#if account.simge}<span class="simge">{account.simge}</span>{/if}{account.ad}
+          {#if isDrive}
+            <button
+              type="button"
+              class="btn-icon head-edit"
+              title="Hesap Ayarlarını Düzenle"
+              aria-label="Hesap Ayarlarını Düzenle"
+              onclick={() => (hesapDuzenleAcik = true)}
+            >✎</button>
+          {/if}
+        </h2>
         <span class="tur">{account.tur === 'KREDI_KARTI' ? 'Kredi kartı' : account.tur === 'BANKA' ? 'Banka hesabı' : 'Nakit'}</span>
       </div>
       {#if kart}
         <div class="kart-figurler" data-testid="bakiye">
-          <span class="kolon"><em>Bu Ay</em><span class="num loss">{fmt(kart.buAy)}</span></span>
-          <span class="kolon"><em>Gelecek Ay</em><span class="num">{fmt(kart.gelecekAy)}</span></span>
+          {#if kart.odenecekEkstre}
+            <span class="kolon">
+              <em>Bu Ay (Ödenecek)</em>
+              <span class="num loss">{fmt(kart.odenecekEkstre.kalan)}</span>
+              {#if kart.odenecekEkstre.sonOdemeTarihi}
+                <small class="due-tag">Son: {kart.odenecekEkstre.sonOdemeTarihi.slice(8, 10)}.{kart.odenecekEkstre.sonOdemeTarihi.slice(5, 7)}</small>
+              {/if}
+            </span>
+            <span class="kolon">
+              <em>Gelecek Ay (Dönem İçi)</em>
+              <span class="num">{fmt(kart.donemIci?.toplam ?? kart.gelecekAy)}</span>
+              {#if kart.donemIci?.sonOdemeTarihi}
+                <small class="due-tag muted">Son: {kart.donemIci.sonOdemeTarihi.slice(8, 10)}.{kart.donemIci.sonOdemeTarihi.slice(5, 7)}</small>
+              {/if}
+            </span>
+          {:else}
+            <span class="kolon"><em>Bu Ay</em><span class="num loss">{fmt(kart.buAy)}</span></span>
+            <span class="kolon"><em>Gelecek Ay</em><span class="num">{fmt(kart.gelecekAy)}</span></span>
+          {/if}
           <span class="toplam num sub">{fmt(kart.toplamBorc)}</span>
         </div>
       {:else}
         <span class="bakiye num" data-testid="bakiye" class:loss={bakiye < 0}>{fmt(bakiye)}</span>
       {/if}
     </header>
+
+    {#if hesapDuzenleAcik && dataset && account}
+      <div class="form-modal">
+        <HesapFormu
+          {dataset}
+          {source}
+          {store}
+          editing={account}
+          onSaved={() => (hesapDuzenleAcik = false)}
+          onCancel={() => (hesapDuzenleAcik = false)}
+        />
+      </div>
+    {/if}
 
     {#if (harcamaAcik || duzenlenen) && dataset}
       <div class="form-modal">
@@ -210,6 +311,7 @@
           kaynakHesap={transferKaynak}
           hedefHesap={transferHedef}
           baslik={transferBasligi}
+          varsayilanTutar={transferTutar}
           tarih={seciliGun ? iso(seciliGun) : today}
           onSaved={() => { transferAcik = false; duzenlenenTransfer = null }}
           onCancel={() => { transferAcik = false; duzenlenenTransfer = null }}
@@ -251,7 +353,97 @@
       </div>
     {/if}
 
-    {#if hareket}
+    {#if isKart}
+      <div class="gorunum-seg-row">
+        <div class="seg" role="group" aria-label="Görünüm Seçimi">
+          <button
+            type="button"
+            class:on={gorunumModu === 'EKSTRE'}
+            onclick={() => (gorunumModu = 'EKSTRE')}
+          >
+            📋 Ekstre Dönemi
+          </button>
+          <button
+            type="button"
+            class:on={gorunumModu === 'TAKVIM'}
+            onclick={() => (gorunumModu = 'TAKVIM')}
+          >
+            📅 Takvim Ayı
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if isKart && gorunumModu === 'EKSTRE' && kart}
+      <!-- Ekstre Dönemi Görünümü -->
+      <div class="ekstre-secici" role="tablist">
+        {#each kart.ekstreler as st, idx}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={seciliEkstreIndex === idx}
+            class="ekstre-tab"
+            class:active={seciliEkstreIndex === idx}
+            onclick={() => (seciliEkstreIndex = idx)}
+          >
+            <div class="tab-title">{st.etiket}</div>
+            <div class="tab-sub">
+              {st.baslangicTarihi.slice(8, 10)}.{st.baslangicTarihi.slice(5, 7)} – {st.kesimTarihi.slice(8, 10)}.{st.kesimTarihi.slice(5, 7)}
+            </div>
+            <div class="tab-amount num" class:loss={st.kalan > 0}>{fmt(st.kalan)}</div>
+          </button>
+        {/each}
+      </div>
+
+      {#if activeStatement}
+        {@const st = activeStatement}
+        <div class="ekstre-ozet-karti">
+          <div class="ozet-ust">
+            <div class="ozet-tarihler">
+              <span class="ozet-etiket">{st.etiket}</span>
+              <span class="tarih-araligi">{st.baslangicTarihi} – {st.kesimTarihi}</span>
+              {#if st.sonOdemeTarihi}
+                <span class="son-odeme-badge">Son Ödeme: <b>{st.sonOdemeTarihi}</b></span>
+              {/if}
+            </div>
+            <button type="button" class="btn-copy" onclick={() => kopyalaEkstre(st)}>
+              {kopyalandi ? '✓ Kopyalandı' : '📋 Özeti Kopyala'}
+            </button>
+          </div>
+
+          {#if Object.keys(st.sahipToplami).length > 0}
+            <div class="kisi-dagilimi">
+              <span class="dagilim-baslik">Kişi Dağılımı:</span>
+              <div class="kisi-etiketler">
+                {#each Object.entries(st.sahipToplami) as [sahipKod, tutar]}
+                  {@const kisiAd = dataset?.people?.find(p => p.kod === sahipKod)?.ad ?? sahipKod}
+                  <span class="kisi-badge">
+                    👤 <strong>{kisiAd}</strong>: <b class="num loss">{fmt(tutar)}</b>
+                  </span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          <div class="ekstre-rakamlar">
+            <div class="rakam-kutu">
+              <span>Harcama</span>
+              <b class="num loss">{fmt(st.toplam)}</b>
+            </div>
+            {#if st.odenen > 0}
+              <div class="rakam-kutu">
+                <span>Ödenen</span>
+                <b class="num gain">{fmt(st.odenen)}</b>
+              </div>
+            {/if}
+            <div class="rakam-kutu kalan">
+              <span>Kalan Borç</span>
+              <b class="num loss">{fmt(st.kalan)}</b>
+            </div>
+          </div>
+        </div>
+      {/if}
+    {:else if hareket}
       <AyTakvimi
         {yil}
         {ay}
@@ -284,6 +476,7 @@
           {seciliGun} {AY_ADI[ay - 1]} · {gorunenKayitlar.length} kayıt ✕
         </button>
       {/if}
+    {/if}
 
       {#if gorunenKayitlar.length === 0}
         <p class="bos">Bu {seciliGun === null ? 'ayda' : 'günde'} hareket yok.</p>
@@ -340,7 +533,6 @@
           {/each}
         </ul>
       {/if}
-    {/if}
 
     <div class="eylemler">
       <button type="button" data-action="harcama" disabled={!isDrive} onclick={() => ekle()}>+ Gider/Gelir</button>
@@ -676,5 +868,205 @@
   .drive-notice {
     font-size: 0.78rem;
     color: var(--ink-soft);
+  }
+
+  .head-edit {
+    font-size: 0.9rem;
+    margin-left: 0.5rem;
+    opacity: 0.7;
+    cursor: pointer;
+    vertical-align: middle;
+  }
+  .head-edit:hover {
+    opacity: 1;
+  }
+
+  .due-tag {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--loss);
+    font-family: var(--font-num);
+    margin-top: 0.1rem;
+  }
+  .due-tag.muted {
+    color: var(--ink-soft);
+  }
+
+  .gorunum-seg-row {
+    display: flex;
+    justify-content: flex-start;
+    margin: 0.25rem 0 0.5rem;
+  }
+  .seg {
+    display: inline-flex;
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 2px;
+    border: 1px solid var(--hairline);
+  }
+  .seg button {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    color: var(--ink-soft);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .seg button.on {
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .ekstre-secici {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+  .ekstre-tab {
+    flex: 1;
+    min-width: 140px;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .ekstre-tab:hover {
+    border-color: var(--accent-defter);
+  }
+  .ekstre-tab.active {
+    background: var(--surface-2);
+    border-color: var(--accent-defter);
+    box-shadow: 0 0 0 1px var(--accent-defter);
+  }
+  .tab-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .tab-sub {
+    font-size: 0.7rem;
+    color: var(--ink-soft);
+    margin-top: 0.15rem;
+    font-family: var(--font-num);
+  }
+  .tab-amount {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-top: 0.35rem;
+  }
+
+  .ekstre-ozet-karti {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .ozet-ust {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .ozet-tarihler {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .ozet-etiket {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: var(--ink);
+  }
+  .tarih-araligi {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    font-family: var(--font-num);
+  }
+  .son-odeme-badge {
+    font-size: 0.75rem;
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--loss);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-family: var(--font-num);
+  }
+  .btn-copy {
+    padding: 0.35rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    color: var(--ink);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-copy:hover {
+    border-color: var(--accent-defter);
+    background: var(--surface);
+  }
+
+  .kisi-dagilimi {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    background: var(--surface-2);
+    padding: 0.45rem 0.75rem;
+    border-radius: 6px;
+  }
+  .dagilim-baslik {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .kisi-etiketler {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .kisi-badge {
+    font-size: 0.78rem;
+    color: var(--ink);
+    background: var(--surface);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--hairline);
+  }
+
+  .ekstre-rakamlar {
+    display: flex;
+    gap: 1.5rem;
+    padding-top: 0.35rem;
+    border-top: 1px dashed var(--hairline);
+  }
+  .rakam-kutu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .rakam-kutu span {
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .rakam-kutu b {
+    font-size: 0.95rem;
   }
 </style>

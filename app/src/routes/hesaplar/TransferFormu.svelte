@@ -17,6 +17,7 @@
     hedefHesap,
     tarih,
     baslik = 'Transfer',
+    varsayilanTutar,
     onSaved,
     onCancel,
   }: {
@@ -28,13 +29,16 @@
     hedefHesap?: string
     tarih?: string
     baslik?: string
+    varsayilanTutar?: number
     onSaved?: () => void
     onCancel?: () => void
   } = $props()
 
   let kaynak = $state(editing?.hesap ?? kaynakHesap ?? '')
   let hedef = $state(editing?.karsiHesap ?? hedefHesap ?? '')
-  let tutarText = $state(editing ? String(editing.tutar) : '')
+  let tutarText = $state(
+    editing ? String(editing.tutar) : varsayilanTutar != null && varsayilanTutar > 0 ? String(varsayilanTutar) : '',
+  )
   let tarihText = $state(editing?.tarih ?? tarih ?? new Date().toISOString().slice(0, 10))
   let aciklama = $state(editing?.aciklama ?? '')
 
