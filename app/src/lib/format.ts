@@ -27,6 +27,28 @@ export function tryFmt(n: number, opts: { sign?: boolean; whole?: boolean } = {}
   return opts.sign ? '+' + body : body
 }
 
+export function eur(n: number, opts: { sign?: boolean; whole?: boolean } = {}): string {
+  if (nullish(n)) return DASH
+  const neg = n < 0
+  const d = opts.whole ? 0 : 2
+  const body =
+    '€' +
+    Math.abs(n).toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d })
+  if (neg) return '-' + body
+  return opts.sign ? '+' + body : body
+}
+
+export function fmtCurrency(
+  n: number,
+  paraBirimi?: string,
+  opts: { sign?: boolean; whole?: boolean } = {},
+): string {
+  const p = (paraBirimi || 'TRY').toUpperCase()
+  if (p === 'USD') return usd(n, opts)
+  if (p === 'EUR') return eur(n, opts)
+  return tryFmt(n, opts)
+}
+
 /** Lot count — strips float noise (e.g. 56.330807992000004) and groups. */
 export function lot(n: number): string {
   if (nullish(n)) return DASH

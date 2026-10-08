@@ -121,7 +121,7 @@ export interface RecurringRule {
   kategori: string
   hesap: string
   sahip: string
-  paraBirimi: 'TRY' | 'USD'
+  paraBirimi: 'TRY' | 'USD' | 'EUR'
   tutar: number
   /** 1-31; ayın gerçek gün sayısından fazlaysa o ayın son gününe sabitlenir. */
   gunOfMonth: number
@@ -137,7 +137,7 @@ export interface PersonalTx {
   tarih: string
   tur: 'GIDER' | 'GELIR' | 'TRANSFER' | 'DUZELTME' | 'SAHIP_AKTARIM'
   tutar: number
-  paraBirimi: 'TRY' | 'USD'
+  paraBirimi: 'TRY' | 'USD' | 'EUR'
   kategori: string
   aciklama: string
   hesap: string
@@ -164,7 +164,7 @@ export interface PaymentPlan {
   alisTarihi: string
   aciklama: string
   toplamTutar: number
-  paraBirimi: 'TRY' | 'USD'
+  paraBirimi: 'TRY' | 'USD' | 'EUR'
   taksitSayisi: number
   taksitTutari: number
   sonTaksitTutari: number
@@ -181,6 +181,7 @@ export interface PersonalAccount {
   ad: string
   tur: 'NAKIT' | 'BANKA' | 'KREDI_KARTI'
   paraBirimi: string
+  banka?: string
   sahip: string
   aktif: boolean
   /** The Telegram bot's NLP account matcher reads this. It is already in
@@ -215,7 +216,7 @@ export interface Debt {
   yon: 'VERDIM' | 'ALDIM'
   kisi: string
   tutar: number
-  paraBirimi: 'TRY' | 'USD'
+  paraBirimi: 'TRY' | 'USD' | 'EUR'
   aciklama: string
   hesap: string
   durum: 'ACIK' | 'KAPALI'

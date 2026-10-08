@@ -132,7 +132,7 @@
           tarih: tarihText,
           tur: 'TRANSFER',
           tutar: Number(tutarText),
-          paraBirimi: currency as 'TRY' | 'USD',
+          paraBirimi: currency as 'TRY' | 'USD' | 'EUR',
           kategori: 'transfer',
           aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
           hesap: kaynak,
@@ -232,7 +232,7 @@
           {#if bankaAccounts.length > 0}
             <optgroup label="── 🏦 Banka Hesapları ──">
               {#each bankaAccounts as a}
-                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.banka ? `[${a.banka}] ` : ''}{a.ad} ({a.paraBirimi})</option>
               {/each}
             </optgroup>
           {/if}
@@ -274,7 +274,7 @@
           {#if bankaAccounts.length > 0}
             <optgroup label="── 🏦 Banka Hesapları ──">
               {#each bankaAccounts as a}
-                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.ad} ({a.paraBirimi})</option>
+                <option value={a.kod}>{a.simge ? `${a.simge} ` : ''}{a.banka ? `[${a.banka}] ` : ''}{a.ad} ({a.paraBirimi})</option>
               {/each}
             </optgroup>
           {/if}

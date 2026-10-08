@@ -5,7 +5,7 @@
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord, appendRecords, updateRecord, updateRecords, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
-  import { tryFmt, usd } from '../../lib/format'
+  import { tryFmt, usd, fmtCurrency } from '../../lib/format'
   import { newPersonalId, newRecurringRuleId } from '../../lib/data/ids'
   import { materialize } from '../../lib/data/recurring'
 
@@ -39,7 +39,7 @@
   let tur = $state<'GIDER' | 'GELIR'>(editing?.tur === 'GELIR' ? 'GELIR' : 'GIDER')
   let tarih = $state(editing?.tarih ?? tarihOn ?? todayIso())
   let tutar = $state(editing ? String(editing.tutar) : '')
-  let paraBirimi = $state<'TRY' | 'USD'>(editing?.paraBirimi ?? 'TRY')
+  let paraBirimi = $state<'TRY' | 'USD' | 'EUR'>((editing?.paraBirimi as any) ?? 'TRY')
   let kategori = $state(editing?.kategori ?? '')
   let hesap = $state(editing?.hesap ?? hesapOn ?? '')
   let sahip = $state(editing?.sahip ?? '')
@@ -84,6 +84,16 @@
   $effect(() => {
     if (!hesap && accounts.length > 0) {
       hesap = accounts[0].kod
+    }
+  })
+
+  // Auto-sync currency from account when creating a new transaction
+  $effect(() => {
+    if (hesap && !editing) {
+      const a = accounts.find((x) => x.kod === hesap)
+      if (a && a.paraBirimi) {
+        paraBirimi = a.paraBirimi as 'TRY' | 'USD' | 'EUR'
+      }
     }
   })
 
@@ -274,8 +284,9 @@
         <div class="field flex-1">
           <label for="hf-para-birimi">Para Birimi</label>
           <select id="hf-para-birimi" aria-label="Para Birimi" bind:value={paraBirimi}>
-            <option value="TRY">TRY (TL)</option>
+            <option value="TRY">TRY (₺)</option>
             <option value="USD">USD ($)</option>
+            <option value="EUR">EUR (€)</option>
           </select>
         </div>
       </div>
@@ -364,7 +375,7 @@
         <dd>{tarih}</dd>
         <dt>Tutar:</dt>
         <dd class="num font-bold">
-          {paraBirimi === 'USD' ? usd(Number(tutar)) : tryFmt(Number(tutar))} {paraBirimi}
+          {fmtCurrency(Number(tutar), paraBirimi)}
         </dd>
         <dt>Kategori:</dt>
         <dd>{allCategories.find((c) => c.kod === kategori)?.ad ?? kategori}</dd>

@@ -109,4 +109,26 @@ describe('Hesaplar listesi', () => {
     expect(container.textContent).toContain('Kaynak Hesap')
     expect(container.textContent).toContain('Hedef Hesap')
   })
+
+  it('aynı bankaya ait alt hesapları banka başlığı altında gruplar ve EUR destekler', () => {
+    const ds: Dataset = {
+      ...fixture,
+      personalAccounts: [
+        { kod: 'QNB-TL', ad: 'QNB Nakit TL', tur: 'BANKA', banka: 'QNB', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true },
+        { kod: 'QNB-USD', ad: 'QNB USD', tur: 'BANKA', banka: 'QNB', paraBirimi: 'USD', sahip: 'ENIS', aktif: true },
+        { kod: 'QNB-EUR', ad: 'QNB EUR', tur: 'BANKA', banka: 'QNB', paraBirimi: 'EUR', sahip: 'ENIS', aktif: true },
+      ],
+      personalTx: [
+        { id: 'tx_1', tarih: '2026-09-01', tur: 'GELIR', tutar: 1000, paraBirimi: 'TRY', kategori: 'maas', aciklama: '', hesap: 'QNB-TL', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '' },
+        { id: 'tx_2', tarih: '2026-09-01', tur: 'GELIR', tutar: 200, paraBirimi: 'EUR', kategori: 'diger', aciklama: '', hesap: 'QNB-EUR', sahip: 'ENIS', taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual', olusturulma: '' },
+      ],
+    }
+    const { container } = render(Hesaplar, { dataset: ds, today: TODAY })
+    const bankSection = container.querySelector('[data-group="BANKA"]')!
+    expect(bankSection.textContent).toContain('QNB')
+    expect(bankSection.textContent).toContain('QNB Nakit TL')
+    expect(bankSection.textContent).toContain('QNB EUR')
+    expect(bankSection.textContent).toContain('€200,00')
+  })
 })
+

@@ -56,7 +56,8 @@
 
   let ad = $state(editing?.ad ?? '')
   let tur = $state<'NAKIT' | 'BANKA' | 'KREDI_KARTI'>(editing?.tur ?? 'BANKA')
-  let paraBirimi = $state<'TRY' | 'USD'>((editing?.paraBirimi as 'TRY' | 'USD') ?? 'TRY')
+  let paraBirimi = $state<'TRY' | 'USD' | 'EUR'>((editing?.paraBirimi as 'TRY' | 'USD' | 'EUR') ?? 'TRY')
+  let banka = $state(editing?.banka ?? '')
   let sahip = $state(editing?.sahip ?? 'ENIS')
   let simge = $state(editing?.simge ?? '')
   let takma = $state(editing?.takmaAdlar ? editing.takmaAdlar.join(', ') : '')
@@ -70,6 +71,23 @@
   let pasiflestirTeklifi = $state(false)
 
   const people = $derived((dataset?.people ?? []).filter((p) => p.aktif !== false))
+
+  const bilinenBankalar = $derived(
+    Array.from(
+      new Set([
+        'QNB',
+        'Garanti BBVA',
+        'Kuveyt Türk',
+        'Yapı Kredi',
+        'İş Bankası',
+        'Akbank',
+        'Ziraat Bankası',
+        'VakıfBank',
+        'Enpara',
+        ...((dataset?.personalAccounts ?? []).map((a) => a.banka).filter(Boolean) as string[]),
+      ]),
+    ).sort((a, b) => a.localeCompare(b, 'tr')),
+  )
 
   const hareketSayisi = $derived(
     !editing
@@ -97,6 +115,7 @@
           ad: ad.trim(),
           tur,
           paraBirimi,
+          banka: tur === 'BANKA' ? (banka.trim() || undefined) : undefined,
           sahip,
           simge: simge.trim() || undefined,
           takmaAdlar: takmaListe(takma),
@@ -128,6 +147,7 @@
           ad: ad.trim(),
           tur,
           paraBirimi,
+          ...(tur === 'BANKA' && banka.trim() ? { banka: banka.trim() } : {}),
           sahip,
           aktif: true,
           takmaAdlar: takmaListe(takma),
@@ -263,8 +283,9 @@
         <div class="field">
           <label for="h-para">Para Birimi</label>
           <select id="h-para" aria-label="Para Birimi" bind:value={paraBirimi}>
-            <option value="TRY">TRY (TL)</option>
+            <option value="TRY">TRY (₺)</option>
             <option value="USD">USD ($)</option>
+            <option value="EUR">EUR (€)</option>
           </select>
         </div>
 
@@ -281,6 +302,28 @@
           </select>
         </div>
       </div>
+
+      {#if tur === 'BANKA'}
+        <div class="row">
+          <div class="field flex-1">
+            <label for="h-banka">Bağlı Olduğu Banka (Opsiyonel)</label>
+            <input
+              id="h-banka"
+              aria-label="Bağlı Olduğu Banka"
+              type="text"
+              placeholder="örn. QNB, Garanti BBVA, Kuveyt Türk"
+              list="banka-onerileri"
+              bind:value={banka}
+            />
+            <datalist id="banka-onerileri">
+              {#each bilinenBankalar as b}
+                <option value={b}></option>
+              {/each}
+            </datalist>
+            <small class="hint">Aynı bankanın alt hesaplarını (TL, USD, EUR vb.) tek çatı altında toplar.</small>
+          </div>
+        </div>
+      {/if}
 
       <div class="row">
         <div class="field flex-1">
@@ -454,9 +497,12 @@
     cursor: not-allowed;
   }
 
-  .helper-text {
+  .helper-text,
+  .hint {
     font-size: 0.75rem;
     color: var(--muted, #8b949e);
+    margin-top: 0.2rem;
+    display: block;
   }
 
   .checkbox-row {

@@ -129,6 +129,7 @@ export interface AccountRow {
   ad: string
   simge?: string
   paraBirimi: string
+  banka?: string
   bakiye: number
   /** Present only on credit cards. */
   kart?: { buAy: number; gelecekAy: number; toplamBorc: number }
@@ -185,6 +186,7 @@ export function accountGroups(
       ad: a.ad,
       simge: a.simge,
       paraBirimi: a.paraBirimi,
+      banka: a.banka,
       bakiye: bakiyeler.get(a.kod) ?? 0,
       kart: a.tur === 'KREDI_KARTI' ? cardStatement(rows, a, today) : undefined,
       href: `#/h/hesap/${a.kod}`,

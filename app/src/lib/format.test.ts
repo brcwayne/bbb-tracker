@@ -25,3 +25,14 @@ describe('dates', () => {
   it('dateShort', () => expect(f.dateShort('2026-08-31')).toBe('31 Ağu 2026'))
   it('monthLabel', () => expect(f.monthLabel('2026-08-31')).toBe('Ağu 2026'))
 })
+
+describe('eur & fmtCurrency', () => {
+  it('formats positive EUR', () => expect(f.eur(1234.56)).toBe('€1.234,56'))
+  it('formats negative EUR', () => expect(f.eur(-50)).toBe('-€50,00'))
+  it('fmtCurrency picks correct formatter', () => {
+    expect(f.fmtCurrency(100, 'TRY')).toBe('₺100,00')
+    expect(f.fmtCurrency(100, 'USD')).toBe('$100.00')
+    expect(f.fmtCurrency(100, 'EUR')).toBe('€100,00')
+  })
+})
+

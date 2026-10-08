@@ -4,7 +4,8 @@
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { accountGroups, netWorthBand } from '../../lib/data/accounts'
-  import { tryFmt, usd } from '../../lib/format'
+  import type { AccountRow } from '../../lib/data/accounts'
+  import { fmtCurrency } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HesapFormu from './HesapFormu.svelte'
   import TransferFormu from './TransferFormu.svelte'
@@ -36,7 +37,40 @@
   const band = $derived(netWorthBand(groups))
   const paralar = $derived(Object.keys(band).sort())
 
-  const fmt = (v: number, para: string) => (para === 'USD' ? usd(v) : tryFmt(v))
+  const fmt = (v: number, para: string) => fmtCurrency(v, para)
+
+  interface BankCluster {
+    banka: string
+    satirlar: AccountRow[]
+    toplam: Record<string, number>
+  }
+
+  function organizeBankRows(satirlar: AccountRow[]): { clusters: BankCluster[]; standalone: AccountRow[] } {
+    const map = new Map<string, AccountRow[]>()
+    const standalone: AccountRow[] = []
+
+    for (const r of satirlar) {
+      if (r.banka && r.banka.trim()) {
+        const b = r.banka.trim()
+        const list = map.get(b) ?? []
+        list.push(r)
+        map.set(b, list)
+      } else {
+        standalone.push(r)
+      }
+    }
+
+    const clusters: BankCluster[] = []
+    for (const [banka, rows] of map.entries()) {
+      const toplam: Record<string, number> = {}
+      for (const r of rows) {
+        toplam[r.paraBirimi] = Math.round(((toplam[r.paraBirimi] ?? 0) + r.bakiye) * 100) / 100
+      }
+      clusters.push({ banka, satirlar: rows, toplam })
+    }
+    clusters.sort((a, b) => a.banka.localeCompare(b.banka, 'tr'))
+    return { clusters, standalone }
+  }
 
   function duzenle(kod: string, e: MouseEvent) {
     e.preventDefault()
@@ -145,38 +179,101 @@
           {/if}
         </header>
 
-        {#each g.satirlar as r (r.kod)}
-          <div class="row-wrapper">
-            <a class="row" class:pasif={r.pasif} href={r.href}>
-              <span class="row-name">
-                {#if r.simge}<span class="simge">{r.simge}</span>{/if}{r.ad}
-              </span>
-              {#if r.kart}
-                <span class="row-figures">
-                  <span class="num" class:loss={r.kart.buAy > 0} class:gain={r.kart.buAy < 0}>
-                    {fmt(r.kart.buAy, r.paraBirimi)}
-                  </span>
-                  <span class="num sub">{fmt(r.kart.toplamBorc, r.paraBirimi)}</span>
+        {#if g.tur === 'BANKA'}
+          {@const { clusters, standalone } = organizeBankRows(g.satirlar)}
+          {#each clusters as cluster (cluster.banka)}
+            <div class="bank-group">
+              <div class="bank-group-head">
+                <div class="bank-name">
+                  <span class="bank-icon">🏦</span>
+                  <strong>{cluster.banka}</strong>
+                </div>
+                <div class="bank-total num">
+                  {#each Object.entries(cluster.toplam) as [para, v], i}
+                    {i > 0 ? ' · ' : ''}
+                    <span class:loss={v < 0} class:gain={v > 0}>{fmt(v, para)}</span>
+                  {/each}
+                </div>
+              </div>
+              <div class="bank-subrows">
+                {#each cluster.satirlar as r (r.kod)}
+                  <div class="row-wrapper sub-row">
+                    <a class="row" class:pasif={r.pasif} href={r.href}>
+                      <span class="row-name">
+                        {#if r.simge}<span class="simge">{r.simge}</span>{/if}{r.ad}
+                        <span class="currency-tag">{r.paraBirimi}</span>
+                      </span>
+                      <span class="num" class:loss={r.bakiye < 0} class:gain={r.bakiye > 0}>
+                        {fmt(r.bakiye, r.paraBirimi)}
+                      </span>
+                    </a>
+                    {#if duzenlemeModu}
+                      <button
+                        type="button"
+                        class="row-edit-btn"
+                        aria-label={`${r.ad} hesabını düzenle`}
+                        onclick={(e) => duzenle(r.kod, e)}
+                      >✎</button>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/each}
+          {#each standalone as r (r.kod)}
+            <div class="row-wrapper">
+              <a class="row" class:pasif={r.pasif} href={r.href}>
+                <span class="row-name">
+                  {#if r.simge}<span class="simge">{r.simge}</span>{/if}{r.ad}
                 </span>
-                <span class="num" class:loss={r.kart.gelecekAy > 0}>
-                  {fmt(r.kart.gelecekAy, r.paraBirimi)}
-                </span>
-              {:else}
                 <span class="num" class:loss={r.bakiye < 0} class:gain={r.bakiye > 0}>
                   {fmt(r.bakiye, r.paraBirimi)}
                 </span>
+              </a>
+              {#if duzenlemeModu}
+                <button
+                  type="button"
+                  class="row-edit-btn"
+                  aria-label={`${r.ad} hesabını düzenle`}
+                  onclick={(e) => duzenle(r.kod, e)}
+                >✎</button>
               {/if}
-            </a>
-            {#if g.tur !== 'KISI' && duzenlemeModu}
-              <button
-                type="button"
-                class="row-edit-btn"
-                aria-label={`${r.ad} hesabını düzenle`}
-                onclick={(e) => duzenle(r.kod, e)}
-              >✎</button>
-            {/if}
-          </div>
-        {/each}
+            </div>
+          {/each}
+        {:else}
+          {#each g.satirlar as r (r.kod)}
+            <div class="row-wrapper">
+              <a class="row" class:pasif={r.pasif} href={r.href}>
+                <span class="row-name">
+                  {#if r.simge}<span class="simge">{r.simge}</span>{/if}{r.ad}
+                </span>
+                {#if r.kart}
+                  <span class="row-figures">
+                    <span class="num" class:loss={r.kart.buAy > 0} class:gain={r.kart.buAy < 0}>
+                      {fmt(r.kart.buAy, r.paraBirimi)}
+                    </span>
+                    <span class="num sub">{fmt(r.kart.toplamBorc, r.paraBirimi)}</span>
+                  </span>
+                  <span class="num" class:loss={r.kart.gelecekAy > 0}>
+                    {fmt(r.kart.gelecekAy, r.paraBirimi)}
+                  </span>
+                {:else}
+                  <span class="num" class:loss={r.bakiye < 0} class:gain={r.bakiye > 0}>
+                    {fmt(r.bakiye, r.paraBirimi)}
+                  </span>
+                {/if}
+              </a>
+              {#if g.tur !== 'KISI' && duzenlemeModu}
+                <button
+                  type="button"
+                  class="row-edit-btn"
+                  aria-label={`${r.ad} hesabını düzenle`}
+                  onclick={(e) => duzenle(r.kod, e)}
+                >✎</button>
+              {/if}
+            </div>
+          {/each}
+        {/if}
       </section>
     {/each}
 
@@ -428,5 +525,50 @@
   .pasif-toggle input[type='checkbox'] {
     cursor: pointer;
     accent-color: var(--accent-defter);
+  }
+
+  /* Bank groups & hierarchical sub-rows */
+  .bank-group {
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface-2, rgba(255, 255, 255, 0.02));
+  }
+  .bank-group:last-child {
+    border-bottom: 0;
+  }
+  .bank-group-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 1rem;
+    background: rgba(125, 125, 125, 0.06);
+    border-bottom: 1px solid var(--hairline);
+    font-size: 0.9rem;
+  }
+  .bank-name {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+  }
+  .bank-total {
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+  .bank-subrows {
+    display: flex;
+    flex-direction: column;
+  }
+  .row-wrapper.sub-row {
+    padding-left: 0.75rem;
+    background: transparent;
+  }
+  .currency-tag {
+    font-size: 0.72rem;
+    background: var(--hairline);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    margin-left: 0.45rem;
+    color: var(--ink-soft);
+    font-weight: 600;
   }
 </style>
