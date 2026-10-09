@@ -71,6 +71,11 @@
       return
     }
 
+    if (!store || !source) {
+      error = 'Kaydetmek için veri bağlantısı gereklidir.'
+      return
+    }
+
     saving = true
     try {
       const newCat: Category = {
