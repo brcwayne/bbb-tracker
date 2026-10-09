@@ -38,4 +38,27 @@ describe('BarChart', () => {
     const [a, b] = [...container.querySelectorAll('rect')].map((r) => +r.getAttribute('height')!)
     expect(a / b).toBeCloseTo(2, 5)
   })
+
+  it('bar seçimi ve tıklaması onSelect tetikler ve data-selected işaretler', async () => {
+    let selected: any = null
+    const { container } = render(BarChart, {
+      props: {
+        bars: [
+          { label: 'Oca', value: 10, key: '2026-01' },
+          { label: 'Şub', value: 20, key: '2026-02' },
+        ],
+        selectedKey: '2026-02',
+        onSelect: (b) => {
+          selected = b
+        },
+      },
+    })
+    const subRect = container.querySelector('[data-bar="Şub"]')
+    expect(subRect?.getAttribute('data-selected')).toBe('true')
+    const ocaRect = container.querySelector('[data-bar="Oca"]')
+    expect(ocaRect?.getAttribute('data-selected')).toBeNull()
+
+    await fireEvent.click(ocaRect!)
+    expect(selected).toEqual({ label: 'Oca', value: 10, key: '2026-01' })
+  })
 })

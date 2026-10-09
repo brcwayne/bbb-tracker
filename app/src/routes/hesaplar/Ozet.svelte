@@ -37,6 +37,12 @@
   const hasRows = $derived(rows.length > 0)
 
   const [currYear, currMonth] = $derived(today.split('-').map(Number))
+  const currentMonthKey = $derived(`${currYear}-${String(currMonth).padStart(2, '0')}`)
+  let selectedMonth = $state<string | null>(null)
+  const activeMonth = $derived(selectedMonth ?? currentMonthKey)
+  const [activeYear, activeMonthNum] = $derived(activeMonth.split('-').map(Number))
+  const isCurrentMonth = $derived(activeMonth === currentMonthKey)
+  const activeMonthLabel = $derived(monthLabel(activeMonth + '-01'))
 
   /** Twelve "Eki 2025"-style labels collide on a 12-month axis, so show the
    *  month alone and carry the year only where it changes. */
@@ -48,13 +54,13 @@
   }
 
   const emptyMonths = $derived.by(() => {
-    const res: { label: string; value: number }[] = []
+    const res: { label: string; value: number; key: string }[] = []
     for (let i = 11; i >= 0; i--) {
       const mIndex = currYear * 12 + (currMonth - 1) - i
       const y = Math.floor(mIndex / 12)
       const m = (mIndex % 12) + 1
       const ay = `${y}-${String(m).padStart(2, '0')}`
-      res.push({ label: axisLabel(ay, 11 - i), value: 0 })
+      res.push({ label: axisLabel(ay, 11 - i), value: 0, key: ay })
     }
     return res
   })
@@ -62,8 +68,9 @@
   // Tekil / global sade görünüm türetmeleri
   const monthly = $derived(monthlyTotals(rows, today, 12))
   const summary = $derived(monthSummary(rows, currYear, currMonth, today))
-  const catBreakdown = $derived(categoryBreakdown(rows, currYear, currMonth, today, 'TRY'))
+  const catBreakdown = $derived(categoryBreakdown(rows, activeYear, activeMonthNum, today, 'TRY'))
   const upcomingInstalments = $derived(instalmentSchedule(rows, today, 3))
+  const activeMonthGiderTry = $derived(catBreakdown.reduce((sum, c) => sum + c.toplam, 0))
 
   const hasTry = $derived(rows.some((r) => r.paraBirimi === 'TRY' && r.tarih <= today))
   const hasUsd = $derived(rows.some((r) => r.paraBirimi === 'USD' && r.tarih <= today))
@@ -71,12 +78,12 @@
   const tryMonthlyBars = $derived(
     monthly
       .filter((m) => m.para === 'TRY')
-      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam })),
+      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam, key: m.ay })),
   )
   const usdMonthlyBars = $derived(
     monthly
       .filter((m) => m.para === 'USD')
-      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam })),
+      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam, key: m.ay })),
   )
 
   const catName = (kod: string) => categories.find((c) => c.kod === kod)?.ad ?? kod
@@ -97,7 +104,7 @@
 
   const activeCatTransactions = $derived.by(() => {
     if (!activeCatKod) return []
-    const prefix = `${currYear}-${String(currMonth).padStart(2, '0')}`
+    const prefix = activeMonth
     return rows
       .filter(
         (r) =>
@@ -125,7 +132,7 @@
 
   function getGroupCatTransactions(groupKey: string, catKod: string | null): PersonalTx[] {
     if (!catKod) return []
-    const prefix = `${currYear}-${String(currMonth).padStart(2, '0')}`
+    const prefix = activeMonth
     return rows
       .filter((r) => {
         if (!r.tarih.startsWith(prefix) || r.tarih > today || r.durum === 'planlandi' || r.tur !== 'GIDER' || r.paraBirimi !== 'TRY') {
@@ -157,14 +164,14 @@
   // Boyutlu kırılım türetmeleri
   const dimensionGroups = $derived(
     showDimensionSelector
-      ? ozetDimensionGroups(rows, dimension, people, accounts, today, currYear, currMonth)
+      ? ozetDimensionGroups(rows, dimension, people, accounts, today, activeYear, activeMonthNum)
       : [],
   )
 
   function getGroupBars(list: MonthlyTotal[], para: string) {
     return list
       .filter((m) => m.para === para)
-      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam }))
+      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam, key: m.ay }))
   }
   function getGroupDonut(breakdown: CategoryBreakdown[]) {
     return breakdown.map((c) => ({
@@ -346,30 +353,69 @@
               <div class="charts-row">
                 {#if gTryMonthly.some(b => b.value > 0)}
                   <section class="chart-card" data-chart="aylik-seyir">
-                    <h4 class="chart-title">Aylık Seyir (₺ TL)</h4>
-                    <BarChart bars={gTryMonthly} fmt={(v) => tryFmt(v, { whole: true })} />
+                    <div class="chart-card-header">
+                      <h4 class="chart-title">Aylık Seyir (₺ TL)</h4>
+                      <span class="chart-hint">Kategori dağılımı için aya tıklayın</span>
+                    </div>
+                    <BarChart
+                      bars={gTryMonthly}
+                      selectedKey={activeMonth}
+                      onSelect={(b) => {
+                        if (b.key) {
+                          selectedMonth = b.key === selectedMonth ? null : b.key
+                        }
+                      }}
+                      fmt={(v) => tryFmt(v, { whole: true })}
+                    />
                   </section>
                 {/if}
                 {#if gUsdMonthly.some(b => b.value > 0)}
                   <section class="chart-card" data-chart="aylik-seyir">
-                    <h4 class="chart-title">Aylık Seyir ($ USD)</h4>
-                    <BarChart bars={gUsdMonthly} fmt={(v) => usd(v, { whole: true })} />
+                    <div class="chart-card-header">
+                      <h4 class="chart-title">Aylık Seyir ($ USD)</h4>
+                      <span class="chart-hint">Kategori dağılımı için aya tıklayın</span>
+                    </div>
+                    <BarChart
+                      bars={gUsdMonthly}
+                      selectedKey={activeMonth}
+                      onSelect={(b) => {
+                        if (b.key) {
+                          selectedMonth = b.key === selectedMonth ? null : b.key
+                        }
+                      }}
+                      fmt={(v) => usd(v, { whole: true })}
+                    />
                   </section>
                 {/if}
               </div>
             {/if}
 
             <!-- Kategori Dağılımı ve Taksit Yükü -->
-            {#if gDonut.length > 0 || gInst.some(b => b.value > 0)}
+            {#if gDonut.length > 0 || gInst.some(b => b.value > 0) || !isCurrentMonth}
               <div class="detail-row">
                 {#if gDonut.length > 0}
                   {@const activeGroupCatKod = getGroupActiveCat(g.key, g.categoryBreakdown)}
                   {@const activeGroupCatLabel = activeGroupCatKod ? catName(activeGroupCatKod) : null}
                   {@const groupCatTxs = getGroupCatTransactions(g.key, activeGroupCatKod)}
                   {@const groupCatTotal = groupCatTxs.reduce((sum, r) => sum + r.tutar, 0)}
+                  {@const activeGroupGiderTry = g.categoryBreakdown.reduce((sum, c) => sum + c.toplam, 0)}
                   <section class="breakdown-card">
                     <div class="breakdown-card-header">
-                      <h4 class="chart-title">Kategori Dağılımı (Bu Ay)</h4>
+                      <div class="breakdown-title-group">
+                        <h4 class="chart-title">
+                          Kategori Dağılımı ({isCurrentMonth ? 'Bu Ay · ' : ''}{activeMonthLabel})
+                        </h4>
+                        {#if !isCurrentMonth}
+                          <button
+                            type="button"
+                            class="btn-reset-month"
+                            onclick={() => (selectedMonth = null)}
+                            title="Bu aya dön"
+                          >
+                            ↺ Bu aya dön
+                          </button>
+                        {/if}
+                      </div>
                       <span class="breakdown-hint">Harcamaları görmek için kategoriye tıklayın</span>
                     </div>
                     <div class="breakdown-split">
@@ -377,8 +423,8 @@
                         <div class="donut-wrap">
                           <Donut
                             slices={gDonut}
-                            total={gGiderTry}
-                            totalLabel="Bu ay"
+                            total={activeGroupGiderTry}
+                            totalLabel={isCurrentMonth ? 'Bu ay' : monthShort(activeMonth + '-01')}
                             selectedLabel={activeGroupCatLabel}
                             onSelect={(slice) => {
                               const cat = g.categoryBreakdown.find((c) => catName(c.kod) === slice.label)
@@ -390,7 +436,7 @@
                         <div class="cat-chips">
                           {#each g.categoryBreakdown as c}
                             {@const isSelected = c.kod === activeGroupCatKod}
-                            {@const pct = gGiderTry > 0 ? Math.round((c.toplam / gGiderTry) * 100) : 0}
+                            {@const pct = activeGroupGiderTry > 0 ? Math.round((c.toplam / activeGroupGiderTry) * 100) : 0}
                             <button
                               type="button"
                               class="cat-chip"
@@ -443,6 +489,24 @@
                       </div>
                     </div>
                   </section>
+                {:else if !isCurrentMonth}
+                  <section class="breakdown-card empty-card">
+                    <div class="breakdown-card-header">
+                      <div class="breakdown-title-group">
+                        <h4 class="chart-title">Kategori Dağılımı ({activeMonthLabel})</h4>
+                        <button
+                          type="button"
+                          class="btn-reset-month"
+                          onclick={() => (selectedMonth = null)}
+                        >
+                          ↺ Bu aya dön
+                        </button>
+                      </div>
+                    </div>
+                    <div class="detail-empty">
+                      <p>{activeMonthLabel} döneminde harcama kaydı bulunamadı.</p>
+                    </div>
+                  </section>
                 {/if}
 
                 {#if gInst.some((b) => b.value > 0)}
@@ -489,14 +553,38 @@
     <div class="charts-row">
       {#if hasTry}
         <section class="chart-card" data-chart="aylik-seyir">
-          <h3 class="chart-title">Aylık Seyir (₺ TL)</h3>
-          <BarChart bars={tryMonthlyBars} fmt={(v) => tryFmt(v, { whole: true })} />
+          <div class="chart-card-header">
+            <h3 class="chart-title">Aylık Seyir (₺ TL)</h3>
+            <span class="chart-hint">Kategori dağılımı için aya tıklayın</span>
+          </div>
+          <BarChart
+            bars={tryMonthlyBars}
+            selectedKey={activeMonth}
+            onSelect={(b) => {
+              if (b.key) {
+                selectedMonth = b.key === selectedMonth ? null : b.key
+              }
+            }}
+            fmt={(v) => tryFmt(v, { whole: true })}
+          />
         </section>
       {/if}
       {#if hasUsd}
         <section class="chart-card" data-chart="aylik-seyir">
-          <h3 class="chart-title">Aylık Seyir ($ USD)</h3>
-          <BarChart bars={usdMonthlyBars} fmt={(v) => usd(v, { whole: true })} />
+          <div class="chart-card-header">
+            <h3 class="chart-title">Aylık Seyir ($ USD)</h3>
+            <span class="chart-hint">Kategori dağılımı için aya tıklayın</span>
+          </div>
+          <BarChart
+            bars={usdMonthlyBars}
+            selectedKey={activeMonth}
+            onSelect={(b) => {
+              if (b.key) {
+                selectedMonth = b.key === selectedMonth ? null : b.key
+              }
+            }}
+            fmt={(v) => usd(v, { whole: true })}
+          />
         </section>
       {/if}
     </div>
@@ -506,7 +594,21 @@
       {#if donutSlices.length > 0}
         <section class="breakdown-card">
           <div class="breakdown-card-header">
-            <h3 class="chart-title">Kategori Dağılımı (Bu Ay)</h3>
+            <div class="breakdown-title-group">
+              <h3 class="chart-title">
+                Kategori Dağılımı ({isCurrentMonth ? 'Bu Ay · ' : ''}{activeMonthLabel})
+              </h3>
+              {#if !isCurrentMonth}
+                <button
+                  type="button"
+                  class="btn-reset-month"
+                  onclick={() => (selectedMonth = null)}
+                  title="Bu aya dön"
+                >
+                  ↺ Bu aya dön ({monthShort(currentMonthKey + '-01')})
+                </button>
+              {/if}
+            </div>
             <span class="breakdown-hint">Harcamaları görmek için kategoriye tıklayın</span>
           </div>
           <div class="breakdown-split">
@@ -514,8 +616,8 @@
               <div class="donut-wrap">
                 <Donut
                   slices={donutSlices}
-                  total={giderTry}
-                  totalLabel="Bu ay"
+                  total={activeMonthGiderTry}
+                  totalLabel={isCurrentMonth ? 'Bu ay' : monthShort(activeMonth + '-01')}
                   selectedLabel={activeCatLabel}
                   onSelect={(slice) => {
                     const cat = catBreakdown.find((c) => catName(c.kod) === slice.label)
@@ -527,7 +629,7 @@
               <div class="cat-chips">
                 {#each catBreakdown as c}
                   {@const isSelected = c.kod === activeCatKod}
-                  {@const pct = giderTry > 0 ? Math.round((c.toplam / giderTry) * 100) : 0}
+                  {@const pct = activeMonthGiderTry > 0 ? Math.round((c.toplam / activeMonthGiderTry) * 100) : 0}
                   <button
                     type="button"
                     class="cat-chip"
@@ -580,6 +682,24 @@
                 <div class="detail-empty">Kategori seçilmedi.</div>
               {/if}
             </div>
+          </div>
+        </section>
+      {:else if !isCurrentMonth}
+        <section class="breakdown-card empty-card">
+          <div class="breakdown-card-header">
+            <div class="breakdown-title-group">
+              <h3 class="chart-title">Kategori Dağılımı ({activeMonthLabel})</h3>
+              <button
+                type="button"
+                class="btn-reset-month"
+                onclick={() => (selectedMonth = null)}
+              >
+                ↺ Bu aya dön ({monthShort(currentMonthKey + '-01')})
+              </button>
+            </div>
+          </div>
+          <div class="detail-empty">
+            <p>{activeMonthLabel} döneminde harcama kaydı bulunamadı.</p>
           </div>
         </section>
       {/if}
@@ -734,6 +854,22 @@
     display: flex;
     flex-direction: column;
   }
+  .chart-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .chart-card-header .chart-title {
+    margin: 0;
+  }
+  .chart-hint {
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
   .breakdown-card {
     grid-column: 1 / -1;
     gap: 1rem;
@@ -749,6 +885,29 @@
   }
   .breakdown-card-header .chart-title {
     margin: 0;
+  }
+  .breakdown-title-group {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+  }
+  .btn-reset-month {
+    background: var(--surface-2);
+    border: 1px solid var(--accent-defter, #c9a86a);
+    color: var(--accent-defter, #c9a86a);
+    font-size: 0.72rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .btn-reset-month:hover {
+    background: rgba(201, 168, 106, 0.2);
+  }
+  .empty-card {
+    min-height: 120px;
   }
   .breakdown-hint {
     font-size: 0.76rem;

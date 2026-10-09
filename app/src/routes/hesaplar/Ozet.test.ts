@@ -55,6 +55,32 @@ describe('Ozet sayfası', () => {
     expect(container.textContent).toContain('Haftalık pazar')
   })
 
+  it('aylık seyir grafiğinde bir aya tıklayınca kategori dağılımı o aya göre değişir', async () => {
+    const { container, getByText } = render(Ozet, { dataset: fixture, today: '2026-09-08' })
+    const { fireEvent } = await import('@testing-library/svelte')
+
+    // Başlangıçta Eylül 2026 (bu ay) aktif
+    expect(container.textContent).toContain('Eyl 2026')
+    expect(container.textContent).not.toContain('Kira ödemesi') // Kira Ağustos'ta
+
+    // Aylık seyir grafiğindeki "Ağu" çubuğuna tıkla
+    const aguBar = container.querySelector('[data-bar="Ağu"]')
+    expect(aguBar).not.toBeNull()
+    await fireEvent.click(aguBar!)
+
+    // Kategori dağılımı Ağustos 2026'ya güncellenir
+    expect(container.textContent).toContain('Ağu 2026')
+    expect(container.textContent).toContain('Kira ödemesi') // 25.000 TL Kira
+
+    // "Bu aya dön" butonuna tıkla
+    const resetBtn = getByText(/bu aya dön/i)
+    await fireEvent.click(resetBtn)
+
+    // Tekrar Eylül 2026'ya döner
+    expect(container.textContent).toContain('Eyl 2026')
+    expect(container.textContent).not.toContain('Kira ödemesi')
+  })
+
   describe('kişi / hesap seçicisi (Görev 3)', () => {
     it('tek kişi veya tek hesap varken seçici gizlenir', () => {
       // fixture has only 1 person (ENIS)
