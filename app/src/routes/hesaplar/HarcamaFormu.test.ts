@@ -273,5 +273,101 @@ describe('HarcamaFormu', () => {
     expect(realRow).toBeDefined()
     expect(realRow!.tekrarKuralId).toBe(rules[0].id)
   })
+
+  it('taksitli harcama seçildiğinde PaymentPlan ve n taksit satırı oluşturur', async () => {
+    const { state, store } = await setup()
+    const onSaved = vi.fn()
+    const savedFiles: Record<string, unknown> = {}
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (n: string, data: unknown) => {
+        savedFiles[n] = data
+      },
+    }
+    const { getByLabelText, getByText } = render(HarcamaFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved },
+    })
+
+    await fireEvent.change(getByLabelText('Tür'), { target: { value: 'GIDER' } })
+    await fireEvent.change(getByLabelText('Kategori'), { target: { value: 'market' } })
+    await fireEvent.input(getByLabelText('Açıklama'), { target: { value: 'Telefon' } })
+    await fireEvent.input(getByLabelText('Tutar'), { target: { value: '3000' } })
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'GARANTI-SANAL' } })
+    await fireEvent.change(getByLabelText('Sahip'), { target: { value: 'ENIS' } })
+
+    // Taksitli seç
+    await fireEvent.click(getByLabelText('Taksitli işlem'))
+    await fireEvent.change(getByLabelText('Taksit Sayısı'), { target: { value: '3' } })
+
+    await fireEvent.click(getByText('İncele'))
+    expect(getByText(/3 Taksit \(₺1.000,00 \/ ay\)/i)).toBeInTheDocument()
+    await fireEvent.click(getByText('Onayla ve Kaydet'))
+
+    await vi.waitFor(() => {
+      expect(onSaved).toHaveBeenCalled()
+    })
+
+    const plans = savedFiles['payment_plans'] as any[]
+    expect(plans).toBeDefined()
+    const addedPlan = plans.find((p) => p.aciklama === 'Telefon')
+    expect(addedPlan).toBeDefined()
+    expect(addedPlan).toMatchObject({
+      aciklama: 'Telefon',
+      toplamTutar: 3000,
+      taksitSayisi: 3,
+      taksitTutari: 1000,
+      sonTaksitTutari: 1000,
+      durum: 'AKTIF',
+    })
+    expect(addedPlan.id).toMatch(/^pp_[0-9a-f]{12}$/)
+
+    const txs = savedFiles['personal_tx'] as PersonalTx[]
+    expect(txs).toBeDefined()
+    const telefonRows = txs.filter((r) => r.aciklama === 'Telefon')
+    expect(telefonRows).toHaveLength(3)
+    expect(telefonRows[0].taksitNo).toBe(1)
+    expect(telefonRows[0].taksitToplam).toBe(3)
+    expect(telefonRows[0].tutar).toBe(1000)
+    expect(telefonRows[0].taksitPlaniId).toBe(addedPlan.id)
+    expect(telefonRows[2].taksitNo).toBe(3)
+  })
+
+  it('kategori ekleme modalını açar ve yeni kategori ekleyip seçer', async () => {
+    const { state, store } = await setup()
+    const onSaved = vi.fn()
+    const savedFiles: Record<string, unknown> = {}
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (n: string, data: unknown) => {
+        savedFiles[n] = data
+      },
+    }
+    const { getByText, container } = render(HarcamaFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved },
+    })
+
+    // Click "+ Yeni" button
+    const addCatBtn = getByText('+ Yeni')
+    await fireEvent.click(addCatBtn)
+
+    expect(getByText('Yeni Kategori Ekle')).toBeInTheDocument()
+
+    // Fill category form
+    const catInput = container.querySelector('#kf-ad') as HTMLInputElement
+    catInput.value = 'Kırtasiye'
+    catInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await Promise.resolve()
+
+    const submitCat = getByText('Kategori Ekle') as HTMLButtonElement
+    submitCat.click()
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(savedFiles['categories']).toBeDefined()
+    // Modal should close and category select should have new category
+    const catSelect = container.querySelector('#hf-kategori') as HTMLSelectElement
+    expect(catSelect.value).toBe('kirtasiye')
+  })
 })
 

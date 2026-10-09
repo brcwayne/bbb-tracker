@@ -1,4 +1,5 @@
 import type { Debt, PaymentPlan, Person, PersonalAccount, PersonalTx } from './types'
+import { clampedDate, shiftMonth } from './accounts'
 
 export interface MonthlyTotal {
   ay: string
@@ -158,6 +159,33 @@ export function instalmentSchedule(
     return a.para.localeCompare(b.para)
   })
   return result
+}
+
+/** Splits a positive total into `n` instalment amounts, remainder on the last, matching Python's split_instalments. */
+export function splitInstalments(total: number, n: number): number[] {
+  if (n < 2) throw new Error('Taksit sayısı en az 2 olmalı.')
+  if (total <= 0) throw new Error('Tutar pozitif olmalı.')
+  const totalCents = Math.round(total * 100)
+  const baseCents = Math.floor(totalCents / n)
+  const remainder = totalCents - baseCents * n
+  const amounts: number[] = []
+  for (let i = 0; i < n - 1; i++) {
+    amounts.push(baseCents / 100)
+  }
+  amounts.push((baseCents + remainder) / 100)
+  return amounts
+}
+
+/** Computes monthly dates for `n` instalments starting from `purchaseDate`, clamped to month end. */
+export function instalmentDates(purchaseDate: string, n: number): string[] {
+  if (n < 1) throw new Error('Taksit sayısı en az 1 olmalı.')
+  const [y, m, d] = purchaseDate.split('-').map(Number)
+  const dates: string[] = []
+  for (let k = 0; k < n; k++) {
+    const [ny, nm] = shiftMonth(y, m, k)
+    dates.push(clampedDate(ny, nm, d))
+  }
+  return dates
 }
 
 export interface ActivePlanItem {

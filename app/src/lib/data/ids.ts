@@ -19,3 +19,9 @@ export function newRecurringRuleId(): string {
   const rand = crypto.getRandomValues(new Uint8Array(6))
   return 'rr_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
 }
+
+/** Mints a payment-plan id: `pp_` + 12 hex, same shape as `newPersonalId`. */
+export function newPaymentPlanId(): string {
+  const rand = crypto.getRandomValues(new Uint8Array(6))
+  return 'pp_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
+}

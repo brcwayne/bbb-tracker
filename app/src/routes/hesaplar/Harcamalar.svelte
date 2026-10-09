@@ -8,6 +8,7 @@
   import { tryFmt, usd } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HarcamaFormu from './HarcamaFormu.svelte'
+  import KategoriFormu from './KategoriFormu.svelte'
 
   let {
     dataset,
@@ -27,6 +28,9 @@
   let qArama = $state('')
 
   let showAdd = $state(false)
+  let showCategoryModal = $state(false)
+  let showFutureInline = $state(false)
+  let futureExpanded = $state(false)
   let editing = $state<PersonalTx | null>(null)
   let deleteTarget = $state<PersonalTx | null>(null)
   let deleting = $state(false)
@@ -97,6 +101,15 @@
       })
   })
 
+  const isFutureTx = (r: PersonalTx) => r.tarih > today || r.durum === 'planlandi'
+  const futureRows = $derived(filteredRows.filter(isFutureTx))
+  const pastAndTodayRows = $derived(filteredRows.filter((r) => !isFutureTx(r)))
+  const futureTotalTry = $derived(
+    futureRows
+      .filter((r) => r.paraBirimi === 'TRY' && r.tur === 'GIDER')
+      .reduce((sum, r) => sum + r.tutar, 0),
+  )
+
   const duzenlenen = $derived(editing)
   const formTarihi = $derived(showAdd ? 'yeni' : null)
 
@@ -152,6 +165,15 @@
         >
           + Harcama Ekle
         </button>
+        <button
+          type="button"
+          class="btn-cat-top"
+          disabled={!isDrive}
+          title={!isDrive ? 'Düzenleme için Drive bağlantısı gerekiyor' : ''}
+          onclick={() => (showCategoryModal = true)}
+        >
+          + Yeni Kategori
+        </button>
         {#if !isDrive}
           <span class="drive-notice">Düzenleme için Drive bağlantısı gerekiyor</span>
         {/if}
@@ -159,6 +181,9 @@
 
       <div class="row-count num">
         {filteredRows.length} kayıt
+        {#if futureRows.length > 0 && !showFutureInline}
+          <span class="count-breakdown">({pastAndTodayRows.length} gerçekleşen, {futureRows.length} ileri tarihli)</span>
+        {/if}
       </div>
     </div>
 
@@ -175,6 +200,21 @@
             onCancel={() => { showAdd = false; editing = null; }}
           />
         {/key}
+      </div>
+    {/if}
+
+    <!-- Yeni Kategori Modalı -->
+    {#if showCategoryModal && dataset}
+      <div class="cat-modal-backdrop" onclick={(e) => { if (e.target === e.currentTarget) showCategoryModal = false }}>
+        <div class="cat-modal-dialog">
+          <KategoriFormu
+            {dataset}
+            {source}
+            {store}
+            onSaved={() => { showCategoryModal = false; }}
+            onCancel={() => { showCategoryModal = false; }}
+          />
+        </div>
       </div>
     {/if}
 
@@ -241,14 +281,20 @@
           bind:value={qArama}
         />
       </div>
+
+      <div class="filter-item checkbox-filter">
+        <label class="toggle-label" for="toggle-future-inline">
+          <input
+            id="toggle-future-inline"
+            type="checkbox"
+            bind:checked={showFutureInline}
+          />
+          <span>Tümünü birleştir</span>
+        </label>
+      </div>
     </div>
 
-    <!-- Harcamalar Tablosu -->
-    {#if filteredRows.length === 0}
-      <div class="no-results">
-        <p>Seçilen filtrelere uygun harcama kaydı bulunamadı.</p>
-      </div>
-    {:else}
+    {#snippet harcamaTablosu(rows: PersonalTx[])}
       <div class="table-container">
         <div class="dt-wrap">
           <table>
@@ -261,7 +307,7 @@
                   Kategori {sortCol === 'kategori' ? (sortDir === 'asc' ? '▴' : '▾') : ''}
                 </th>
                 <th class="sortable" onclick={() => toggleSort('aciklama')}>
-                  Açıklama {sortCol === 'aciklama' ? (sortDir === 'asc' ? '▴' : '▾') : ''}
+                  Açıklama {sortCol === 'aciklama' ? (sortDir === 'asc' ? '▾' : '▴') : ''}
                 </th>
                 <th class="sortable r" onclick={() => toggleSort('tutar')}>
                   Tutar {sortCol === 'tutar' ? (sortDir === 'asc' ? '▴' : '▾') : ''}
@@ -279,7 +325,7 @@
               </tr>
             </thead>
             <tbody>
-              {#each filteredRows as r (r.id)}
+              {#each rows as r (r.id)}
                 {@const isFuture = r.tarih > today}
                 {@const isPlanned = r.durum === 'planlandi'}
                 <tr class:editing-row={editing?.id === r.id} class:planned-row={isPlanned}>
@@ -333,6 +379,41 @@
           </table>
         </div>
       </div>
+    {/snippet}
+
+    <!-- Harcamalar Tablosu -->
+    {#if filteredRows.length === 0}
+      <div class="no-results">
+        <p>Seçilen filtrelere uygun harcama kaydı bulunamadı.</p>
+      </div>
+    {:else if !showFutureInline && futureRows.length > 0}
+      <!-- İleri Tarihli Akordiyon -->
+      <details class="future-accordion" bind:open={futureExpanded}>
+        <summary class="future-summary">
+          <div class="summary-left">
+            <span class="chevron">{futureExpanded ? '▾' : '▸'}</span>
+            <span class="summary-title">🗓 İleri Tarihli ve Planlanan İşlemler</span>
+            <span class="summary-badge">{futureRows.length} kayıt</span>
+          </div>
+          <div class="summary-right num">
+            Toplam: <strong>{tryFmt(futureTotalTry)} TRY</strong>
+          </div>
+        </summary>
+        <div class="future-table-wrap">
+          {@render harcamaTablosu(futureRows)}
+        </div>
+      </details>
+
+      <!-- Geçmiş ve Bugünkü İşlemler -->
+      {#if pastAndTodayRows.length > 0}
+        {@render harcamaTablosu(pastAndTodayRows)}
+      {:else}
+        <div class="no-past-notice">
+          <p>Bugün ve geçmişe ait harcama kaydı bulunmuyor. İleri tarihli işlemler yukarıdaki sekmede yer alıyor.</p>
+        </div>
+      {/if}
+    {:else}
+      {@render harcamaTablosu(filteredRows)}
     {/if}
   </div>
 {/if}
@@ -568,6 +649,134 @@
     border: 1px solid rgba(201, 168, 106, 0.3);
     margin-left: 0.4rem;
     vertical-align: middle;
+  }
+  .btn-cat-top {
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-cat-top:hover:not(:disabled) {
+    background: var(--surface);
+    border-color: var(--accent-defter);
+  }
+  .btn-cat-top:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .count-breakdown {
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+    margin-left: 0.25rem;
+  }
+  .checkbox-filter {
+    justify-content: flex-end;
+    padding-bottom: 0.2rem;
+  }
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-label input {
+    cursor: pointer;
+  }
+  .future-accordion {
+    background: var(--surface);
+    border: 1px solid rgba(201, 168, 106, 0.35);
+    border-radius: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .future-accordion[open] {
+    border-color: var(--accent-defter, #c9a86a);
+  }
+  .future-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: rgba(201, 168, 106, 0.08);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    font-size: 0.88rem;
+  }
+  .future-summary::-webkit-details-marker {
+    display: none;
+  }
+  .summary-left {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .chevron {
+    font-size: 0.8rem;
+    color: var(--accent-defter, #c9a86a);
+    width: 1rem;
+  }
+  .summary-title {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .summary-badge {
+    font-size: 0.75rem;
+    background: rgba(201, 168, 106, 0.2);
+    color: var(--gold, #c9a86a);
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+  .summary-right {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+  }
+  .summary-right strong {
+    color: var(--ink);
+  }
+  .future-table-wrap {
+    border-top: 1px solid var(--hairline);
+  }
+  .future-table-wrap .table-container {
+    border: none;
+    border-radius: 0;
+  }
+  .no-past-notice {
+    padding: 1.5rem;
+    text-align: center;
+    background: var(--surface);
+    border: 1px dashed var(--hairline);
+    border-radius: 6px;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+  }
+  .cat-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+  }
+  .cat-modal-dialog {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 1.25rem;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   }
   .num {
     font-family: var(--font-num);

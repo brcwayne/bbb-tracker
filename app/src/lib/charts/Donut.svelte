@@ -11,6 +11,8 @@
     totalLabel = 'Toplam',
     captionBelow = false,
     maxSlices = 8,
+    onSelect = undefined,
+    selectedLabel = null,
   }: {
     slices?: { label: string; value: number }[]
     size?: number
@@ -21,6 +23,8 @@
     /** Show the hovered slice's name in the ring and its value + share on a line below. */
     captionBelow?: boolean
     maxSlices?: number
+    onSelect?: (slice: { label: string; value: number }, index: number) => void
+    selectedLabel?: string | null
   } = $props()
 
   const effectiveSlices = $derived.by(() => {
@@ -34,6 +38,10 @@
   const parts = $derived(arcs(effectiveSlices.map((s) => s.value), r, r - thickness))
   const sum = $derived(total ?? effectiveSlices.reduce((s, x) => s + x.value, 0))
   let hoverI = $state<number | null>(null)
+
+  const selectedSlice = $derived(
+    selectedLabel ? effectiveSlices.find((s) => s.label === selectedLabel) : null
+  )
 
   const share = (v: number) => (sum ? ((v / sum) * 100).toFixed(1) + '%' : '—')
 </script>
@@ -49,16 +57,20 @@
     onmouseleave={() => (hoverI = null)}
   >
     {#each parts as p, i}
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
       <path
         data-slice={effectiveSlices[i].label}
         role="img"
         aria-label={`${effectiveSlices[i].label}: ${fmt(effectiveSlices[i].value)}`}
         d={p.d}
         fill={CATEGORICAL[i % CATEGORICAL.length]}
+        stroke={selectedLabel === effectiveSlices[i].label ? 'var(--gold, #c9a86a)' : 'none'}
+        stroke-width={selectedLabel === effectiveSlices[i].label ? '2' : '0'}
         style:cursor="pointer"
-        style:opacity={hoverI == null || hoverI === i ? 1 : 0.35}
-        style:transition="opacity .12s ease"
+        style:opacity={selectedLabel ? (selectedLabel === effectiveSlices[i].label ? 1 : 0.4) : (hoverI == null || hoverI === i ? 1 : 0.35)}
+        style:transition="opacity .12s ease, stroke .12s ease"
         onmouseenter={() => (hoverI = i)}
+        onclick={() => onSelect?.(effectiveSlices[i], i)}
       />
     {/each}
     {#if hoverI != null}
@@ -72,6 +84,19 @@
           text-anchor="middle"
           style="font-size:1rem; fill:var(--ink); font-variant-numeric:tabular-nums;"
           >{fmt(effectiveSlices[hoverI].value)}</text
+        >
+      {/if}
+    {:else if selectedSlice}
+      <text x="0" y={captionBelow ? 4 : -3} text-anchor="middle" style="font-size:0.8125rem; fill:var(--gold, #c9a86a); font-weight:600;"
+        >{selectedSlice.label}</text
+      >
+      {#if !captionBelow}
+        <text
+          x="0"
+          y="12"
+          text-anchor="middle"
+          style="font-size:1rem; fill:var(--ink); font-variant-numeric:tabular-nums;"
+          >{fmt(selectedSlice.value)}</text
         >
       {/if}
     {:else}

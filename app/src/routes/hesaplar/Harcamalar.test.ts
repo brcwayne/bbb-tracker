@@ -126,5 +126,30 @@ describe('Harcamalar sayfası', () => {
     expect(getByText('Planlandı')).toBeInTheDocument()
     expect(container.querySelector('tr.planned-row')).not.toBeNull()
   })
+
+  it('yeni kategori butonuna basınca modal açılır', async () => {
+    const source = { id: 'drive' as const, load: () => Promise.resolve(fixture), save: async () => {} }
+    const store = createAppStore()
+    const { getByText, queryByText } = render(Harcamalar, {
+      props: { dataset: fixture, source, store, today: '2026-09-08' },
+    })
+
+    const newCatBtn = getByText('+ Yeni Kategori')
+    expect(queryByText('Yeni Kategori Ekle')).toBeNull()
+    await fireEvent.click(newCatBtn)
+    expect(getByText('Yeni Kategori Ekle')).toBeInTheDocument()
+  })
+
+  it('ileri tarihli işlemler varsayılan olarak akordiyonda gruplanır', async () => {
+    const { container, getByLabelText } = render(Harcamalar, { dataset: fixture, today: '2026-09-08' })
+    const accordion = container.querySelector('.future-accordion')
+    expect(accordion).not.toBeNull()
+    expect(accordion?.textContent).toContain('İleri Tarihli ve Planlanan İşlemler')
+
+    // Tümünü birleştir seçilince tek tabloya geçer
+    const toggle = getByLabelText(/tümünü birleştir/i)
+    await fireEvent.click(toggle)
+    expect(container.querySelector('.future-accordion')).toBeNull()
+  })
 })
 

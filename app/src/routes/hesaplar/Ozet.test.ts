@@ -37,6 +37,24 @@ describe('Ozet sayfası', () => {
     expect(container.querySelectorAll('[data-chart="aylik-seyir"]')).toHaveLength(2)
   })
 
+  it('kategori dağılımında seçili kategorinin harcama detayını listeler ve tıklamayla değiştirir', async () => {
+    const { container, getAllByText } = render(Ozet, { dataset: fixture, today: '2026-09-08' })
+    const { fireEvent } = await import('@testing-library/svelte')
+
+    // Varsayılan olarak kategori dağılımı iki sütunlu görünür
+    expect(container.querySelector('.breakdown-split')).not.toBeNull()
+    expect(container.querySelector('.detail-tx-list')).not.toBeNull()
+
+    // Market çipine tıklanınca Market harcaması sağdaki listede belirir
+    const marketChips = getAllByText('Market')
+    const marketChip = marketChips.find((el) => el.closest('.cat-chip'))
+    expect(marketChip).toBeDefined()
+    await fireEvent.click(marketChip!.closest('.cat-chip')!)
+
+    expect(container.querySelector('.detail-cat-title')?.textContent).toContain('Market')
+    expect(container.textContent).toContain('Haftalık pazar')
+  })
+
   describe('kişi / hesap seçicisi (Görev 3)', () => {
     it('tek kişi veya tek hesap varken seçici gizlenir', () => {
       // fixture has only 1 person (ENIS)

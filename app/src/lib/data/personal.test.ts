@@ -7,6 +7,8 @@ import {
   monthlyTotals,
   monthSummary,
   ozetDimensionGroups,
+  splitInstalments,
+  instalmentDates,
 } from './personal'
 import type { Debt, PaymentPlan, Person, PersonalAccount, PersonalTx } from './types'
 
@@ -204,6 +206,32 @@ describe('ozetDimensionGroups (Görev 3)', () => {
     expect(nakit.summary.gider['TRY']).toBe(100)
     expect(kart.label).toBe('Bonus Kart')
     expect(kart.summary.gider['TRY']).toBe(250)
+  })
+})
+
+describe('splitInstalments and instalmentDates', () => {
+  it('tutarı taksitlere eşit böler ve kalanı son taksite ekler', () => {
+    expect(splitInstalments(100, 3)).toEqual([33.33, 33.33, 33.34])
+    expect(splitInstalments(300, 3)).toEqual([100, 100, 100])
+    expect(splitInstalments(1000, 6)).toEqual([166.66, 166.66, 166.66, 166.66, 166.66, 166.70])
+  })
+
+  it('geçersiz taksit sayısı veya tutar için hata fırlatır', () => {
+    expect(() => splitInstalments(100, 1)).toThrow()
+    expect(() => splitInstalments(0, 3)).toThrow()
+  })
+
+  it('taksit tarihlerini her ay aynı güne öteler ve ay sonuna sabitler', () => {
+    expect(instalmentDates('2026-10-15', 3)).toEqual([
+      '2026-10-15',
+      '2026-11-15',
+      '2026-12-15',
+    ])
+    expect(instalmentDates('2026-01-31', 3)).toEqual([
+      '2026-01-31',
+      '2026-02-28', // Şubat 28'e sabitlenir
+      '2026-03-31',
+    ])
   })
 })
 

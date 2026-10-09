@@ -1,13 +1,15 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, PersonalTx, RecurringRule } from '../../lib/data/types'
+  import type { Dataset, PersonalTx, RecurringRule, PaymentPlan, Category } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord, appendRecords, updateRecord, updateRecords, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd, fmtCurrency } from '../../lib/format'
-  import { newPersonalId, newRecurringRuleId } from '../../lib/data/ids'
+  import { newPersonalId, newRecurringRuleId, newPaymentPlanId } from '../../lib/data/ids'
   import { materialize } from '../../lib/data/recurring'
+  import { splitInstalments, instalmentDates } from '../../lib/data/personal'
+  import KategoriFormu from './KategoriFormu.svelte'
 
   function todayIso() {
     const d = new Date()
@@ -46,6 +48,9 @@
   let aciklama = $state(editing?.aciklama ?? '')
   let notText = $state(editing?.not ?? '')
   let tekrarla = $state(false)
+  let taksitli = $state(false)
+  let taksitSayisi = $state(3)
+  let showCategoryModal = $state(false)
 
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
@@ -64,13 +69,33 @@
 
   const isInstalment = $derived(Boolean(editing?.taksitPlaniId))
 
-  const allCategories = $derived(dataset?.categories ?? [])
+  const taksitPreview = $derived.by(() => {
+    if (!taksitli || !tutar || tur !== 'GIDER') return null
+    const num = Number(tutar)
+    if (isNaN(num) || num <= 0 || taksitSayisi < 2) return null
+    try {
+      const amounts = splitInstalments(num, taksitSayisi)
+      const dates = instalmentDates(tarih, taksitSayisi)
+      return {
+        amounts,
+        dates,
+        ilkTaksit: amounts[0],
+        sonTaksit: amounts[amounts.length - 1],
+        bitisTarih: dates[dates.length - 1],
+      }
+    } catch {
+      return null
+    }
+  })
+
+  const liveDataset = $derived(store && $store?.dataset ? $store.dataset : dataset)
+  const allCategories = $derived(liveDataset?.categories ?? [])
   const filteredCategories = $derived(allCategories.filter((c) => c.tur === tur && c.aktif !== false))
 
   const accounts = $derived(
-    (dataset?.personalAccounts ?? dataset?.personalAccounts ?? []).filter((a) => a.aktif !== false),
+    (liveDataset?.personalAccounts ?? []).filter((a) => a.aktif !== false),
   )
-  const people = $derived((dataset?.people ?? []).filter((p) => p.aktif !== false))
+  const people = $derived((liveDataset?.people ?? []).filter((p) => p.aktif !== false))
 
   // Set default category, account, owner if not set
   $effect(() => {
@@ -130,6 +155,12 @@
       error = 'Sahip seçilmeli.'
       return
     }
+    if (taksitli && !editing && tur === 'GIDER') {
+      if (isNaN(taksitSayisi) || taksitSayisi < 2) {
+        error = 'Taksit sayısı en az 2 olmalı.'
+        return
+      }
+    }
     step = 'confirm'
   }
 
@@ -173,6 +204,47 @@
             (r) => ({ ...r, tutar: Number(tutar), kategori, hesap }),
           )
         }
+      } else if (taksitli && tur === 'GIDER') {
+        const num = Number(tutar)
+        const planId = newPaymentPlanId()
+        const amounts = splitInstalments(num, taksitSayisi)
+        const dates = instalmentDates(tarih, taksitSayisi)
+        const plan: PaymentPlan = {
+          id: planId,
+          alisTarihi: tarih,
+          aciklama: aciklama.trim(),
+          toplamTutar: num,
+          paraBirimi,
+          taksitSayisi,
+          taksitTutari: amounts[0],
+          sonTaksitTutari: amounts[amounts.length - 1],
+          kategori,
+          hesap,
+          sahip,
+          durum: 'AKTIF',
+          kaynak: 'manual',
+          olusturulma: new Date().toISOString(),
+        }
+        await appendRecord<PaymentPlan>(store, source, 'payment_plans', plan)
+
+        const rows: PersonalTx[] = dates.map((d, idx) => ({
+          id: newPersonalId(),
+          tarih: d,
+          tur: 'GIDER',
+          tutar: amounts[idx],
+          paraBirimi,
+          kategori,
+          aciklama: aciklama.trim(),
+          hesap,
+          sahip,
+          taksitPlaniId: planId,
+          taksitNo: idx + 1,
+          taksitToplam: taksitSayisi,
+          not: notText.trim(),
+          kaynak: 'manual',
+          olusturulma: new Date().toISOString(),
+        }))
+        await appendRecords<PersonalTx>(store, source, 'personal_tx', rows)
       } else {
         const ruleId = tekrarla ? newRecurringRuleId() : null
         const newRecord: PersonalTx = {
@@ -293,11 +365,32 @@
 
       <div class="row">
         <div class="field flex-1">
-          <label for="hf-kategori">Kategori</label>
-          <select id="hf-kategori" aria-label="Kategori" bind:value={kategori}>
+          <div class="field-label-row">
+            <label for="hf-kategori">Kategori</label>
+            <button
+              type="button"
+              class="btn-cat-add"
+              onclick={() => (showCategoryModal = true)}
+              title="Yeni kategori ekle"
+            >
+              + Yeni
+            </button>
+          </div>
+          <select
+            id="hf-kategori"
+            aria-label="Kategori"
+            bind:value={kategori}
+            onchange={(e) => {
+              if ((e.target as HTMLSelectElement).value === '__yeni__') {
+                showCategoryModal = true
+                kategori = filteredCategories[0]?.kod ?? ''
+              }
+            }}
+          >
             {#each filteredCategories as c}
               <option value={c.kod}>{c.ad}</option>
             {/each}
+            <option value="__yeni__">+ Yeni Kategori Ekle...</option>
           </select>
         </div>
 
@@ -349,11 +442,73 @@
         </div>
       {/if}
 
-      {#if !editing}
+      {#if !editing && tur === 'GIDER'}
+        <div class="taksit-card">
+          <div class="checkbox-field">
+            <label class="checkbox-label" for="hf-taksitli">
+              <input
+                id="hf-taksitli"
+                type="checkbox"
+                aria-label="Taksitli işlem"
+                bind:checked={taksitli}
+                onchange={() => { if (taksitli) tekrarla = false; }}
+              />
+              <span class="font-medium">💳 Taksitli Harcama Yap</span>
+            </label>
+          </div>
+
+          {#if taksitli}
+            <div class="taksit-row">
+              <div class="field flex-1">
+                <label for="hf-taksit-sayisi">Taksit Sayısı</label>
+                <select id="hf-taksit-sayisi" aria-label="Taksit Sayısı" bind:value={taksitSayisi}>
+                  <option value={2}>2 Taksit</option>
+                  <option value={3}>3 Taksit</option>
+                  <option value={4}>4 Taksit</option>
+                  <option value={5}>5 Taksit</option>
+                  <option value={6}>6 Taksit</option>
+                  <option value={8}>8 Taksit</option>
+                  <option value={9}>9 Taksit</option>
+                  <option value={10}>10 Taksit</option>
+                  <option value={12}>12 Taksit</option>
+                  <option value={18}>18 Taksit</option>
+                  <option value={24}>24 Taksit</option>
+                  <option value={36}>36 Taksit</option>
+                </select>
+              </div>
+
+              {#if taksitPreview}
+                <div class="taksit-preview-box">
+                  <div class="taksit-preview-main">
+                    <span>Aylık:</span>
+                    <strong class="num">{fmtCurrency(taksitPreview.ilkTaksit, paraBirimi)}</strong>
+                  </div>
+                  {#if taksitPreview.sonTaksit !== taksitPreview.ilkTaksit}
+                    <div class="taksit-preview-sub">
+                      (Son taksit: {fmtCurrency(taksitPreview.sonTaksit, paraBirimi)})
+                    </div>
+                  {/if}
+                  <div class="taksit-preview-dates">
+                    🗓 {tarih} → {taksitPreview.bitisTarih} ({taksitSayisi} ay)
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      {#if !editing && !taksitli}
         <div class="checkbox-field">
           <label class="checkbox-label" for="hf-tekrarla">
-            <input id="hf-tekrarla" type="checkbox" aria-label="Her ay tekrarla" bind:checked={tekrarla} />
-            <span>Her ay tekrarla</span>
+            <input
+              id="hf-tekrarla"
+              type="checkbox"
+              aria-label="Her ay tekrarla"
+              bind:checked={tekrarla}
+              onchange={() => { if (tekrarla) taksitli = false; }}
+            />
+            <span>Her ay tekrarla (Tekrarlayan kural)</span>
           </label>
         </div>
       {/if}
@@ -386,6 +541,12 @@
         {#if isInstalment}
           <dt>Taksit:</dt>
           <dd>{editing?.taksitNo}/{editing?.taksitToplam}</dd>
+        {/if}
+        {#if taksitli && !editing}
+          <dt>Ödeme Şekli:</dt>
+          <dd>{taksitSayisi} Taksit ({fmtCurrency(taksitPreview?.ilkTaksit ?? 0, paraBirimi)} / ay)</dd>
+          <dt>Taksit Planı:</dt>
+          <dd>{tarih} - {taksitPreview?.bitisTarih} ({taksitSayisi} taksit kaydı oluşturulacak)</dd>
         {/if}
         {#if tekrarla && !editing}
           <dt>Tekrar:</dt>
@@ -422,6 +583,36 @@
     </div>
   {/if}
 </div>
+
+{#if showCategoryModal}
+  <div
+    class="cat-modal-backdrop"
+    role="presentation"
+    onclick={() => (showCategoryModal = false)}
+    onkeydown={(e) => { if (e.key === 'Escape') showCategoryModal = false; }}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+      class="cat-modal-dialog"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <KategoriFormu
+        {dataset}
+        {source}
+        {store}
+        varsayilanTur={tur}
+        onSaved={(newCat) => {
+          kategori = newCat.kod
+          showCategoryModal = false
+        }}
+        onCancel={() => (showCategoryModal = false)}
+      />
+    </div>
+  </div>
+{/if}
 
 <style>
   .form-container {
@@ -602,5 +793,77 @@
     height: 1.05rem;
     accent-color: var(--accent-defter, #c9a86a);
     cursor: pointer;
+  }
+  .field-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .btn-cat-add {
+    background: transparent;
+    border: none;
+    color: var(--accent-defter, #c9a86a);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+  }
+  .btn-cat-add:hover {
+    text-decoration: underline;
+  }
+  .taksit-card {
+    background: rgba(201, 168, 106, 0.08);
+    border: 1px solid rgba(201, 168, 106, 0.25);
+    border-radius: 6px;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .taksit-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+  .taksit-preview-box {
+    flex: 2;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+  }
+  .taksit-preview-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .taksit-preview-sub {
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+    text-align: right;
+  }
+  .taksit-preview-dates {
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+    margin-top: 0.25rem;
+  }
+  .font-medium {
+    font-weight: 500;
+  }
+  .cat-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+    backdrop-filter: blur(2px);
+  }
+  .cat-modal-dialog {
+    max-width: 440px;
+    width: 100%;
   }
 </style>

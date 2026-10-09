@@ -87,6 +87,58 @@
     })),
   )
 
+  let selectedCatKod = $state<string | null>(null)
+  const activeCatKod = $derived(
+    (selectedCatKod && catBreakdown.some((c) => c.kod === selectedCatKod))
+      ? selectedCatKod
+      : catBreakdown[0]?.kod ?? null,
+  )
+  const activeCatLabel = $derived(activeCatKod ? catName(activeCatKod) : null)
+
+  const activeCatTransactions = $derived.by(() => {
+    if (!activeCatKod) return []
+    const prefix = `${currYear}-${String(currMonth).padStart(2, '0')}`
+    return rows
+      .filter(
+        (r) =>
+          r.tarih.startsWith(prefix) &&
+          r.tarih <= today &&
+          r.durum !== 'planlandi' &&
+          r.tur === 'GIDER' &&
+          r.paraBirimi === 'TRY' &&
+          r.kategori === activeCatKod,
+      )
+      .sort((a, b) => b.tarih.localeCompare(a.tarih) || b.id.localeCompare(a.id))
+  })
+
+  const activeCatTotal = $derived(
+    activeCatTransactions.reduce((sum, r) => sum + r.tutar, 0),
+  )
+
+  let groupSelectedCat = $state<Record<string, string>>({})
+
+  function getGroupActiveCat(groupKey: string, breakdown: CategoryBreakdown[]): string | null {
+    const sel = groupSelectedCat[groupKey]
+    if (sel && breakdown.some((c) => c.kod === sel)) return sel
+    return breakdown[0]?.kod ?? null
+  }
+
+  function getGroupCatTransactions(groupKey: string, catKod: string | null): PersonalTx[] {
+    if (!catKod) return []
+    const prefix = `${currYear}-${String(currMonth).padStart(2, '0')}`
+    return rows
+      .filter((r) => {
+        if (!r.tarih.startsWith(prefix) || r.tarih > today || r.durum === 'planlandi' || r.tur !== 'GIDER' || r.paraBirimi !== 'TRY') {
+          return false
+        }
+        if (r.kategori !== catKod) return false
+        if (dimension === 'kisi' && r.sahip !== groupKey) return false
+        if (dimension === 'hesap' && r.hesap !== groupKey) return false
+        return true
+      })
+      .sort((a, b) => b.tarih.localeCompare(a.tarih) || b.id.localeCompare(a.id))
+  }
+
   const instBars = $derived(
     upcomingInstalments
       .filter((s) => s.para === 'TRY')
@@ -311,15 +363,84 @@
             {#if gDonut.length > 0 || gInst.some(b => b.value > 0)}
               <div class="detail-row">
                 {#if gDonut.length > 0}
+                  {@const activeGroupCatKod = getGroupActiveCat(g.key, g.categoryBreakdown)}
+                  {@const activeGroupCatLabel = activeGroupCatKod ? catName(activeGroupCatKod) : null}
+                  {@const groupCatTxs = getGroupCatTransactions(g.key, activeGroupCatKod)}
+                  {@const groupCatTotal = groupCatTxs.reduce((sum, r) => sum + r.tutar, 0)}
                   <section class="breakdown-card">
-                    <h4 class="chart-title">Kategori Dağılımı (Bu Ay)</h4>
-                    <div class="donut-wrap">
-                      <Donut
-                        slices={gDonut}
-                        total={gGiderTry}
-                        totalLabel="Bu ay"
-                        fmt={(v) => tryFmt(v, { whole: true })}
-                      />
+                    <div class="breakdown-card-header">
+                      <h4 class="chart-title">Kategori Dağılımı (Bu Ay)</h4>
+                      <span class="breakdown-hint">Harcamaları görmek için kategoriye tıklayın</span>
+                    </div>
+                    <div class="breakdown-split">
+                      <div class="breakdown-left">
+                        <div class="donut-wrap">
+                          <Donut
+                            slices={gDonut}
+                            total={gGiderTry}
+                            totalLabel="Bu ay"
+                            selectedLabel={activeGroupCatLabel}
+                            onSelect={(slice) => {
+                              const cat = g.categoryBreakdown.find((c) => catName(c.kod) === slice.label)
+                              if (cat) groupSelectedCat = { ...groupSelectedCat, [g.key]: cat.kod }
+                            }}
+                            fmt={(v) => tryFmt(v, { whole: true })}
+                          />
+                        </div>
+                        <div class="cat-chips">
+                          {#each g.categoryBreakdown as c}
+                            {@const isSelected = c.kod === activeGroupCatKod}
+                            {@const pct = gGiderTry > 0 ? Math.round((c.toplam / gGiderTry) * 100) : 0}
+                            <button
+                              type="button"
+                              class="cat-chip"
+                              class:active={isSelected}
+                              onclick={() => { groupSelectedCat = { ...groupSelectedCat, [g.key]: c.kod } }}
+                            >
+                              <span class="chip-name">{catName(c.kod)}</span>
+                              <span class="chip-amount num">{tryFmt(c.toplam)}</span>
+                              <span class="chip-pct num">%{pct}</span>
+                            </button>
+                          {/each}
+                        </div>
+                      </div>
+                      <div class="breakdown-right">
+                        {#if activeGroupCatKod}
+                          <div class="detail-header">
+                            <div class="detail-title-row">
+                              <h5 class="detail-cat-title">{activeGroupCatLabel}</h5>
+                              <span class="detail-count num">{groupCatTxs.length} işlem</span>
+                            </div>
+                            <div class="detail-total-row">
+                              <span class="detail-total-label">Toplam:</span>
+                              <span class="detail-total-val num">{tryFmt(groupCatTotal)} TRY</span>
+                            </div>
+                          </div>
+                          {#if groupCatTxs.length === 0}
+                            <div class="detail-empty">Bu kategoride işlem bulunmuyor.</div>
+                          {:else}
+                            <div class="detail-tx-list">
+                              {#each groupCatTxs as tx (tx.id)}
+                                <div class="detail-tx-item">
+                                  <div class="tx-item-left">
+                                    <div class="tx-date-row">
+                                      <span class="tx-date num">{tx.tarih}</span>
+                                      {#if tx.taksitPlaniId && tx.taksitNo != null && tx.taksitToplam != null}
+                                        <span class="tx-instalment-badge num" title="Taksit">💳 {tx.taksitNo}/{tx.taksitToplam}</span>
+                                      {/if}
+                                      <span class="tx-account-badge">{dimension === 'kisi' ? tx.hesap : tx.sahip}</span>
+                                    </div>
+                                    <div class="tx-desc" title={tx.aciklama}>{tx.aciklama}</div>
+                                  </div>
+                                  <div class="tx-item-right">
+                                    <span class="tx-amount num">{tryFmt(tx.tutar)} ₺</span>
+                                  </div>
+                                </div>
+                              {/each}
+                            </div>
+                          {/if}
+                        {/if}
+                      </div>
                     </div>
                   </section>
                 {/if}
@@ -384,14 +505,81 @@
     <div class="detail-row">
       {#if donutSlices.length > 0}
         <section class="breakdown-card">
-          <h3 class="chart-title">Kategori Dağılımı (Bu Ay)</h3>
-          <div class="donut-wrap">
-            <Donut
-              slices={donutSlices}
-              total={giderTry}
-              totalLabel="Bu ay"
-              fmt={(v) => tryFmt(v, { whole: true })}
-            />
+          <div class="breakdown-card-header">
+            <h3 class="chart-title">Kategori Dağılımı (Bu Ay)</h3>
+            <span class="breakdown-hint">Harcamaları görmek için kategoriye tıklayın</span>
+          </div>
+          <div class="breakdown-split">
+            <div class="breakdown-left">
+              <div class="donut-wrap">
+                <Donut
+                  slices={donutSlices}
+                  total={giderTry}
+                  totalLabel="Bu ay"
+                  selectedLabel={activeCatLabel}
+                  onSelect={(slice) => {
+                    const cat = catBreakdown.find((c) => catName(c.kod) === slice.label)
+                    if (cat) selectedCatKod = cat.kod
+                  }}
+                  fmt={(v) => tryFmt(v, { whole: true })}
+                />
+              </div>
+              <div class="cat-chips">
+                {#each catBreakdown as c}
+                  {@const isSelected = c.kod === activeCatKod}
+                  {@const pct = giderTry > 0 ? Math.round((c.toplam / giderTry) * 100) : 0}
+                  <button
+                    type="button"
+                    class="cat-chip"
+                    class:active={isSelected}
+                    onclick={() => (selectedCatKod = c.kod)}
+                  >
+                    <span class="chip-name">{catName(c.kod)}</span>
+                    <span class="chip-amount num">{tryFmt(c.toplam)}</span>
+                    <span class="chip-pct num">%{pct}</span>
+                  </button>
+                {/each}
+              </div>
+            </div>
+            <div class="breakdown-right">
+              {#if activeCatKod}
+                <div class="detail-header">
+                  <div class="detail-title-row">
+                    <h4 class="detail-cat-title">{activeCatLabel}</h4>
+                    <span class="detail-count num">{activeCatTransactions.length} işlem</span>
+                  </div>
+                  <div class="detail-total-row">
+                    <span class="detail-total-label">Toplam:</span>
+                    <span class="detail-total-val num">{tryFmt(activeCatTotal)} TRY</span>
+                  </div>
+                </div>
+                {#if activeCatTransactions.length === 0}
+                  <div class="detail-empty">Bu kategoride işlem bulunmuyor.</div>
+                {:else}
+                  <div class="detail-tx-list">
+                    {#each activeCatTransactions as tx (tx.id)}
+                      <div class="detail-tx-item">
+                        <div class="tx-item-left">
+                          <div class="tx-date-row">
+                            <span class="tx-date num">{tx.tarih}</span>
+                            {#if tx.taksitPlaniId && tx.taksitNo != null && tx.taksitToplam != null}
+                              <span class="tx-instalment-badge num" title="Taksit">💳 {tx.taksitNo}/{tx.taksitToplam}</span>
+                            {/if}
+                            <span class="tx-account-badge">{tx.hesap}</span>
+                          </div>
+                          <div class="tx-desc" title={tx.aciklama}>{tx.aciklama}</div>
+                        </div>
+                        <div class="tx-item-right">
+                          <span class="tx-amount num">{tryFmt(tx.tutar)} ₺</span>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              {:else}
+                <div class="detail-empty">Kategori seçilmedi.</div>
+              {/if}
+            </div>
           </div>
         </section>
       {/if}
@@ -545,6 +733,220 @@
     padding: 1rem;
     display: flex;
     flex-direction: column;
+  }
+  .breakdown-card {
+    grid-column: 1 / -1;
+    gap: 1rem;
+  }
+  .breakdown-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 0.5rem;
+  }
+  .breakdown-card-header .chart-title {
+    margin: 0;
+  }
+  .breakdown-hint {
+    font-size: 0.76rem;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+  .breakdown-split {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+  }
+  @media (max-width: 768px) {
+    .breakdown-split {
+      flex-direction: column;
+    }
+  }
+  .breakdown-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.85rem;
+    flex: 0 0 320px;
+    max-width: 100%;
+  }
+  .cat-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+    width: 100%;
+  }
+  .cat-chip {
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 0.3rem 0.55rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    transition: all 0.15s ease;
+  }
+  .cat-chip:hover {
+    border-color: var(--accent-defter, #c9a86a);
+    color: var(--ink);
+  }
+  .cat-chip.active {
+    background: rgba(201, 168, 106, 0.18);
+    border-color: var(--accent-defter, #c9a86a);
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .chip-amount {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .chip-pct {
+    font-size: 0.7rem;
+    color: var(--ink-soft);
+  }
+  .breakdown-right {
+    flex: 1;
+    min-width: 0;
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .dimension-group-card .breakdown-right {
+    background: var(--surface);
+  }
+  .detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 0.5rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .detail-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .detail-cat-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .detail-count {
+    font-size: 0.74rem;
+    background: var(--surface);
+    color: var(--ink-soft);
+    padding: 0.15rem 0.45rem;
+    border-radius: 8px;
+    border: 1px solid var(--hairline);
+  }
+  .dimension-group-card .detail-count {
+    background: var(--surface-2);
+  }
+  .detail-total-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .detail-total-label {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+  .detail-total-val {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .detail-tx-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 0.2rem;
+  }
+  .detail-tx-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0.65rem;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 5px;
+    gap: 0.75rem;
+  }
+  .dimension-group-card .detail-tx-item {
+    background: var(--surface-2);
+  }
+  .tx-item-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .tx-date-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.74rem;
+    color: var(--ink-soft);
+  }
+  .tx-desc {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tx-instalment-badge {
+    font-size: 0.68rem;
+    color: var(--gold, #c9a86a);
+    background: rgba(201, 168, 106, 0.15);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    border: 1px solid rgba(201, 168, 106, 0.3);
+  }
+  .tx-account-badge {
+    font-size: 0.68rem;
+    color: var(--ink-soft);
+    background: var(--surface-2);
+    padding: 0.08rem 0.35rem;
+    border-radius: 4px;
+    border: 1px solid var(--hairline);
+  }
+  .dimension-group-card .tx-account-badge {
+    background: var(--surface);
+  }
+  .tx-item-right {
+    flex-shrink: 0;
+  }
+  .tx-amount {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .detail-empty {
+    padding: 2rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    font-style: italic;
   }
   .dimension-group-card .chart-card,
   .dimension-group-card .breakdown-card,
