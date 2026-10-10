@@ -53,15 +53,6 @@ function readStoredToken(): string | null {
     return null
   }
 }
-async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 15_000): Promise<Response> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    return await fetch(url, { ...init, signal: controller.signal })
-  } finally {
-    clearTimeout(timer)
-  }
-}
 
 function writeStoredToken(t: string | null, expiresInS = DEFAULT_TOKEN_TTL_S): void {
   try {
@@ -113,9 +104,6 @@ export class DriveSource implements DataSource {
     return new Promise<void>((resolve, reject) => {
       try {
         if (!this.tokenClient) {
-          if (typeof google === 'undefined' || !google?.accounts?.oauth2) {
-            throw new NeedsAuthError('Google servisleri henüz hazır değil — tekrar dene.')
-          }
           this.tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: this.clientId,
             scope: DRIVE_SCOPE,
@@ -124,13 +112,10 @@ export class DriveSource implements DataSource {
         }
         let done = false
         // Sessiz yenileme (prompt:'none') arayüz açmaz, anında cevaplanır —
-        // kısa süre doğrudur, kullanıcı açılışta beklemesin. Safari / iOS
-        // üçüncü taraf çerezleri engellediğinden (ITP) sessiz yenilemeye yanıt
-        // dönmez ve 8s beklemek donmuş hissi yaratır. Bu yüzden sessiz yenileme
-        // süresi 2.5 saniyedir. Elle giriş ise insanı bekler: hesap seçimi, şifre,
-        // izin ekranı.
+        // kısa süre doğrudur, kullanıcı açılışta beklemesin. Elle giriş ise
+        // insanı bekler: hesap seçimi, şifre, izin ekranı.
         const sessiz = prompt === 'none'
-        const sure = sessiz ? 2_500 : 5 * 60_000
+        const sure = sessiz ? 5_000 : 5 * 60_000
         const timer = setTimeout(() => {
           if (!done) {
             done = true
@@ -246,7 +231,7 @@ export class DriveSource implements DataSource {
     // No mimeType filter — a browser upload can land as text/plain or
     // application/octet-stream. Selection is by filename below.
     const q = `'${folderId}' in parents and trashed = false`
-    const listRes = await fetchWithTimeout(
+    const listRes = await fetch(
       'https://www.googleapis.com/drive/v3/files?q=' +
         encodeURIComponent(q) +
         '&fields=files(id,name,md5Checksum,modifiedTime)',
@@ -282,7 +267,7 @@ export class DriveSource implements DataSource {
       NAMES.map(async (n) => {
         const file = files.find((f) => f.name === `${n}.json`)
         if (!file) throw new Error(`Drive: ${n}.json bulunamadı`)
-        const res = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
           headers,
           cache: 'no-store',
         })
@@ -299,7 +284,7 @@ export class DriveSource implements DataSource {
     if (atFile) {
       // assetTransfers.json is optional (Ruling P2-4): a transient read failure on this one
       // file shouldn't break the whole dataset load, so fall back to [] rather than throwing.
-      const atRes = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, {
+      const atRes = await fetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, {
         headers,
         cache: 'no-store',
       })
@@ -317,7 +302,7 @@ export class DriveSource implements DataSource {
           return
         }
         try {
-          const res = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
             headers,
             cache: 'no-store',
           })
@@ -338,7 +323,7 @@ export class DriveSource implements DataSource {
     const syncFile = files.find((f) => f.name === 'sync-state.json')
     if (syncFile) {
       try {
-        const syncRes = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${syncFile.id}?alt=media`, {
+        const syncRes = await fetch(`https://www.googleapis.com/drive/v3/files/${syncFile.id}?alt=media`, {
           headers,
           cache: 'no-store',
         })
@@ -370,7 +355,7 @@ export class DriveSource implements DataSource {
     let cached = this.fileIds[name]
     if (!cached) {
       const q = `'${folderId}' in parents and trashed = false and name = '${name}.json'`
-      const res = await fetchWithTimeout(
+      const res = await fetch(
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,md5Checksum)`,
         { headers },
       )
@@ -389,7 +374,7 @@ export class DriveSource implements DataSource {
       const body =
         `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metaPart}\r\n` +
         `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(data)}\r\n--${boundary}--`
-      const res = await fetchWithTimeout(
+      const res = await fetch(
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,md5Checksum',
         { method: 'POST', headers: { ...headers, 'Content-Type': `multipart/related; boundary=${boundary}` }, body },
       )
@@ -404,7 +389,7 @@ export class DriveSource implements DataSource {
       return
     }
 
-    const currentRes = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${cached.id}?fields=md5Checksum`, {
+    const currentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${cached.id}?fields=md5Checksum`, {
       headers,
     })
     if (currentRes.status === 401 || currentRes.status === 403) {
@@ -417,7 +402,7 @@ export class DriveSource implements DataSource {
       throw new ConflictError(name)
     }
 
-    const updateRes = await fetchWithTimeout(
+    const updateRes = await fetch(
       `https://www.googleapis.com/upload/drive/v3/files/${cached.id}?uploadType=media&fields=md5Checksum`,
       { method: 'PATCH', headers, body: JSON.stringify(data) },
     )

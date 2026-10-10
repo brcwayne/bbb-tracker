@@ -279,7 +279,7 @@ describe('accountGroups', () => {
       debt({ id: 'd3', kisi: 'ZEK', yon: 'VERDIM', tutar: 900, durum: 'KAPALI' }),
     ], TODAY)
     const kisiler = g.find((x) => x.tur === 'KISI')!
-    expect(kisiler.satirlar.map((r) => [r.kod, r.bakiye])).toEqual([['BORA', 2000], ['ALPER', -500]])
+    expect(kisiler.satirlar.map((r) => [r.kod, r.bakiye])).toEqual([['BORA_TRY', 2000], ['ALPER_TRY', -500]])
     expect(kisiler.satirlar[0].href).toBe('#/h/borclar/BORA')
     expect(kisiler.toplam).toEqual({ TRY: 1500 })
   })

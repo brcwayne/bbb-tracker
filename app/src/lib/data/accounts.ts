@@ -339,7 +339,7 @@ export function accountGroups(
   const kisiler = debtBalances(debts)
   if (kisiler.length > 0) {
     const satirlar: AccountRow[] = kisiler.map((k) => ({
-      kod: k.kisi,
+      kod: `${k.kisi}_${k.para}`,
       ad: k.kisi,
       paraBirimi: k.para,
       bakiye: k.net,

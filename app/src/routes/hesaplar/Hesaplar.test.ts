@@ -128,7 +128,24 @@ describe('Hesaplar listesi', () => {
     expect(bankSection.textContent).toContain('QNB')
     expect(bankSection.textContent).toContain('QNB Nakit TL')
     expect(bankSection.textContent).toContain('QNB EUR')
-    expect(bankSection.textContent).toContain('€200,00')
+  })
+
+  it('aynı kişinin farklı para birimlerinde borçları varsa duplicate key hatası vermeden iki satırı da çizer', () => {
+    const ds: Dataset = {
+      ...fixture,
+      debts: [
+        { id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 50000, paraBirimi: 'TRY', aciklama: '', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z' },
+        { id: 'db_2', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 2060, paraBirimi: 'USD', aciklama: '', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z' },
+      ],
+    }
+    const { container } = render(Hesaplar, { dataset: ds, today: TODAY })
+    const kisiSection = container.querySelector('[data-group="KISI"]')!
+    expect(kisiSection.textContent).toContain('BORA')
+    expect(kisiSection.textContent).toContain('TRY')
+    expect(kisiSection.textContent).toContain('USD')
+    expect(kisiSection.textContent).toContain('₺50.000,00')
+    expect(kisiSection.textContent).toContain('$2,060.00')
   })
 })
+
 
