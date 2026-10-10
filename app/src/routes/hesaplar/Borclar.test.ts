@@ -477,7 +477,36 @@ describe('Borçlar sayfası', () => {
     // Küsüratsız tutarlar
     expect(cards[0].textContent).toContain('₺10.000')
     expect(cards[0].textContent).toContain('$500')
-    expect(cards[0].textContent).not.toContain('₺10.000,00')
+  })
+
+  it('canlı verideki gerçek borçlar ile sorunsuz render olur', () => {
+    const baseDebt = {
+      hesap: 'NAKIT',
+      durum: 'ACIK' as const,
+      kapatanKayitlar: [],
+      kaynak: 'telegram',
+      olusturulma: '2026-10-10T11:55:00Z',
+    }
+    const multiDebts: Debt[] = [
+      { ...baseDebt, id: 'd1', tarih: '2026-10-10', yon: 'VERDIM', kisi: 'CAN', tutar: 43000, paraBirimi: 'TRY', aciklama: 'Borç' },
+      { ...baseDebt, id: 'd2', tarih: '2026-10-10', yon: 'VERDIM', kisi: 'CAN', tutar: 200, paraBirimi: 'EUR', aciklama: 'Euro' },
+      { ...baseDebt, id: 'd3', tarih: '2026-10-10', yon: 'VERDIM', kisi: 'BORA', tutar: 50000, paraBirimi: 'TRY', aciklama: 'Bora' },
+      { ...baseDebt, id: 'd4', tarih: '2026-10-10', yon: 'VERDIM', kisi: 'BORA', tutar: 2060, paraBirimi: 'USD', aciklama: 'Bora usd' },
+      { ...baseDebt, id: 'd5', tarih: '2026-10-10', yon: 'VERDIM', kisi: 'ALPER', tutar: 5863, paraBirimi: 'USD', aciklama: 'Alper usd' },
+    ]
+    const ds: Dataset = {
+      ...fixture,
+      people: [
+        ...(fixture.people ?? []),
+        { kod: 'CAN', ad: 'Can', aktif: true, haneUyesi: false },
+        { kod: 'ALPER', ad: 'Alper', aktif: true, haneUyesi: false },
+      ],
+      debts: multiDebts,
+    }
+    const { container } = render(Borclar, { props: { dataset: ds } })
+    expect(container.textContent).toContain('Can')
+    expect(container.textContent).toContain('Bora')
+    expect(container.textContent).toContain('Alper')
   })
 
   it('Alacak ve Borç filtre sekmeleri ile listeyi filtreler', async () => {

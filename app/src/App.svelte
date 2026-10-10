@@ -165,6 +165,19 @@
     }
     location.reload()
   }
+
+  let loadingSlow = $state(false)
+  $effect(() => {
+    if ($store.status === 'loading') {
+      loadingSlow = false
+      const timer = setTimeout(() => {
+        loadingSlow = true
+      }, 2500)
+      return () => clearTimeout(timer)
+    } else {
+      loadingSlow = false
+    }
+  })
 </script>
 
 <header class="running">
@@ -230,7 +243,54 @@
 {/if}
 
 {#if $store.status === 'loading'}
-  <p class="loading">Yükleniyor…</p>
+  <div class="loading-wrap">
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="loading">Veriler yükleniyor…</p>
+    {#if loadingSlow}
+      <div class="loading-slow-card">
+        <p class="slow-desc">
+          Google Drive bağlantısı beklenenden uzun sürüyor.
+          {#if drive}
+            <small>Safari veya gizli sekmede arka plan oturum izni engellenmiş olabilir.</small>
+          {/if}
+        </p>
+        <div class="slow-actions">
+          {#if drive}
+            <button
+              type="button"
+              class="slow-btn primary"
+              onclick={() => {
+                drive.connect().then(() => load(store, source)).catch((e) => {
+                  store.set({ status: 'error', error: e instanceof Error ? e.message : String(e), errorKind: 'auth' })
+                })
+              }}
+            >
+              Google ile Bağlan
+            </button>
+          {/if}
+          <button type="button" class="slow-btn" onclick={() => load(store, source)}>
+            Tekrar Dene
+          </button>
+          <button
+            type="button"
+            class="slow-btn ghost"
+            onclick={() => {
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then((regs) => {
+                  for (const r of regs) r.unregister()
+                  location.reload()
+                })
+              } else {
+                location.reload()
+              }
+            }}
+          >
+            Önbelleği Temizle & Yenile
+          </button>
+        </div>
+      </div>
+    {/if}
+  </div>
 {:else if $store.status === 'error' && $store.errorKind === 'auth' && drive}
   <ConnectDrive
     connect={() => drive.connect()}
@@ -343,8 +403,80 @@
     border-bottom: 1px solid var(--hairline);
     background: var(--surface);
   }
+  .loading-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3.5rem 1.25rem;
+    gap: 0.75rem;
+  }
+  .spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 3px solid var(--hairline);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
   .loading {
-    padding: 2rem 1.25rem;
+    margin: 0;
+    padding: 0;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+  }
+  .loading-slow-card {
+    margin-top: 1rem;
+    padding: 1.25rem;
+    max-width: 24rem;
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    text-align: center;
+    box-sizing: border-box;
+  }
+  .slow-desc {
+    margin: 0 0 1rem;
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    line-height: 1.45;
+  }
+  .slow-desc small {
+    display: block;
+    margin-top: 0.4rem;
+    opacity: 0.85;
+    font-size: 0.8rem;
+  }
+  .slow-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .slow-btn {
+    appearance: none;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--surface-2);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+    padding: 0.5rem 0.85rem;
+    cursor: pointer;
+  }
+  .slow-btn.primary {
+    background: var(--gold);
+    color: #1a1400;
+    font-weight: 600;
+    border-color: var(--gold);
+  }
+  .slow-btn.ghost {
+    background: transparent;
     color: var(--ink-soft);
   }
   /* Excel-style sheet tabs, pinned bottom-left at every width. */
