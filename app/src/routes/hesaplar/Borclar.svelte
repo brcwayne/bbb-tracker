@@ -5,7 +5,7 @@
   import type { DataSource } from '../../lib/data/source'
   import { updateRecord, deleteRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
-  import { debtBalances } from '../../lib/data/personal'
+  import { debtBalances, type DebtBalanceItem } from '../../lib/data/personal'
   import { fmtCurrency } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import BorcFormu from './BorcFormu.svelte'
@@ -50,11 +50,30 @@
   const showSahip = $derived(distinctOwners >= 2)
 
   const balances = $derived(debtBalances(allDebts))
+
+  interface PersonDebtBalance {
+    kisi: string
+    items: DebtBalanceItem[]
+  }
+
+  const personBalances = $derived.by<PersonDebtBalance[]>(() => {
+    const map = new Map<string, DebtBalanceItem[]>()
+    for (const b of balances) {
+      const list = map.get(b.kisi) ?? []
+      list.push(b)
+      map.set(b.kisi, list)
+    }
+    return Array.from(map.entries()).map(([kisi, items]) => ({
+      kisi,
+      items,
+    }))
+  })
+
   const allOpenDebts = $derived(allDebts.filter((d) => d.durum === 'ACIK'))
   const openDebts = $derived(
     allOpenDebts.filter((d) => fTur === 'ALL' || d.yon === fTur),
   )
-  const fmtAmount = (n: number, curr: string) => fmtCurrency(n, curr)
+  const fmtAmount = (n: number, curr?: string) => fmtCurrency(n, curr, { whole: true })
 
   let editingDebt = $state<Debt | null>(null)
   let editAmount = $state('')
@@ -263,39 +282,82 @@
     {/if}
 
     <!-- Borç ve Alacak Bakiyeleri -->
-    {#if balances.length > 0}
+    {#if personBalances.length > 0}
       <section class="section-card">
-        <h3 class="section-title">Borç ve Alacak Bakiyeleri ({balances.length})</h3>
+        <h3 class="section-title">Borç ve Alacak Bakiyeleri ({personBalances.length})</h3>
         <div class="balances-grid">
-          {#each balances as b}
-            {@const isAlacakNet = b.net > 0}
-            {@const isBorcNet = b.net < 0}
-            <div class="balance-card">
+          {#each personBalances as p}
+            <div class="balance-card" data-person-card={p.kisi}>
               <div class="card-top">
-                <span class="person-name">{personName(b.kisi)}</span>
-                <span class="currency-tag">{b.para}</span>
+                <span class="person-name">{personName(p.kisi)}</span>
+                {#if p.items.length === 1}
+                  <span class="currency-tag">{p.items[0].para}</span>
+                {:else}
+                  <div class="currency-tags">
+                    {#each p.items as it}
+                      <span class="currency-tag">{it.para}</span>
+                    {/each}
+                  </div>
+                {/if}
               </div>
 
-              <div class="figures-row">
-                <div class="figure-item">
-                  <span class="fig-label">Alacak</span>
-                  <span class="fig-val num alacak gain">{fmtAmount(b.alacak, b.para)}</span>
+              {#if p.items.length === 1}
+                {@const b = p.items[0]}
+                {@const isAlacakNet = b.net > 0}
+                {@const isBorcNet = b.net < 0}
+                <div class="figures-row">
+                  <div class="figure-item">
+                    <span class="fig-label">Alacak</span>
+                    <span class="fig-val num alacak gain">{fmtAmount(b.alacak, b.para)}</span>
+                  </div>
+                  <div class="figure-item">
+                    <span class="fig-label">Borç</span>
+                    <span class="fig-val num borc loss">{fmtAmount(b.borc, b.para)}</span>
+                  </div>
+                  <div class="figure-item net-item">
+                    <span class="fig-label">Net Durum</span>
+                    <span
+                      class="fig-val num net"
+                      class:gain={isAlacakNet}
+                      class:loss={isBorcNet}
+                    >
+                      {isAlacakNet ? '+' : ''}{fmtAmount(b.net, b.para)}
+                    </span>
+                  </div>
                 </div>
-                <div class="figure-item">
-                  <span class="fig-label">Borç</span>
-                  <span class="fig-val num borc loss">{fmtAmount(b.borc, b.para)}</span>
+              {:else}
+                <div class="currency-subgroups">
+                  {#each p.items as b}
+                    {@const isAlacakNet = b.net > 0}
+                    {@const isBorcNet = b.net < 0}
+                    <div class="currency-subgroup">
+                      <div class="sub-curr-header">
+                        <span class="sub-curr-label">{b.para}</span>
+                      </div>
+                      <div class="figures-row">
+                        <div class="figure-item">
+                          <span class="fig-label">Alacak</span>
+                          <span class="fig-val num alacak gain">{fmtAmount(b.alacak, b.para)}</span>
+                        </div>
+                        <div class="figure-item">
+                          <span class="fig-label">Borç</span>
+                          <span class="fig-val num borc loss">{fmtAmount(b.borc, b.para)}</span>
+                        </div>
+                        <div class="figure-item net-item">
+                          <span class="fig-label">Net Durum</span>
+                          <span
+                            class="fig-val num net"
+                            class:gain={isAlacakNet}
+                            class:loss={isBorcNet}
+                          >
+                            {isAlacakNet ? '+' : ''}{fmtAmount(b.net, b.para)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
                 </div>
-                <div class="figure-item net-item">
-                  <span class="fig-label">Net Durum</span>
-                  <span
-                    class="fig-val num net"
-                    class:gain={isAlacakNet}
-                    class:loss={isBorcNet}
-                  >
-                    {isAlacakNet ? '+' : ''}{fmtAmount(b.net, b.para)}
-                  </span>
-                </div>
-              </div>
+              {/if}
             </div>
           {/each}
         </div>
@@ -617,6 +679,41 @@
     padding: 0.15rem 0.5rem;
     border-radius: 10px;
     border: 1px solid var(--hairline);
+  }
+  .currency-tags {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+  .currency-subgroups {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .currency-subgroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--hairline);
+  }
+  .currency-subgroup:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+  .sub-curr-header {
+    display: flex;
+    align-items: center;
+  }
+  .sub-curr-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    background: var(--surface);
+    padding: 0.12rem 0.45rem;
+    border-radius: 4px;
+    border: 1px solid var(--hairline);
+    letter-spacing: 0.02em;
   }
   .figures-row {
     display: grid;

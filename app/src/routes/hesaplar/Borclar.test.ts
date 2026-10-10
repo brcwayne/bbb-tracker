@@ -421,10 +421,63 @@ describe('Borçlar sayfası', () => {
     }
     const { container } = render(Borclar, { props: { dataset: currencyDataset } })
 
-    // USD: $500.00
-    expect(container.textContent).toContain('$500.00')
-    // EUR: €300,00
-    expect(container.textContent).toContain('€300,00')
+    // USD: $500 (küsüratsız)
+    expect(container.textContent).toContain('$500')
+    expect(container.textContent).not.toContain('$500.00')
+    // EUR: €300 (küsüratsız)
+    expect(container.textContent).toContain('€300')
+    expect(container.textContent).not.toContain('€300,00')
+  })
+
+  it('aynı kişinin farklı para cinsinden borçlarını tek karta toplar ve küsüratsız gösterir', () => {
+    const multiCurrDataset: Dataset = {
+      ...fixture,
+      people: [
+        { kod: 'BORA', ad: 'Bora', haneUyesi: false, aktif: true },
+      ],
+      debts: [
+        {
+          id: 'db_try',
+          tarih: '2026-09-01',
+          yon: 'VERDIM',
+          kisi: 'BORA',
+          tutar: 10000,
+          paraBirimi: 'TRY',
+          aciklama: 'TL borcu',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'manual',
+          olusturulma: '2026-09-01T00:00:00Z',
+        },
+        {
+          id: 'db_usd',
+          tarih: '2026-09-02',
+          yon: 'VERDIM',
+          kisi: 'BORA',
+          tutar: 500,
+          paraBirimi: 'USD',
+          aciklama: 'Dolar borcu',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'manual',
+          olusturulma: '2026-09-02T00:00:00Z',
+        },
+      ],
+    }
+    const { container } = render(Borclar, { props: { dataset: multiCurrDataset } })
+
+    // Tek bir kart olmalı
+    const cards = container.querySelectorAll('.balance-card')
+    expect(cards.length).toBe(1)
+    expect(cards[0].textContent).toContain('Bora')
+    expect(cards[0].textContent).toContain('TRY')
+    expect(cards[0].textContent).toContain('USD')
+    // Küsüratsız tutarlar
+    expect(cards[0].textContent).toContain('₺10.000')
+    expect(cards[0].textContent).toContain('$500')
+    expect(cards[0].textContent).not.toContain('₺10.000,00')
   })
 
   it('Alacak ve Borç filtre sekmeleri ile listeyi filtreler', async () => {
