@@ -6,8 +6,9 @@
   import { updateRecord, deleteRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { debtBalances } from '../../lib/data/personal'
-  import { tryFmt, usd } from '../../lib/format'
+  import { fmtCurrency } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
+  import BorcFormu from './BorcFormu.svelte'
 
   let {
     dataset,
@@ -21,7 +22,10 @@
     param?: string
   } = $props()
 
+  // svelte-ignore state_referenced_locally
   let fKisi = $state(param ?? '')
+  let fTur = $state<'ALL' | 'VERDIM' | 'ALDIM'>('ALL')
+  let showAdd = $state(false)
 
   const isDrive = $derived(Boolean(source?.save))
   const allDebts = $derived<Debt[]>(
@@ -46,13 +50,17 @@
   const showSahip = $derived(distinctOwners >= 2)
 
   const balances = $derived(debtBalances(allDebts))
-  const openDebts = $derived(allDebts.filter((d) => d.durum === 'ACIK'))
-  const fmtAmount = (n: number, curr: string) => (curr === 'USD' ? usd(n) : tryFmt(n))
+  const allOpenDebts = $derived(allDebts.filter((d) => d.durum === 'ACIK'))
+  const openDebts = $derived(
+    allOpenDebts.filter((d) => fTur === 'ALL' || d.yon === fTur),
+  )
+  const fmtAmount = (n: number, curr: string) => fmtCurrency(n, curr)
 
   let editingDebt = $state<Debt | null>(null)
   let editAmount = $state('')
   let editAciklama = $state('')
   let editSahip = $state('')
+  let editParaBirimi = $state<'TRY' | 'USD' | 'EUR'>('TRY')
   let editSaving = $state(false)
   let editError = $state<string | null>(null)
 
@@ -97,6 +105,7 @@
     editAmount = String(debt.tutar)
     editAciklama = debt.aciklama
     editSahip = debt.sahip || resolveSahip(debt)
+    editParaBirimi = (debt.paraBirimi as 'TRY' | 'USD' | 'EUR') || 'TRY'
     editError = null
   }
 
@@ -119,6 +128,7 @@
         {
           ...editingDebt,
           tutar: num,
+          paraBirimi: editParaBirimi,
           aciklama: editAciklama.trim(),
           ...(updatedSahip ? { sahip: updatedSahip } : {}),
         },
@@ -171,8 +181,40 @@
   }
 </script>
 
-{#if balances.length === 0 && openDebts.length === 0}
+{#if showAdd && dataset}
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="add-modal-title">
+    <BorcFormu
+      {dataset}
+      {source}
+      {store}
+      defaultKisi={fKisi}
+      onSaved={() => {
+        showAdd = false
+      }}
+      onCancel={() => {
+        showAdd = false
+      }}
+    />
+  </div>
+{/if}
+
+{#if balances.length === 0 && allOpenDebts.length === 0}
   <div class="empty-container">
+    <div class="top-bar">
+      <div class="left-actions">
+        <button
+          type="button"
+          class="btn-add"
+          disabled={!isDrive}
+          title={!isDrive ? 'Düzenleme için Drive bağlantısı gerekiyor' : ''}
+          onclick={() => {
+            showAdd = true
+          }}
+        >
+          + Borç / Alacak Ekle
+        </button>
+      </div>
+    </div>
     {#if fKisi}
       <button type="button" class="kisi-rozeti" data-testid="kisi-rozeti" onclick={() => (fKisi = '')}>
         {personName(fKisi)} ✕
@@ -185,11 +227,31 @@
   </div>
 {:else}
   <div class="page-container">
-    {#if fKisi}
-      <button type="button" class="kisi-rozeti" data-testid="kisi-rozeti" onclick={() => (fKisi = '')}>
-        {personName(fKisi)} ✕
-      </button>
-    {/if}
+    <div class="top-bar">
+      <div class="left-actions">
+        <button
+          type="button"
+          class="btn-add"
+          disabled={!isDrive}
+          title={!isDrive ? 'Düzenleme için Drive bağlantısı gerekiyor' : ''}
+          onclick={() => {
+            showAdd = true
+          }}
+        >
+          + Borç / Alacak Ekle
+        </button>
+        {#if !isDrive}
+          <span class="drive-notice">Düzenleme için Drive bağlantısı gerekiyor</span>
+        {/if}
+      </div>
+
+      {#if fKisi}
+        <button type="button" class="kisi-rozeti" data-testid="kisi-rozeti" onclick={() => (fKisi = '')}>
+          {personName(fKisi)} ✕
+        </button>
+      {/if}
+    </div>
+
     {#if !isDrive}
       <div class="offline-note">
         <span>Düzenleme için Drive bağlantısı gerekiyor (yerel kaynakta sadece okuma yapılır).</span>
@@ -242,7 +304,38 @@
 
     <!-- Açık Borç ve Alacak Kayıtları -->
     <section class="section-card">
-      <h3 class="section-title">Açık Kayıtlar ({openDebts.length})</h3>
+      <div class="section-header-row">
+        <h3 class="section-title">Açık Kayıtlar ({allOpenDebts.length})</h3>
+        {#if allOpenDebts.length > 0}
+          <div class="filter-tabs" role="tablist" aria-label="Kayıt Filtresi">
+            <button
+              type="button"
+              class="tab-btn"
+              class:active={fTur === 'ALL'}
+              onclick={() => (fTur = 'ALL')}
+            >
+              Tümü ({allOpenDebts.length})
+            </button>
+            <button
+              type="button"
+              class="tab-btn alacak-tab"
+              class:active={fTur === 'VERDIM'}
+              onclick={() => (fTur = 'VERDIM')}
+            >
+              Alacak ({allOpenDebts.filter((d) => d.yon === 'VERDIM').length})
+            </button>
+            <button
+              type="button"
+              class="tab-btn borc-tab"
+              class:active={fTur === 'ALDIM'}
+              onclick={() => (fTur = 'ALDIM')}
+            >
+              Borç ({allOpenDebts.filter((d) => d.yon === 'ALDIM').length})
+            </button>
+          </div>
+        {/if}
+      </div>
+
       {#if openDebts.length === 0}
         <p class="empty-hint">Açık kayıt bulunmuyor.</p>
       {:else}
@@ -280,7 +373,7 @@
                     {fmtAmount(d.tutar, d.paraBirimi)}
                   </td>
                   <td>{d.aciklama}</td>
-                  <td class="muted">{d.hesap}</td>
+                  <td class="muted">{d.hesap === 'DUZELTME' ? 'Düzeltme' : d.hesap}</td>
                   <td class="actions-cell">
                     <button
                       type="button"
@@ -305,7 +398,10 @@
                       class="btn-action btn-del"
                       disabled={!isDrive}
                       title={!isDrive ? 'Düzenleme için Drive bağlantısı gerekiyor' : 'Sil'}
-                      onclick={() => { deletingDebt = d; deleteError = null }}
+                      onclick={() => {
+                        deletingDebt = d
+                        deleteError = null
+                      }}
                     >
                       Sil
                     </button>
@@ -327,15 +423,43 @@
       <h4 id="edit-modal-title" class="modal-title">Borç / Alacak Düzenle</h4>
       <div class="form-body">
         <div class="field">
-          <label for="edit-tutar">Tutar ({editingDebt.paraBirimi})</label>
-          <input
-            id="edit-tutar"
-            type="number"
-            step="0.01"
-            min="0.01"
-            bind:value={editAmount}
-            required
-          />
+          <label for="edit-tutar">Tutar</label>
+          <div class="amount-row">
+            <input
+              id="edit-tutar"
+              type="number"
+              step="0.01"
+              min="0.01"
+              bind:value={editAmount}
+              required
+            />
+            <div class="currency-pills" role="radiogroup" aria-label="Para Birimi">
+              <button
+                type="button"
+                class="pill-btn"
+                class:active={editParaBirimi === 'TRY'}
+                onclick={() => (editParaBirimi = 'TRY')}
+              >
+                ₺ TRY
+              </button>
+              <button
+                type="button"
+                class="pill-btn"
+                class:active={editParaBirimi === 'USD'}
+                onclick={() => (editParaBirimi = 'USD')}
+              >
+                $ USD
+              </button>
+              <button
+                type="button"
+                class="pill-btn"
+                class:active={editParaBirimi === 'EUR'}
+                onclick={() => (editParaBirimi = 'EUR')}
+              >
+                € EUR
+              </button>
+            </div>
+          </div>
         </div>
         <div class="field">
           <label for="edit-aciklama">Açıklama</label>
@@ -364,7 +488,10 @@
           type="button"
           class="btn-vazgec"
           disabled={editSaving}
-          onclick={() => { editingDebt = null; editError = null }}
+          onclick={() => {
+            editingDebt = null
+            editError = null
+          }}
         >
           Vazgeç
         </button>
@@ -707,6 +834,122 @@
   }
   .kisi-rozeti:hover {
     opacity: 0.85;
+  }
+
+  /* Üst Eylem Çubuğu ve Butonlar */
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .left-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .btn-add {
+    background: var(--accent-defter, #238636);
+    border: 1px solid rgba(240, 246, 252, 0.1);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.45rem 0.95rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-add:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  .btn-add:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .drive-notice {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+
+  /* Başlık ve Filtre Sekmeleri */
+  .section-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .filter-tabs {
+    display: flex;
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .tab-btn {
+    border: none;
+    background: transparent;
+    color: var(--ink-soft);
+    padding: 0.35rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .tab-btn:hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .tab-btn.active {
+    background: var(--accent-defter, #388bfd);
+    color: #ffffff;
+    font-weight: 600;
+  }
+  .tab-btn.alacak-tab.active {
+    background: #2ea043;
+    color: #ffffff;
+  }
+  .tab-btn.borc-tab.active {
+    background: #da3633;
+    color: #ffffff;
+  }
+
+  /* Düzenleme Modalı Tutar & Para Birimi */
+  .amount-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+  .amount-row input {
+    flex: 1;
+  }
+  .currency-pills {
+    display: flex;
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .pill-btn {
+    border: none;
+    background: transparent;
+    color: var(--ink-soft);
+    padding: 0.3rem 0.55rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .pill-btn:hover {
+    color: var(--ink);
+  }
+  .pill-btn.active {
+    background: var(--accent-defter, #388bfd);
+    color: #fff;
+    font-weight: 600;
   }
 </style>
 

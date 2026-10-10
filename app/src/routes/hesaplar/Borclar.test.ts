@@ -359,5 +359,129 @@ describe('Borçlar sayfası', () => {
     const target = savedDebts!.find((d) => d.id === 'db_2')
     expect(target?.sahip).toBe('ANNE')
   })
+
+  it('+ Borç / Alacak Ekle butonuna basınca modal açılır', async () => {
+    const { createAppStore, load } = await import('../../lib/data/store')
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(fixture) })
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async () => {},
+    }
+    const { getByRole, getByText } = render(Borclar, {
+      props: { dataset: fixture, source, store },
+    })
+
+    const addBtn = getByRole('button', { name: /\+ Borç \/ Alacak Ekle/i })
+    await fireEvent.click(addBtn)
+
+    expect(getByText(/Yeni Borç \/ Alacak Ekle/i)).toBeInTheDocument()
+
+    // Vazgeç butonu ile kapatılır
+    const cancelBtn = getByRole('button', { name: /Vazgeç/i })
+    await fireEvent.click(cancelBtn)
+
+    expect(addBtn).toBeInTheDocument()
+  })
+
+  it('EUR ve USD kayıtlarını doğru para birimi sembolleriyle listeler', () => {
+    const currencyDataset: Dataset = {
+      ...fixture,
+      debts: [
+        {
+          id: 'db_usd',
+          tarih: '2026-09-01',
+          yon: 'VERDIM',
+          kisi: 'ALICE',
+          tutar: 500,
+          paraBirimi: 'USD',
+          aciklama: 'Dolar alacağı',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'manual',
+          olusturulma: '2026-09-01T00:00:00Z',
+        },
+        {
+          id: 'db_eur',
+          tarih: '2026-09-02',
+          yon: 'ALDIM',
+          kisi: 'BOB',
+          tutar: 300,
+          paraBirimi: 'EUR',
+          aciklama: 'Euro borcu',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'manual',
+          olusturulma: '2026-09-02T00:00:00Z',
+        },
+      ],
+    }
+    const { container } = render(Borclar, { props: { dataset: currencyDataset } })
+
+    // USD: $500.00
+    expect(container.textContent).toContain('$500.00')
+    // EUR: €300,00
+    expect(container.textContent).toContain('€300,00')
+  })
+
+  it('Alacak ve Borç filtre sekmeleri ile listeyi filtreler', async () => {
+    const ds: Dataset = {
+      ...fixture,
+      debts: [
+        {
+          id: 'db_alacak',
+          tarih: '2026-09-01',
+          yon: 'VERDIM',
+          kisi: 'BORA',
+          tutar: 1000,
+          paraBirimi: 'TRY',
+          aciklama: 'Bora alacağı',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'manual',
+          olusturulma: '2026-09-01T00:00:00Z',
+        },
+        {
+          id: 'db_borc',
+          tarih: '2026-09-02',
+          yon: 'ALDIM',
+          kisi: 'CAN',
+          tutar: 750,
+          paraBirimi: 'TRY',
+          aciklama: 'Can borcu',
+          hesap: 'NAKIT',
+          durum: 'ACIK',
+          kapatanKayitlar: [],
+          kaynak: 'manual',
+          olusturulma: '2026-09-02T00:00:00Z',
+        },
+      ],
+    }
+    const { container, getByRole } = render(Borclar, { props: { dataset: ds } })
+
+    // Başlangıçta ikisi de görünür
+    expect(container.textContent).toContain('Bora alacağı')
+    expect(container.textContent).toContain('Can borcu')
+
+    // Alacak sekmesine tıkla
+    await fireEvent.click(getByRole('button', { name: /Alacak \(1\)/i }))
+    expect(container.textContent).toContain('Bora alacağı')
+    expect(container.textContent).not.toContain('Can borcu')
+
+    // Borç sekmesine tıkla
+    await fireEvent.click(getByRole('button', { name: /Borç \(1\)/i }))
+    expect(container.textContent).not.toContain('Bora alacağı')
+    expect(container.textContent).toContain('Can borcu')
+
+    // Tümü sekmesine tıkla
+    await fireEvent.click(getByRole('button', { name: /Tümü \(2\)/i }))
+    expect(container.textContent).toContain('Bora alacağı')
+    expect(container.textContent).toContain('Can borcu')
+  })
 })
+
 

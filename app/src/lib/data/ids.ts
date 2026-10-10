@@ -25,3 +25,10 @@ export function newPaymentPlanId(): string {
   const rand = crypto.getRandomValues(new Uint8Array(6))
   return 'pp_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
 }
+
+/** Mints a debt id: `db_` + 12 hex, matching Telegram bot / debts.json shape. */
+export function newDebtId(): string {
+  const rand = crypto.getRandomValues(new Uint8Array(6))
+  return 'db_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
