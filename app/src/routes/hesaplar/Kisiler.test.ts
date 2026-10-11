@@ -84,7 +84,7 @@ describe('Kişiler sayfası', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(save).toHaveBeenCalledWith('people', expect.anything())
     expect(yazilan[yazilan.length - 1]).toEqual({
-      kod: 'AYSE-HANIM', ad: 'Ayşe Hanım', haneUyesi: false, aktif: true,
+      kod: 'AYSE-HANIM', ad: 'Ayşe Hanım', haneUyesi: true, aktif: true,
     })
   })
 

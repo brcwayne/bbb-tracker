@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, Debt, PersonalTx } from '../../lib/data/types'
+  import type { Dataset, Debt, PersonalTx, Person } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord, load } from '../../lib/data/store'
@@ -69,6 +69,20 @@
     }
   })
 
+  function slug(ad: string): string {
+    return ad
+      .trim()
+      .toLocaleUpperCase('tr')
+      .replace(/İ/g, 'I')
+      .replace(/Ş/g, 'S')
+      .replace(/Ğ/g, 'G')
+      .replace(/Ü/g, 'U')
+      .replace(/Ö/g, 'O')
+      .replace(/Ç/g, 'C')
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  }
+
   function dogrula(): string | null {
     if (!kisi.trim()) return 'Kişi adı girilmeli.'
     const t = Number(tutarText)
@@ -111,6 +125,22 @@
       }
 
       await appendRecord<Debt>(store, source, 'debts', yeniBorc)
+
+      // Tam entegrasyon: Kişi people.json'da yoksa otomatik ekle
+      const currentPeople = dataset?.people ?? []
+      const personKod = slug(trimmedKisi)
+      const personExists = currentPeople.some(
+        (p) => p.kod === personKod || p.ad.trim().toLocaleLowerCase('tr') === trimmedKisi.toLocaleLowerCase('tr'),
+      )
+      if (!personExists && personKod) {
+        const yeniKisi: Person = {
+          kod: personKod,
+          ad: trimmedKisi,
+          haneUyesi: true,
+          aktif: true,
+        }
+        await appendRecord<Person>(store, source, 'people', yeniKisi)
+      }
 
       // Eğer kullanıcı canlı işlem seçmişse (düzeltme DEĞİLSE) ve geçerli bir hesap seçilmişse,
       // hesap bakiyesini de günceller (personal_tx kaydı üretir):

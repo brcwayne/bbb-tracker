@@ -77,7 +77,7 @@ describe('BorcFormu', () => {
     const submitBtn = getByRole('button', { name: /Kaydet/i })
     await fireEvent.click(submitBtn)
 
-    expect(onSaved).toHaveBeenCalled()
+    await vi.waitFor(() => expect(onSaved).toHaveBeenCalled())
     expect(savedDebts.length).toBeGreaterThan(0)
     const added = savedDebts.find((d) => d.kisi === 'Ahmet' && d.tutar === 250)
     expect(added).toBeDefined()
@@ -119,7 +119,7 @@ describe('BorcFormu', () => {
     const submitBtn = getByRole('button', { name: /Kaydet/i })
     await fireEvent.click(submitBtn)
 
-    expect(onSaved).toHaveBeenCalled()
+    await vi.waitFor(() => expect(onSaved).toHaveBeenCalled())
     const added = savedDebts.find((d) => d.kisi === 'Mehmet')
     expect(added).toBeDefined()
     expect(added?.yon).toBe('ALDIM')
@@ -163,7 +163,7 @@ describe('BorcFormu', () => {
     const submitBtn = getByRole('button', { name: /Kaydet/i })
     await fireEvent.click(submitBtn)
 
-    expect(onSaved).toHaveBeenCalled()
+    await vi.waitFor(() => expect(onSaved).toHaveBeenCalled())
     expect(savedDebts.length).toBeGreaterThan(0)
     // personal_tx'e hiçbir kayıt atılmamalıdır (hesap bakiyesi azalmaz)
     expect(savedPersonalTx.length).toBe(0)
@@ -206,4 +206,33 @@ describe('BorcFormu', () => {
     expect(tx).toBeDefined()
     expect(tx?.tur).toBe('GIDER') // Borç verdiğimiz için hesaptan çıkış
   })
+
+  it('yeni kişiyi people listesine de ekler (tam entegrasyon)', async () => {
+    const { state, store } = await setup()
+    const onSaved = vi.fn()
+    let savedPeople: any[] = []
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (name: string, data: unknown) => {
+        if (name === 'people') savedPeople = data as any[]
+      },
+    }
+    const { getByRole, getByLabelText } = render(BorcFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved },
+    })
+
+    await fireEvent.input(getByLabelText(/Kişi/i), { target: { value: 'Yeni Komşu' } })
+    await fireEvent.input(getByLabelText(/Tutar/i), { target: { value: '500' } })
+
+    const submitBtn = getByRole('button', { name: /Kaydet/i })
+    await fireEvent.click(submitBtn)
+
+    await vi.waitFor(() => expect(onSaved).toHaveBeenCalled())
+    const addedPerson = savedPeople.find((p) => p.kod === 'YENI-KOMSU')
+    expect(addedPerson).toBeDefined()
+    expect(addedPerson?.ad).toBe('Yeni Komşu')
+    expect(addedPerson?.haneUyesi).toBe(true)
+  })
 })
+

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, PaymentPlan, PersonalTx, RecurringRule, Person } from '../../lib/data/types'
+  import type { Dataset, PaymentPlan, PersonalTx, RecurringRule, Person, Debt } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { updateRecord, deleteRecord, load } from '../../lib/data/store'
@@ -133,7 +133,15 @@
 
   const hasAccounts = $derived((dataset?.personalAccounts ?? []).some((a) => a.sahip === kod))
   const hasBrokers = $derived((dataset?.brokers ?? []).some((b) => b.sahip === kod))
-  const hasDebts = $derived((dataset?.debts ?? []).some((d) => d.sahip === kod))
+  const personDebts = $derived(
+    (dataset?.debts ?? []).filter(
+      (d) =>
+        d.sahip === kod ||
+        d.kisi?.trim().toLocaleUpperCase('tr') === kod ||
+        (person?.ad && d.kisi?.trim().toLocaleLowerCase('tr') === person.ad.trim().toLocaleLowerCase('tr')),
+    ),
+  )
+  const hasDebts = $derived(personDebts.length > 0)
   const relatedCount = $derived(
     personRows.length +
     personPlans.length +
@@ -385,6 +393,30 @@
             </div>
             <span class="pill-amount num loss">
               {fmtCurrency(cd.tutar, cd.paraBirimi)}
+            </span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if personDebts.length > 0}
+    <div class="card-debt-alerts">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+        <span class="alerts-title">🤝 Borç ve Alacaklar:</span>
+        <a href="#/h/borclar" class="btn-subtle" style="font-size:0.75rem; text-decoration:none;">Borçlar Sayfası →</a>
+      </div>
+      <div class="debt-pills">
+        {#each personDebts as pd}
+          <div class="debt-pill" class:due={pd.yon === 'ALDIM'}>
+            <div class="pill-info">
+              <strong>{pd.yon === 'VERDIM' ? 'Alacak (Borç Verildi)' : 'Borç (Borç Alındı)'}</strong>
+              <span class="pill-type">
+                {pd.aciklama || pd.tarih} · Durum: <b>{pd.durum === 'ACIK' ? 'Açık' : 'Kapalı'}</b>
+              </span>
+            </div>
+            <span class="pill-amount num" class:gain={pd.yon === 'VERDIM'} class:loss={pd.yon === 'ALDIM'}>
+              {fmtCurrency(pd.tutar, pd.paraBirimi)}
             </span>
           </div>
         {/each}
