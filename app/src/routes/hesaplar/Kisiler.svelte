@@ -72,7 +72,7 @@
     if (!source || !store) return
     kisiKaydediyor = true
     try {
-      const p: Person = { kod, ad, haneUyesi: false, aktif: true }
+      const p: Person = { kod, ad, haneUyesi: true, aktif: true }
       await appendRecord<Person>(store, source, 'people', p)
       yeniAd = ''
     } catch (e: any) {
