@@ -1,5 +1,4 @@
 import type { Debt, PersonalAccount, PersonalTx } from './types'
-import { debtBalances } from './personal'
 
 /** Two decimals, and never `-0`. `Math.round(-0.001 * 100) / 100` yields `-0`,
  *  which `toEqual(0)` rejects — an empty statement window would fail a test
@@ -301,18 +300,37 @@ function toplamla(satirlar: AccountRow[]): Record<string, number> {
 
 /**
  * The grouped list the page renders. Groups always come back in the order of
- * `GRUP_SIRASI`, with Alacak/Verecek last and omitted entirely when there are
- * no open debts. An empty account group is still returned so the page can
- * show it — an account with no movements is a true `₺ 0,00`, not an absence.
+ * `GRUP_SIRASI` (NAKIT, BANKA, KREDI_KARTI). Alacak/Verecek (debts) is excluded
+ * from the accounts page and its totals, remaining exclusively on the Borçlar page.
+ * An empty account group is still returned so the page can show it — an account
+ * with no movements is a true `₺ 0,00`, not an absence.
  */
 export function accountGroups(
   rows: PersonalTx[],
   accounts: PersonalAccount[],
-  debts: Debt[],
-  today: string,
-  opts: { pasifDahil?: boolean } = {},
+  debtsOrToday?: Debt[] | string,
+  todayOrOpts?: string | { pasifDahil?: boolean },
+  opts?: { pasifDahil?: boolean },
 ): AccountGroup[] {
-  const gorunen = accounts.filter((a) => a.aktif || opts.pasifDahil)
+  let today = ''
+  let options: { pasifDahil?: boolean } = {}
+
+  if (typeof debtsOrToday === 'string') {
+    today = debtsOrToday
+    if (todayOrOpts && typeof todayOrOpts === 'object') {
+      options = todayOrOpts
+    }
+  } else {
+    // Legacy / 5-arg signature: (rows, accounts, debts, today, opts)
+    if (typeof todayOrOpts === 'string') {
+      today = todayOrOpts
+    }
+    if (opts && typeof opts === 'object') {
+      options = opts
+    }
+  }
+
+  const gorunen = accounts.filter((a) => a.aktif || options.pasifDahil)
   const bakiyeler = accountBalances(rows, gorunen, today)
 
   const gruplar: AccountGroup[] = []
@@ -334,23 +352,6 @@ export function accountGroups(
     }))
 
     gruplar.push({ baslik, tur, satirlar, toplam: toplamla(satirlar) })
-  }
-
-  const kisiler = debtBalances(debts)
-  if (kisiler.length > 0) {
-    const satirlar: AccountRow[] = kisiler.map((k) => ({
-      kod: `${k.kisi}_${k.para}`,
-      ad: k.kisi,
-      paraBirimi: k.para,
-      bakiye: k.net,
-      href: `#/h/borclar/${k.kisi}`,
-    }))
-    gruplar.push({
-      baslik: 'Alacak / Verecek',
-      tur: 'KISI',
-      satirlar,
-      toplam: toplamla(satirlar),
-    })
   }
 
   return gruplar

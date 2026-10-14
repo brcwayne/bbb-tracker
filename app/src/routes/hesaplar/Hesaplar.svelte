@@ -32,7 +32,7 @@
 
   const accounts = $derived(dataset?.personalAccounts ?? [])
   const groups = $derived(
-    accountGroups(dataset?.personalTx ?? [], accounts, dataset?.debts ?? [], today, { pasifDahil }),
+    accountGroups(dataset?.personalTx ?? [], accounts, today, { pasifDahil }),
   )
   const band = $derived(netWorthBand(groups))
   const paralar = $derived(Object.keys(band).sort())
@@ -246,9 +246,6 @@
               <a class="row" class:pasif={r.pasif} href={r.href}>
                 <span class="row-name">
                   {#if r.simge}<span class="simge">{r.simge}</span>{/if}{r.ad}
-                  {#if g.tur === 'KISI'}
-                    <span class="currency-tag">{r.paraBirimi}</span>
-                  {/if}
                 </span>
                 {#if r.kart}
                   <span class="row-figures">
@@ -266,7 +263,7 @@
                   </span>
                 {/if}
               </a>
-              {#if g.tur !== 'KISI' && duzenlemeModu}
+              {#if duzenlemeModu}
                 <button
                   type="button"
                   class="row-edit-btn"

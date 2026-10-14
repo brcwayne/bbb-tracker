@@ -272,20 +272,19 @@ describe('accountGroups', () => {
     expect(g.find((x) => x.tur === 'NAKIT')!.satirlar[0].href).toBe('#/h/hesap/NAKIT')
   })
 
-  it('açık borçlardan Alacak/Verecek grubu üretir', () => {
+  it('borçlar olsa dahi hesaplar sayfasında Alacak/Verecek grubu üretmez (Borçlar sayfasına bırakılır)', () => {
     const g = accountGroups([], accounts, [
       debt({ id: 'd1', kisi: 'BORA', yon: 'VERDIM', tutar: 2000 }),
       debt({ id: 'd2', kisi: 'ALPER', yon: 'ALDIM', tutar: 500 }),
       debt({ id: 'd3', kisi: 'ZEK', yon: 'VERDIM', tutar: 900, durum: 'KAPALI' }),
     ], TODAY)
-    const kisiler = g.find((x) => x.tur === 'KISI')!
-    expect(kisiler.satirlar.map((r) => [r.kod, r.bakiye])).toEqual([['BORA_TRY', 2000], ['ALPER_TRY', -500]])
-    expect(kisiler.satirlar[0].href).toBe('#/h/borclar/BORA')
-    expect(kisiler.toplam).toEqual({ TRY: 1500 })
+    expect(g.some((x) => x.tur === 'KISI')).toBe(false)
+    expect(g.some((x) => x.baslik.includes('Alacak'))).toBe(false)
   })
 
-  it('borç yoksa Alacak/Verecek grubunu hiç üretmez', () => {
-    expect(accountGroups([], accounts, [], TODAY).some((x) => x.tur === 'KISI')).toBe(false)
+  it('debts parametresi olmadan da (rows, accounts, today, opts) çağrılabilir', () => {
+    const g = accountGroups([], accounts, TODAY)
+    expect(g.map((x) => x.tur)).toEqual(['NAKIT', 'BANKA', 'KREDI_KARTI'])
   })
 })
 
@@ -315,6 +314,19 @@ describe('netWorthBand', () => {
       TRY: { varliklar: 1000, borclar: 0, toplam: 1000 },
       USD: { varliklar: 40, borclar: 0, toplam: 40 },
     })
+  })
+
+  it('açık borçlar olsa dahi netWorthBand toplamlarına dahil edilmez', () => {
+    const accounts = [
+      acc({ kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT' }),
+    ]
+    const g = accountGroups([
+      tx({ id: 'a', tur: 'GELIR', tutar: 1000, hesap: 'NAKIT', tarih: '2026-09-01' }),
+    ], accounts, [
+      debt({ id: 'd1', kisi: 'BORA', yon: 'VERDIM', tutar: 2000 }),
+      debt({ id: 'd2', kisi: 'ALPER', yon: 'ALDIM', tutar: 500 }),
+    ], TODAY)
+    expect(netWorthBand(g)).toEqual({ TRY: { varliklar: 1000, borclar: 0, toplam: 1000 } })
   })
 })
 

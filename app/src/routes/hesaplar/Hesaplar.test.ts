@@ -59,14 +59,15 @@ describe('Hesaplar listesi', () => {
     expect(container.querySelector('a[href="#/h/hesap/NAKIT"]')).toBeTruthy()
   })
 
-  it('açık borç varsa Alacak / Verecek grubunu ekler', () => {
+  it('açık borç olsa bile hesaplar sayfasında Alacak / Verecek grubunu göstermez ve toplamlara katmaz', () => {
     const ds: Dataset = {
       ...fixture,
       debts: [{ id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 2000, paraBirimi: 'TRY', aciklama: '', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z' }],
     }
     const { container } = render(Hesaplar, { dataset: ds, today: TODAY })
-    expect(container.querySelector('[data-group="KISI"]')).toBeTruthy()
-    expect(container.querySelector('a[href="#/h/borclar/BORA"]')).toBeTruthy()
+    expect(container.querySelector('[data-group="KISI"]')).toBeFalsy()
+    expect(container.textContent).not.toContain('Alacak / Verecek')
+    expect(container.querySelector('a[href="#/h/borclar/BORA"]')).toBeFalsy()
   })
 
   it('Drive yoksa ekleme düğmesi pasif', () => {
@@ -84,19 +85,13 @@ describe('Hesaplar listesi', () => {
     expect(container.textContent).toContain('Yeni Hesap Ekle')
   })
 
-  it('düzenleme modunda hesaplarda düzenleme düğmesi çıkar ama kişi satırında çıkmaz', async () => {
-    const ds: Dataset = {
-      ...fixture,
-      debts: [{ id: 'db_1', tarih: '2026-09-01', yon: 'VERDIM', kisi: 'BORA', tutar: 2000, paraBirimi: 'TRY', aciklama: '', hesap: 'NAKIT', durum: 'ACIK', kapatanKayitlar: [], kaynak: 'telegram', olusturulma: '2026-09-01T00:00:00Z' }],
-    }
-    const source = { id: 'drive' as const, load: async () => ds, save: async () => {} }
-    const { getByLabelText, container } = render(Hesaplar, { dataset: ds, today: TODAY, source })
+  it('düzenleme modunda hesaplarda düzenleme düğmesi çıkar', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { getByLabelText, container } = render(Hesaplar, { dataset: fixture, today: TODAY, source })
     const toggle = getByLabelText(/hesapları düzenle/i) as HTMLButtonElement
     toggle.click()
     await Promise.resolve()
     expect(container.querySelector('[aria-label="Nakit hesabını düzenle"]')).toBeTruthy()
-    const kisiGroup = container.querySelector('[data-group="KISI"]')!
-    expect(kisiGroup.querySelector('.row-edit-btn')).toBeFalsy()
   })
 
   it('Drive varsa transfer düğmesi transfer formunu açar', async () => {
@@ -130,7 +125,7 @@ describe('Hesaplar listesi', () => {
     expect(bankSection.textContent).toContain('QNB EUR')
   })
 
-  it('aynı kişinin farklı para birimlerinde borçları varsa duplicate key hatası vermeden iki satırı da çizer', () => {
+  it('borçlar olsa dahi hesaplar sayfasında listelenmez ve net worth bandını etkilemez', () => {
     const ds: Dataset = {
       ...fixture,
       debts: [
@@ -139,12 +134,8 @@ describe('Hesaplar listesi', () => {
       ],
     }
     const { container } = render(Hesaplar, { dataset: ds, today: TODAY })
-    const kisiSection = container.querySelector('[data-group="KISI"]')!
-    expect(kisiSection.textContent).toContain('BORA')
-    expect(kisiSection.textContent).toContain('TRY')
-    expect(kisiSection.textContent).toContain('USD')
-    expect(kisiSection.textContent).toContain('₺50.000,00')
-    expect(kisiSection.textContent).toContain('$2,060.00')
+    expect(container.querySelector('[data-group="KISI"]')).toBeFalsy()
+    expect(container.textContent).not.toContain('BORA')
   })
 })
 
