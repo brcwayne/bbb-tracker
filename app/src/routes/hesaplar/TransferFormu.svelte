@@ -18,6 +18,7 @@
     tarih,
     baslik = 'Transfer',
     varsayilanTutar,
+    varsayilanSahip,
     onSaved,
     onCancel,
   }: {
@@ -30,6 +31,7 @@
     tarih?: string
     baslik?: string
     varsayilanTutar?: number
+    varsayilanSahip?: string
     onSaved?: () => void
     onCancel?: () => void
   } = $props()
@@ -41,6 +43,7 @@
   )
   let tarihText = $state(editing?.tarih ?? tarih ?? new Date().toISOString().slice(0, 10))
   let aciklama = $state(editing?.aciklama ?? '')
+  let sahip = $state(editing?.sahip ?? varsayilanSahip ?? '')
 
   let error = $state<string | null>(null)
   let saving = $state(false)
@@ -48,6 +51,22 @@
   const accounts = $derived(
     (dataset?.personalAccounts ?? []).filter((a) => a.aktif !== false),
   )
+  const people = $derived(
+    (dataset?.people ?? []).filter((p) => p.aktif !== false),
+  )
+
+  $effect(() => {
+    if (!sahip) {
+      if (varsayilanSahip) {
+        sahip = varsayilanSahip
+      } else if (hedef) {
+        const targetAcc = accounts.find((a) => a.kod === hedef)
+        sahip = targetAcc?.sahip || people[0]?.kod || 'ENIS'
+      } else if (people.length > 0) {
+        sahip = people[0].kod
+      }
+    }
+  })
   const nakitAccounts = $derived(
     accounts.filter((a) => a.tur === 'NAKIT'),
   )
@@ -114,6 +133,7 @@
           tutar: Number(tutarText),
           hesap: kaynak,
           karsiHesap: hedef,
+          sahip: sahip || editing.sahip || 'ENIS',
           aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
         }
         await updateRecord<PersonalTx>(store, source, 'personal_tx', (r) => r.id === editing!.id, patch, {
@@ -123,9 +143,10 @@
         const kIsBroker = isBroker(kaynak)
         const hIsBroker = isBroker(hedef)
         const owner =
-          (!kIsBroker ? accounts.find((a) => a.kod === kaynak)?.sahip : null) ??
+          sahip ||
+          ((!kIsBroker ? accounts.find((a) => a.kod === kaynak)?.sahip : null) ??
           (!hIsBroker ? accounts.find((a) => a.kod === hedef)?.sahip : null) ??
-          'ENIS'
+          'ENIS')
         const currency =
           (!kIsBroker ? accounts.find((a) => a.kod === kaynak)?.paraBirimi : null) ??
           (!hIsBroker ? accounts.find((a) => a.kod === hedef)?.paraBirimi : null) ??
@@ -336,6 +357,19 @@
         <input id="t-tarih" aria-label="Tarih" type="date" bind:value={tarihText} />
       </div>
     </div>
+
+    {#if people.length > 0}
+      <div class="row">
+        <div class="field">
+          <label for="t-sahip">Kimin Adına / Borçlu Kişi</label>
+          <select id="t-sahip" aria-label="Kimin Adına" bind:value={sahip}>
+            {#each people as p}
+              <option value={p.kod}>{p.ad}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+    {/if}
 
     <div class="row">
       <div class="field">

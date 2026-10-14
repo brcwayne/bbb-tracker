@@ -53,6 +53,7 @@
   let transferHedef = $state<string | undefined>(undefined)
   let transferBasligi = $state('Transfer')
   let transferTutar = $state<number | undefined>(undefined)
+  let transferSahip = $state<string | undefined>(undefined)
   let duzenlenenTransfer = $state<PersonalTx | null>(null)
   let duzeltmeAcik = $state(false)
   let hesapDuzenleAcik = $state(false)
@@ -67,18 +68,31 @@
     transferHedef = undefined
     transferBasligi = 'Transfer'
     transferTutar = undefined
+    transferSahip = undefined
     duzenlenenTransfer = null
     transferAcik = true
   }
 
-  function acKartOdemesi() {
+  function acKartOdemesi(sahipKod?: string, defaultTutar?: number) {
     if (!account) return
     transferKaynak = undefined
     transferHedef = account.kod
-    transferBasligi = 'Kart Ödemesi'
-    transferTutar = kart?.odenecekEkstre?.kalan && kart.odenecekEkstre.kalan > 0
-      ? kart.odenecekEkstre.kalan
-      : (kart?.toplamBorc && kart.toplamBorc < 0 ? Math.abs(kart.toplamBorc) : undefined)
+    transferBasligi = sahipKod
+      ? `${dataset?.people?.find((p) => p.kod === sahipKod)?.ad ?? sahipKod} İçin Kart Ödemesi`
+      : 'Kart Ödemesi'
+    transferSahip = sahipKod
+    if (defaultTutar != null && defaultTutar > 0) {
+      transferTutar = defaultTutar
+    } else if (sahipKod && activeStatement) {
+      const gross = activeStatement.sahipToplami[sahipKod] ?? 0
+      const paid = activeStatement.sahipOdenen?.[sahipKod] ?? 0
+      const rem = Math.max(0, Math.round((gross - paid) * 100) / 100)
+      transferTutar = rem > 0 ? rem : gross
+    } else {
+      transferTutar = kart?.odenecekEkstre?.kalan && kart.odenecekEkstre.kalan > 0
+        ? kart.odenecekEkstre.kalan
+        : (kart?.toplamBorc && kart.toplamBorc < 0 ? Math.abs(kart.toplamBorc) : undefined)
+    }
     duzenlenenTransfer = null
     transferAcik = true
   }
@@ -118,7 +132,13 @@
     if (Object.keys(st.sahipToplami).length > 0) {
       for (const [sahipKod, tutar] of Object.entries(st.sahipToplami)) {
         const kisiAd = dataset?.people?.find(p => p.kod === sahipKod)?.ad ?? sahipKod
-        lines.push(`👤 ${kisiAd}: ${fmt(tutar)}`)
+        const odenen = st.sahipOdenen?.[sahipKod] ?? 0
+        const kalan = Math.max(0, Math.round((tutar - odenen) * 100) / 100)
+        if (odenen > 0) {
+          lines.push(`👤 ${kisiAd}: ${fmt(tutar)} (Ödenen: ${fmt(odenen)}, Kalan: ${fmt(kalan)})`)
+        } else {
+          lines.push(`👤 ${kisiAd}: ${fmt(tutar)}`)
+        }
       }
       lines.push('')
     }
@@ -270,6 +290,18 @@
       {/if}
     </header>
 
+    <div class="eylemler">
+      <button type="button" data-action="harcama" disabled={!isDrive} onclick={() => ekle()}>+ Gider/Gelir</button>
+      <button type="button" data-action="transfer" disabled={!isDrive} onclick={acTransfer}>⇄ Transfer</button>
+      {#if account.tur === 'KREDI_KARTI'}
+        <button type="button" data-action="odeme" disabled={!isDrive} onclick={() => acKartOdemesi()}>💳 Kart ödemesi</button>
+      {/if}
+      <button type="button" data-action="duzeltme" disabled={!isDrive} onclick={() => (duzeltmeAcik = true)}>⚖ Bakiye düzelt</button>
+    </div>
+    {#if !isDrive}
+      <span class="drive-notice">Düzenleme için Drive bağlantısı gerekiyor</span>
+    {/if}
+
     {#if hesapDuzenleAcik && dataset && account}
       <div class="form-modal">
         <HesapFormu
@@ -312,9 +344,10 @@
           hedefHesap={transferHedef}
           baslik={transferBasligi}
           varsayilanTutar={transferTutar}
+          varsayilanSahip={transferSahip}
           tarih={seciliGun ? iso(seciliGun) : today}
-          onSaved={() => { transferAcik = false; duzenlenenTransfer = null }}
-          onCancel={() => { transferAcik = false; duzenlenenTransfer = null }}
+          onSaved={() => { transferAcik = false; duzenlenenTransfer = null; transferSahip = undefined; }}
+          onCancel={() => { transferAcik = false; duzenlenenTransfer = null; transferSahip = undefined; }}
         />
       </div>
     {/if}
@@ -417,9 +450,34 @@
               <div class="kisi-etiketler">
                 {#each Object.entries(st.sahipToplami) as [sahipKod, tutar]}
                   {@const kisiAd = dataset?.people?.find(p => p.kod === sahipKod)?.ad ?? sahipKod}
-                  <span class="kisi-badge">
-                    👤 <strong>{kisiAd}</strong>: <b class="num loss">{fmt(tutar)}</b>
-                  </span>
+                  {@const odenen = st.sahipOdenen?.[sahipKod] ?? 0}
+                  {@const kalan = Math.max(0, Math.round((tutar - odenen) * 100) / 100)}
+                  <div class="kisi-badge">
+                    <div class="kisi-badge-head">
+                      <span class="kisi-ad">👤 <strong>{kisiAd}</strong>: <b class="num loss">{fmt(tutar)}</b></span>
+                      {#if isDrive && isKart}
+                        <button
+                          type="button"
+                          class="btn-kisi-ode"
+                          title="{kisiAd} için kart ödemesi yap"
+                          onclick={() => acKartOdemesi(sahipKod, kalan > 0 ? kalan : tutar)}
+                        >
+                          Öde
+                        </button>
+                      {/if}
+                    </div>
+                    {#if odenen > 0}
+                      <div class="kisi-badge-sub">
+                        <span>Ödenen:</span>
+                        <b class="num gain">+{fmt(odenen)}</b>
+                        {#if kalan > 0}
+                          <span class="kisi-kalan">(Kalan: <b class="num loss">{fmt(kalan)}</b>)</span>
+                        {:else}
+                          <span class="kisi-tamam">✓ Ödendi</span>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
                 {/each}
               </div>
             </div>
@@ -533,18 +591,6 @@
           {/each}
         </ul>
       {/if}
-
-    <div class="eylemler">
-      <button type="button" data-action="harcama" disabled={!isDrive} onclick={() => ekle()}>+ Gider/Gelir</button>
-      <button type="button" data-action="transfer" disabled={!isDrive} onclick={acTransfer}>⇄ Transfer</button>
-      {#if account.tur === 'KREDI_KARTI'}
-        <button type="button" data-action="odeme" disabled={!isDrive} onclick={acKartOdemesi}>💳 Kart ödemesi</button>
-      {/if}
-      <button type="button" data-action="duzeltme" disabled={!isDrive} onclick={() => (duzeltmeAcik = true)}>⚖ Bakiye düzelt</button>
-    </div>
-    {#if !isDrive}
-      <span class="drive-notice">Düzenleme için Drive bağlantısı gerekiyor</span>
-    {/if}
   </div>
 {/if}
 
@@ -842,7 +888,7 @@
     display: flex;
     gap: 0.6rem;
     flex-wrap: wrap;
-    margin-top: 0.5rem;
+    margin: 0.5rem 0 0.75rem;
   }
   .eylemler button {
     flex: 1;
@@ -1041,12 +1087,63 @@
     flex-wrap: wrap;
   }
   .kisi-badge {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
     font-size: 0.78rem;
     color: var(--ink);
     background: var(--surface);
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
     border: 1px solid var(--hairline);
+    min-width: 170px;
+  }
+  .kisi-badge-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .btn-kisi-ode {
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    color: var(--ink);
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn-kisi-ode:hover {
+    border-color: var(--accent-defter);
+    background: var(--accent-defter);
+    color: #fff;
+  }
+  .kisi-badge-sub {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.74rem;
+    color: var(--ink-soft);
+  }
+  .kisi-badge-sub b.gain {
+    color: var(--gain);
+    font-weight: 600;
+    font-family: var(--font-num);
+  }
+  .kisi-kalan {
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+  }
+  .kisi-kalan b.loss {
+    color: var(--loss);
+    font-family: var(--font-num);
+  }
+  .kisi-tamam {
+    color: var(--gain);
+    font-weight: 600;
+    font-size: 0.72rem;
   }
 
   .ekstre-rakamlar {

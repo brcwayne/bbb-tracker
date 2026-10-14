@@ -465,6 +465,33 @@ describe('Haftasonu ve Son Ödeme Tarihi', () => {
     expect(res.donemIci!.sahipToplami['SELCUK']).toBe(1514.07)
     expect(res.donemIci!.kayitlar.length).toBe(1)
   })
+
+  it('ödenecek ekstre kesimden sonra yapılan ödemeleri alır ve kişi bazında eşler', () => {
+    const sanalKart = {
+      kod: 'GARANTI-SANAL',
+      ad: 'Garanti Sanal',
+      tur: 'KREDI_KARTI' as const,
+      paraBirimi: 'TRY',
+      sahip: 'ENIS',
+      aktif: true,
+      hesapKesim: 1,
+      sonOdeme: 14,
+    }
+    const islemler = [
+      tx({ id: 'tx1', tarih: '2026-09-10', tutar: 1000, hesap: 'GARANTI-SANAL', sahip: 'SELCUK' }),
+      tx({ id: 'tx2', tarih: '2026-09-15', tutar: 500, hesap: 'GARANTI-SANAL', sahip: 'ENIS' }),
+      // Ödeme: 14 Ekim'de (son ödeme günü) Selçuk adına 1000 TL transfer yapılıyor
+      tx({ id: 'tx3', tarih: '2026-10-14', tur: 'TRANSFER', tutar: 1000, hesap: 'GARANTI-BANKA', karsiHesap: 'GARANTI-SANAL', sahip: 'SELCUK' }),
+    ]
+    const res = cardStatement(islemler, sanalKart, '2026-10-14')
+    expect(res.odenecekEkstre).toBeDefined()
+    expect(res.odenecekEkstre!.toplam).toBe(1500)
+    expect(res.odenecekEkstre!.odenen).toBe(1000)
+    expect(res.odenecekEkstre!.kalan).toBe(500)
+    expect(res.odenecekEkstre!.sahipToplami['SELCUK']).toBe(1000)
+    expect(res.odenecekEkstre!.sahipOdenen['SELCUK']).toBe(1000)
+    expect(res.donemIci!.odenen).toBe(0)
+  })
 })
 
 

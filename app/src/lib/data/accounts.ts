@@ -107,6 +107,7 @@ export interface StatementPeriodInfo {
   odenen: number
   kalan: number
   sahipToplami: Record<string, number>
+  sahipOdenen: Record<string, number>
   kayitlar: PersonalTx[]
 }
 
@@ -127,16 +128,27 @@ function buildPeriod(
   kesim: number,
   sonOdeme?: number,
   etiket?: string,
+  payWindow?: { fromDate: string; toDate: string },
+  excludePayIds?: Set<string>,
 ): StatementPeriodInfo {
   const inPeriod = (t: string) => {
     if (kesim === 1) return t >= fromDate && t < toDate
     return t > fromDate && t <= toDate
   }
 
+  const inPayPeriod = (t: string) => {
+    if (!payWindow) return inPeriod(t)
+    const inPay = kesim === 1
+      ? (t >= payWindow.fromDate && t < payWindow.toDate)
+      : (t > payWindow.fromDate && t <= payWindow.toDate)
+    return inPeriod(t) || inPay
+  }
+
   const kayitlar: PersonalTx[] = []
   let expenseSum = 0
   let paymentSum = 0
   const sahipToplami: Record<string, number> = {}
+  const sahipOdenen: Record<string, number> = {}
 
   for (const r of rows) {
     if (r.durum === 'planlandi') continue
@@ -144,13 +156,12 @@ function buildPeriod(
     const isPayment = r.tur === 'TRANSFER' && r.karsiHesap === account.kod
 
     if (!matchThis && !isPayment) continue
-    if (!inPeriod(r.tarih)) continue
-
-    kayitlar.push(r)
-
-    if (r.paraBirimi !== account.paraBirimi) continue
 
     if (matchThis) {
+      if (!inPeriod(r.tarih)) continue
+      kayitlar.push(r)
+      if (r.paraBirimi !== account.paraBirimi) continue
+
       if (r.tur === 'GIDER') {
         expenseSum = round2(expenseSum + r.tutar)
         const s = r.sahip || 'Diğer'
@@ -167,7 +178,14 @@ function buildPeriod(
     }
 
     if (isPayment) {
+      if (excludePayIds?.has(r.id)) continue
+      if (!inPayPeriod(r.tarih)) continue
+      kayitlar.push(r)
+      if (r.paraBirimi !== account.paraBirimi) continue
+
       paymentSum = round2(paymentSum + r.tutar)
+      const s = r.sahip || 'Diğer'
+      sahipOdenen[s] = round2((sahipOdenen[s] ?? 0) + r.tutar)
     }
   }
 
@@ -187,6 +205,7 @@ function buildPeriod(
     odenen: round2(paymentSum),
     kalan: round2(Math.max(0, expenseSum - paymentSum)),
     sahipToplami,
+    sahipOdenen,
     kayitlar,
   }
 }
@@ -247,9 +266,16 @@ export function cardStatement(
   // donemIci: current open cycle (cPrev -> c0)
   // odenecekEkstre: most recently closed statement (cPrev2 -> cPrev)
   // oncekiEkstre: statement before that (cPrev3 -> cPrev2)
-  const donemIci = buildPeriod(rows, account, cPrev, c0, kesim, sonOdeme, 'Dönem İçi (Gelecek Ekstre)')
-  const odenecekEkstre = buildPeriod(rows, account, cPrev2, cPrev, kesim, sonOdeme, 'Ödenecek Ekstre')
-  const oncekiEkstre = buildPeriod(rows, account, cPrev3, cPrev2, kesim, sonOdeme)
+  const odenecekEkstre = buildPeriod(rows, account, cPrev2, cPrev, kesim, sonOdeme, 'Ödenecek Ekstre', { fromDate: cPrev, toDate: c0 })
+  const oncekiEkstre = buildPeriod(rows, account, cPrev3, cPrev2, kesim, sonOdeme, undefined, { fromDate: cPrev2, toDate: cPrev })
+  const usedPayIds = new Set<string>()
+  for (const r of odenecekEkstre.kayitlar) {
+    if (r.tur === 'TRANSFER' && r.karsiHesap === account.kod) usedPayIds.add(r.id)
+  }
+  for (const r of oncekiEkstre.kayitlar) {
+    if (r.tur === 'TRANSFER' && r.karsiHesap === account.kod) usedPayIds.add(r.id)
+  }
+  const donemIci = buildPeriod(rows, account, cPrev, c0, kesim, sonOdeme, 'Dönem İçi (Gelecek Ekstre)', undefined, usedPayIds)
 
   const ekstreler = [odenecekEkstre, donemIci, oncekiEkstre]
 
