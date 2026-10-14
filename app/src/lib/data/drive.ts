@@ -100,6 +100,17 @@ export class DriveSource implements DataSource {
     writeStoredToken(t, expiresInS)
   }
 
+  /** Returns the stored token if still unexpired; otherwise clears it and returns null. */
+  getToken(): string | null {
+    const valid = readStoredToken()
+    if (!valid) {
+      this.token = null
+      return null
+    }
+    this.token = valid
+    return valid
+  }
+
   private requestToken(prompt: '' | 'none' | 'consent' | 'select_account'): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       try {
@@ -112,10 +123,10 @@ export class DriveSource implements DataSource {
         }
         let done = false
         // Sessiz yenileme (prompt:'none') arayüz açmaz, anında cevaplanır —
-        // kısa süre doğrudur, kullanıcı açılışta beklemesin. Elle giriş ise
-        // insanı bekler: hesap seçimi, şifre, izin ekranı.
+        // 10 saniye mobil ve yavaş ağ gecikmelerini karşılar. Elle giriş ise
+        // insanı bekler: hesap seçimi, şifre, izin ekranı (5 dakika).
         const sessiz = prompt === 'none'
-        const sure = sessiz ? 5_000 : 5 * 60_000
+        const sure = sessiz ? 10_000 : 5 * 60_000
         const timer = setTimeout(() => {
           if (!done) {
             done = true
@@ -166,14 +177,64 @@ export class DriveSource implements DataSource {
     } catch {}
   }
 
-  /** Silent refresh on load; rejects (no UI) when a real sign-in is needed. */
+  private refreshPromise: Promise<void> | null = null
+
+  /** Silent refresh on load/save; deduplicated so concurrent calls share one request. */
   private trySilent(): Promise<void> {
-    return this.requestToken('none')
+    if (this.refreshPromise) return this.refreshPromise
+    this.refreshPromise = this.requestToken('none').finally(() => {
+      this.refreshPromise = null
+    })
+    return this.refreshPromise
+  }
+
+  /** Ensures a valid (unexpired) token is present, attempting silent refresh before failing. */
+  async ensureToken(): Promise<string> {
+    const valid = this.getToken()
+    if (valid) return valid
+
+    try {
+      await this.trySilent()
+    } catch (e) {
+      this.setToken(null)
+      throw e instanceof NeedsAuthError ? e : new NeedsAuthError('oturum süresi doldu')
+    }
+
+    if (this.token) return this.token
+    throw new NeedsAuthError('oturum süresi doldu')
+  }
+
+  /**
+   * Helper that injects Authorization header, ensures valid token, and
+   * automatically retries once with a silently refreshed token if Drive returns 401/403.
+   */
+  private async authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+    await this.ensureToken()
+    const buildHeaders = (tok: string) => {
+      const h = new Headers(init.headers)
+      h.set('Authorization', `Bearer ${tok}`)
+      return h
+    }
+
+    let res = await fetch(url, { ...init, headers: buildHeaders(this.token!) })
+    if (res.status === 401 || res.status === 403) {
+      this.setToken(null)
+      try {
+        await this.trySilent()
+        if (this.token) {
+          res = await fetch(url, { ...init, headers: buildHeaders(this.token) })
+        }
+      } catch {
+        // silent refresh failed — keep original response so caller sees 401/403
+      }
+    }
+    return res
   }
 
   chooseFolder(): Promise<string> {
     return new Promise<string>((resolve, reject) => {
-      if (!this.token) {
+      const tok = this.getToken()
+      if (!tok) {
         reject(new NeedsAuthError())
         return
       }
@@ -184,7 +245,7 @@ export class DriveSource implements DataSource {
             .setMimeTypes('application/vnd.google-apps.folder')
           let builder = new google.picker.PickerBuilder()
             .addView(view)
-            .setOAuthToken(this.token)
+            .setOAuthToken(tok)
           // Picker needs the developer key (Picker API) and the Cloud project
           // number (App ID); harmless to pass alongside the drive-scope token.
           if (this.apiKey) builder = builder.setDeveloperKey(this.apiKey)
@@ -218,24 +279,16 @@ export class DriveSource implements DataSource {
   async load(): Promise<Dataset> {
     const folderId = this.folderId ?? readStoredFolder()
     if (!folderId) throw new NeedsAuthError('klasör seçilmedi')
-    if (!this.token) {
-      // Stored token gone/expired — try a silent grant before nagging the user.
-      try {
-        await this.trySilent()
-      } catch {
-        throw new NeedsAuthError()
-      }
-    }
+    await this.ensureToken()
 
-    const headers = { Authorization: `Bearer ${this.token}` }
     // No mimeType filter — a browser upload can land as text/plain or
     // application/octet-stream. Selection is by filename below.
     const q = `'${folderId}' in parents and trashed = false`
-    const listRes = await fetch(
+    const listRes = await this.authFetch(
       'https://www.googleapis.com/drive/v3/files?q=' +
         encodeURIComponent(q) +
         '&fields=files(id,name,md5Checksum,modifiedTime)',
-      { headers, cache: 'no-store' },
+      { cache: 'no-store' },
     )
     if (listRes.status === 401 || listRes.status === 403) {
       this.setToken(null)
@@ -267,8 +320,7 @@ export class DriveSource implements DataSource {
       NAMES.map(async (n) => {
         const file = files.find((f) => f.name === `${n}.json`)
         if (!file) throw new Error(`Drive: ${n}.json bulunamadı`)
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-          headers,
+        const res = await this.authFetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
           cache: 'no-store',
         })
         if (res.status === 401 || res.status === 403) {
@@ -284,8 +336,7 @@ export class DriveSource implements DataSource {
     if (atFile) {
       // assetTransfers.json is optional (Ruling P2-4): a transient read failure on this one
       // file shouldn't break the whole dataset load, so fall back to [] rather than throwing.
-      const atRes = await fetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, {
-        headers,
+      const atRes = await this.authFetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, {
         cache: 'no-store',
       })
       dataset.assetTransfers = atRes.ok ? await atRes.json() : []
@@ -302,8 +353,7 @@ export class DriveSource implements DataSource {
           return
         }
         try {
-          const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-            headers,
+          const res = await this.authFetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
             cache: 'no-store',
           })
           if (res.status === 401 || res.status === 403) {
@@ -323,8 +373,7 @@ export class DriveSource implements DataSource {
     const syncFile = files.find((f) => f.name === 'sync-state.json')
     if (syncFile) {
       try {
-        const syncRes = await fetch(`https://www.googleapis.com/drive/v3/files/${syncFile.id}?alt=media`, {
-          headers,
+        const syncRes = await this.authFetch(`https://www.googleapis.com/drive/v3/files/${syncFile.id}?alt=media`, {
           cache: 'no-store',
         })
         dataset.syncState = syncRes.ok ? await syncRes.json() : null
@@ -349,15 +398,15 @@ export class DriveSource implements DataSource {
    */
   async save(name: string, data: unknown): Promise<void> {
     const folderId = this.folderId ?? readStoredFolder()
-    if (!folderId || !this.token) throw new NeedsAuthError()
-    const headers = { Authorization: `Bearer ${this.token}` }
+    if (!folderId) throw new NeedsAuthError('klasör seçilmedi')
+    await this.ensureToken()
 
     let cached = this.fileIds[name]
     if (!cached) {
       const q = `'${folderId}' in parents and trashed = false and name = '${name}.json'`
-      const res = await fetch(
+      const res = await this.authFetch(
         `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,md5Checksum)`,
-        { headers },
+        { cache: 'no-store' },
       )
       if (res.status === 401 || res.status === 403) {
         this.setToken(null)
@@ -374,9 +423,13 @@ export class DriveSource implements DataSource {
       const body =
         `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metaPart}\r\n` +
         `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(data)}\r\n--${boundary}--`
-      const res = await fetch(
+      const res = await this.authFetch(
         'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,md5Checksum',
-        { method: 'POST', headers: { ...headers, 'Content-Type': `multipart/related; boundary=${boundary}` }, body },
+        {
+          method: 'POST',
+          headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+          body,
+        },
       )
       if (res.status === 401 || res.status === 403) {
         this.setToken(null)
@@ -389,9 +442,10 @@ export class DriveSource implements DataSource {
       return
     }
 
-    const currentRes = await fetch(`https://www.googleapis.com/drive/v3/files/${cached.id}?fields=md5Checksum`, {
-      headers,
-    })
+    const currentRes = await this.authFetch(
+      `https://www.googleapis.com/drive/v3/files/${cached.id}?fields=md5Checksum`,
+      { cache: 'no-store' },
+    )
     if (currentRes.status === 401 || currentRes.status === 403) {
       this.setToken(null)
       throw new NeedsAuthError('oturum süresi doldu')
@@ -402,9 +456,9 @@ export class DriveSource implements DataSource {
       throw new ConflictError(name)
     }
 
-    const updateRes = await fetch(
+    const updateRes = await this.authFetch(
       `https://www.googleapis.com/upload/drive/v3/files/${cached.id}?uploadType=media&fields=md5Checksum`,
-      { method: 'PATCH', headers, body: JSON.stringify(data) },
+      { method: 'PATCH', body: JSON.stringify(data) },
     )
     if (updateRes.status === 401 || updateRes.status === 403) {
       this.setToken(null)

@@ -371,4 +371,61 @@ describe('DriveSource.save', () => {
     await expect(src.save('meta', { foo: 1 })).rejects.toThrow()
     expect((src as any).fileIds.meta).toEqual({ id: 'meta', md5Checksum: 'meta-sum' })
   })
+
+  it('automatically refreshes an expired token and saves successfully', async () => {
+    stubFetchWithChecksums('meta-sum')
+    const src = new DriveSource('CID')
+    await src.connect()
+    ;(src as any).folderId = 'FOLDER'
+    await src.load()
+
+    // Simulate token expiring in localStorage while form was open
+    localStorage.setItem('bbb-drive-token', JSON.stringify({ t: 'old-tok', exp: Date.now() - 1000 }))
+
+    await expect(src.save('meta', { foo: 2 })).resolves.toBeUndefined()
+    expect((src as any).fileIds.meta).toEqual({ id: 'meta', md5Checksum: 'meta-sum-v2' })
+  })
+
+  it('retries with a freshly requested token if Drive returns 401 on save', async () => {
+    let attempts = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, options?: { method?: string; headers?: any }) => {
+        const method = options?.method
+        if (url.includes('fields=files(id,name,md5Checksum')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                files: Object.keys(FILE_MAP).map((n) => ({ id: n, name: `${n}.json`, md5Checksum: `${n}-sum` })),
+              }),
+          })
+        }
+        if (url.includes('alt=media')) {
+          const id = url.match(/files\/(\w+)/)![1]
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(FILE_MAP[id]) })
+        }
+        if (url.endsWith('?fields=md5Checksum')) {
+          attempts++
+          if (attempts === 1) {
+            // First attempt gets 401 Unauthorized
+            return Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({ error: 'unauthorized' }) })
+          }
+          // Second attempt (after retry) succeeds
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ md5Checksum: 'meta-sum' }) })
+        }
+        if (method === 'PATCH') {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ md5Checksum: 'meta-sum-v2' }) })
+        }
+        throw new Error('unexpected fetch: ' + url)
+      }),
+    )
+    const src = new DriveSource('CID')
+    await src.connect()
+    ;(src as any).folderId = 'FOLDER'
+    await src.load()
+
+    await expect(src.save('meta', { foo: 3 })).resolves.toBeUndefined()
+    expect(attempts).toBe(2)
+  })
 })
