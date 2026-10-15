@@ -464,6 +464,13 @@ describe('Haftasonu ve Son Ödeme Tarihi', () => {
     expect(res.donemIci!.toplam).toBe(1514.07)
     expect(res.donemIci!.sahipToplami['SELCUK']).toBe(1514.07)
     expect(res.donemIci!.kayitlar.length).toBe(1)
+
+    // Ekstre sekmeleri sıralaması: En solda Dönem İçi, ortada Ödenecek Ekstre, sağda önceki ekstre
+    expect(res.ekstreler.map((e) => e.etiket)).toEqual([
+      'Dönem İçi',
+      'Ödenecek Ekstre',
+      'Ağustos Ekstresi',
+    ])
   })
 
   it('ödenecek ekstre kesimden sonra yapılan ödemeleri alır ve kişi bazında eşler', () => {

@@ -62,6 +62,11 @@
   let seciliEkstreIndex = $state(0)
   let kopyalandi = $state(false)
 
+  $effect(() => {
+    void param
+    seciliEkstreIndex = 0
+  })
+
   function acTransfer() {
     if (!account) return
     transferKaynak = account.kod

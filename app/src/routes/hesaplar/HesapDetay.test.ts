@@ -195,6 +195,25 @@ describe('Hesap detayı', () => {
     await Promise.resolve()
     expect(container.querySelector('.inline-edit-item')).toBeNull()
   })
+
+  it('kredi kartında Dönem İçi en solda, Ödenecek Ekstre ortada gelir ve varsayılan olarak Dönem İçi (güncel işlemler) seçilidir', async () => {
+    const { container } = render(HesapDetay, { dataset: fixture, param: 'GARANTI-DIJI', today: TODAY })
+
+    const tabs = container.querySelectorAll('.ekstre-tab')
+    expect(tabs.length).toBeGreaterThanOrEqual(2)
+
+    // En solda Dönem İçi, ortada Ödenecek Ekstre olmalı
+    expect(tabs[0].querySelector('.tab-title')?.textContent?.trim()).toBe('Dönem İçi')
+    expect(tabs[1].querySelector('.tab-title')?.textContent?.trim()).toBe('Ödenecek Ekstre')
+
+    // Varsayılan olarak ilk sekme (Dönem İçi) seçili olmalı
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true')
+    expect(tabs[0].classList.contains('active')).toBe(true)
+    expect(tabs[1].getAttribute('aria-selected')).toBe('false')
+
+    // Dönem içi güncel işlemler listelenmeli (örn. 03.09 Kulaklık harcaması)
+    expect(container.textContent).toContain('Kulaklık')
+  })
 })
 
 

@@ -275,9 +275,9 @@ export function cardStatement(
   for (const r of oncekiEkstre.kayitlar) {
     if (r.tur === 'TRANSFER' && r.karsiHesap === account.kod) usedPayIds.add(r.id)
   }
-  const donemIci = buildPeriod(rows, account, cPrev, c0, kesim, sonOdeme, 'Dönem İçi (Gelecek Ekstre)', undefined, usedPayIds)
+  const donemIci = buildPeriod(rows, account, cPrev, c0, kesim, sonOdeme, 'Dönem İçi', undefined, usedPayIds)
 
-  const ekstreler = [odenecekEkstre, donemIci, oncekiEkstre]
+  const ekstreler = [donemIci, odenecekEkstre, oncekiEkstre]
 
   return {
     buAy: window(cPrev, c0),
