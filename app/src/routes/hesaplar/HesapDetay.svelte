@@ -315,39 +315,37 @@
       </div>
     {/if}
 
-    {#if (harcamaAcik || duzenlenen) && dataset}
+    {#if harcamaAcik && !duzenlenen && dataset}
       <div class="form-modal">
-        {#key duzenlenen?.id ?? formTarihi}
+        {#key formTarihi}
           <HarcamaFormu
             {dataset}
             {source}
             {store}
-            editing={duzenlenen ?? undefined}
             hesap={account.kod}
             tarih={formTarihi ?? today}
             hesapKilitli
-            onSaved={() => { harcamaAcik = false; duzenlenen = null }}
-            onCancel={() => { harcamaAcik = false; duzenlenen = null }}
+            onSaved={() => { harcamaAcik = false; }}
+            onCancel={() => { harcamaAcik = false; }}
           />
         {/key}
       </div>
     {/if}
 
-    {#if (transferAcik || duzenlenenTransfer) && dataset}
+    {#if transferAcik && !duzenlenenTransfer && dataset}
       <div class="form-modal">
         <TransferFormu
           {dataset}
           {source}
           {store}
-          editing={duzenlenenTransfer ?? undefined}
           kaynakHesap={transferKaynak}
           hedefHesap={transferHedef}
           baslik={transferBasligi}
           varsayilanTutar={transferTutar}
           varsayilanSahip={transferSahip}
           tarih={seciliGun ? iso(seciliGun) : today}
-          onSaved={() => { transferAcik = false; duzenlenenTransfer = null; transferSahip = undefined; }}
-          onCancel={() => { transferAcik = false; duzenlenenTransfer = null; transferSahip = undefined; }}
+          onSaved={() => { transferAcik = false; transferSahip = undefined; }}
+          onCancel={() => { transferAcik = false; transferSahip = undefined; }}
         />
       </div>
     {/if}
@@ -363,26 +361,6 @@
           onSaved={() => (duzeltmeAcik = false)}
           onCancel={() => (duzeltmeAcik = false)}
         />
-      </div>
-    {/if}
-
-    {#if silinecek}
-      <div class="confirm-delete">
-        <p>
-          <strong>{silinecek.tarih} · {satirBasligi(silinecek)} ({satirTutari(silinecek).metin})</strong>
-          kaydı silinsin mi?
-        </p>
-        {#if deleteError}
-          <p class="error">{deleteError}</p>
-        {/if}
-        <div class="confirm-actions">
-          <button type="button" class="btn-secondary" onclick={() => (silinecek = null)} disabled={deleting}>
-            Vazgeç
-          </button>
-          <button type="button" class="btn-danger" onclick={confirmDelete} disabled={deleting}>
-            {deleting ? 'Siliniyor…' : 'Evet, Sil'}
-          </button>
-        </div>
       </div>
     {/if}
 
@@ -542,7 +520,12 @@
         <ul class="hareketler">
           {#each gorunenKayitlar as r (r.id)}
             {@const t = satirTutari(r)}
-            <li class="hareket" class:planlandi={r.durum === 'planlandi'}>
+            <li
+              class="hareket"
+              class:planlandi={r.durum === 'planlandi'}
+              class:editing={duzenlenen?.id === r.id || duzenlenenTransfer?.id === r.id}
+              class:deleting={silinecek?.id === r.id}
+            >
               <span class="tarih num">{r.tarih.slice(8, 10)}.{r.tarih.slice(5, 7)}</span>
               <span class="ad">
                 {satirBasligi(r)}
@@ -563,9 +546,16 @@
                     aria-label="Düzenle"
                     disabled={!isDrive}
                     onclick={() => {
-                      duzenlenenTransfer = r
-                      transferBasligi = 'Transferi Düzenle'
-                      transferAcik = true
+                      if (duzenlenenTransfer?.id === r.id) {
+                        duzenlenenTransfer = null
+                        transferAcik = false
+                      } else {
+                        duzenlenen = null
+                        silinecek = null
+                        duzenlenenTransfer = r
+                        transferBasligi = 'Transferi Düzenle'
+                        transferAcik = true
+                      }
                     }}
                   >✎</button>
                 {:else if r.tur !== 'DUZELTME'}
@@ -575,7 +565,18 @@
                     title="Düzenle"
                     aria-label="Düzenle"
                     disabled={!isDrive}
-                    onclick={() => { duzenlenen = r; formTarihi = r.tarih; harcamaAcik = true; }}
+                    onclick={() => {
+                      if (duzenlenen?.id === r.id) {
+                        duzenlenen = null
+                        harcamaAcik = false
+                      } else {
+                        duzenlenenTransfer = null
+                        silinecek = null
+                        duzenlenen = r
+                        formTarihi = r.tarih
+                        harcamaAcik = true
+                      }
+                    }}
                   >✎</button>
                 {/if}
                 <button
@@ -584,10 +585,104 @@
                   title="Sil"
                   aria-label="Sil"
                   disabled={!isDrive}
-                  onclick={() => { silinecek = r; }}
+                  onclick={() => {
+                    if (silinecek?.id === r.id) {
+                      silinecek = null
+                      deleteError = null
+                    } else {
+                      duzenlenen = null
+                      duzenlenenTransfer = null
+                      silinecek = r
+                      deleteError = null
+                    }
+                  }}
                 >🗑</button>
               </div>
             </li>
+            {#if duzenlenen?.id === r.id && dataset}
+              <li class="inline-edit-item">
+                <div class="inline-edit-box">
+                  <div class="inline-box-header">
+                    <span class="inline-box-title">
+                      İşlem Düzenleme: <strong>{satirBasligi(r)}</strong> · {r.tarih}
+                    </span>
+                    <button
+                      type="button"
+                      class="inline-close"
+                      aria-label="Kapat"
+                      onclick={() => { duzenlenen = null; harcamaAcik = false; }}
+                    >✕</button>
+                  </div>
+                  {#key duzenlenen.id}
+                    <HarcamaFormu
+                      {dataset}
+                      {source}
+                      {store}
+                      editing={duzenlenen}
+                      hesap={account.kod}
+                      tarih={formTarihi ?? today}
+                      hesapKilitli
+                      onSaved={() => { harcamaAcik = false; duzenlenen = null; }}
+                      onCancel={() => { harcamaAcik = false; duzenlenen = null; }}
+                    />
+                  {/key}
+                </div>
+              </li>
+            {/if}
+            {#if duzenlenenTransfer?.id === r.id && dataset}
+              <li class="inline-edit-item">
+                <div class="inline-edit-box">
+                  <div class="inline-box-header">
+                    <span class="inline-box-title">
+                      Transferi Düzenle: <strong>{satirBasligi(r)}</strong> · {r.tarih}
+                    </span>
+                    <button
+                      type="button"
+                      class="inline-close"
+                      aria-label="Kapat"
+                      onclick={() => { duzenlenenTransfer = null; transferAcik = false; }}
+                    >✕</button>
+                  </div>
+                  {#key duzenlenenTransfer.id}
+                    <TransferFormu
+                      {dataset}
+                      {source}
+                      {store}
+                      editing={duzenlenenTransfer}
+                      kaynakHesap={transferKaynak}
+                      hedefHesap={transferHedef}
+                      baslik={transferBasligi}
+                      varsayilanTutar={transferTutar}
+                      varsayilanSahip={transferSahip}
+                      tarih={seciliGun ? iso(seciliGun) : today}
+                      onSaved={() => { transferAcik = false; duzenlenenTransfer = null; transferSahip = undefined; }}
+                      onCancel={() => { transferAcik = false; duzenlenenTransfer = null; transferSahip = undefined; }}
+                    />
+                  {/key}
+                </div>
+              </li>
+            {/if}
+            {#if silinecek?.id === r.id}
+              <li class="inline-delete-item">
+                <div class="confirm-delete">
+                  <p>
+                    <strong>{silinecek.tarih} · {satirBasligi(silinecek)} ({satirTutari(silinecek).metin})</strong>
+                    kaydı silinsin mi?
+                  </p>
+                  {#if deleteError}
+                    <p class="error">{deleteError}</p>
+                  {/if}
+                  <div class="confirm-actions">
+                    <button type="button" class="btn-secondary" onclick={() => { silinecek = null; deleteError = null; }} disabled={deleting}>
+                      Vazgeç
+                    </button>
+                    <button type="button" class="btn-danger" onclick={confirmDelete} disabled={deleting}>
+                      {deleting ? 'Siliniyor…' : 'Evet, Sil'}
+                    </button>
+                  </div>
+                </div>
+              </li>
+            {/if}
           {/each}
         </ul>
       {/if}
@@ -809,6 +904,60 @@
   }
   .hareket:last-child {
     border-bottom: 0;
+  }
+  li.hareket.editing {
+    background: var(--surface-2);
+    border-bottom: none;
+  }
+  li.hareket.deleting {
+    background: rgba(224, 86, 96, 0.08);
+    border-bottom: none;
+  }
+  .inline-edit-item,
+  .inline-delete-item {
+    padding: 0.25rem 0.75rem 0.75rem;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--hairline);
+    list-style: none;
+  }
+  .inline-edit-box {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--accent-defter, #c9a86a);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 0.25rem 0 0.5rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+  .inline-box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .inline-box-title {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+  .inline-box-title strong {
+    color: var(--ink);
+  }
+  .inline-close {
+    appearance: none;
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .inline-close:hover {
+    color: var(--ink);
+    background: var(--surface-2);
   }
   li.hareket.planlandi {
     opacity: 0.6;

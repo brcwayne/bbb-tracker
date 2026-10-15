@@ -187,17 +187,16 @@
       </div>
     </div>
 
-    <!-- Ekleme / Düzenleme Formu -->
-    {#if (showAdd || editing) && dataset}
+    <!-- Yeni Harcama Ekleme Formu -->
+    {#if showAdd && !editing && dataset}
       <div class="form-modal">
-        {#key duzenlenen?.id ?? formTarihi}
+        {#key formTarihi}
           <HarcamaFormu
             {dataset}
             {source}
             {store}
-            editing={editing ?? undefined}
             onSaved={onFormSaved}
-            onCancel={() => { showAdd = false; editing = null; }}
+            onCancel={() => { showAdd = false; }}
           />
         {/key}
       </div>
@@ -214,27 +213,6 @@
             onSaved={() => { showCategoryModal = false; }}
             onCancel={() => { showCategoryModal = false; }}
           />
-        </div>
-      </div>
-    {/if}
-
-    <!-- Silme Onayı -->
-    {#if deleteTarget}
-      <div class="confirm-delete">
-        <p>
-          <strong>{deleteTarget.tarih} · {deleteTarget.aciklama} ({deleteTarget.paraBirimi === 'USD' ? usd(deleteTarget.tutar) : tryFmt(deleteTarget.tutar)} {deleteTarget.paraBirimi})</strong>
-          kaydı silinsin mi?
-        </p>
-        {#if deleteError}
-          <p class="error">{deleteError}</p>
-        {/if}
-        <div class="confirm-actions">
-          <button type="button" class="btn-secondary" onclick={() => (deleteTarget = null)} disabled={deleting}>
-            Vazgeç
-          </button>
-          <button type="button" class="btn-danger" onclick={confirmDelete} disabled={deleting}>
-            {deleting ? 'Siliniyor…' : 'Evet, Sil'}
-          </button>
         </div>
       </div>
     {/if}
@@ -328,7 +306,11 @@
               {#each rows as r (r.id)}
                 {@const isFuture = r.tarih > today}
                 {@const isPlanned = r.durum === 'planlandi'}
-                <tr class:editing-row={editing?.id === r.id} class:planned-row={isPlanned}>
+                <tr
+                  class:editing-row={editing?.id === r.id}
+                  class:deleting-row={deleteTarget?.id === r.id}
+                  class:planned-row={isPlanned}
+                >
                   <td data-col="tarih" class="nowrap">
                     {r.tarih}
                     {#if isPlanned}
@@ -358,7 +340,15 @@
                       title="Düzenle"
                       aria-label="Düzenle"
                       disabled={!isDrive}
-                      onclick={() => { editing = r; showAdd = false; }}
+                      onclick={() => {
+                        if (editing?.id === r.id) {
+                          editing = null
+                        } else {
+                          editing = r
+                          showAdd = false
+                          deleteTarget = null
+                        }
+                      }}
                     >
                       ✎
                     </button>
@@ -368,12 +358,83 @@
                       title="Sil"
                       aria-label="Sil"
                       disabled={!isDrive}
-                      onclick={() => { deleteTarget = r; }}
+                      onclick={() => {
+                        if (deleteTarget?.id === r.id) {
+                          deleteTarget = null
+                          deleteError = null
+                        } else {
+                          deleteTarget = r
+                          editing = null
+                          deleteError = null
+                        }
+                      }}
                     >
                       🗑
                     </button>
                   </td>
                 </tr>
+                {#if editing?.id === r.id && dataset}
+                  <tr class="inline-row inline-edit-row">
+                    <td colspan="8">
+                      <div class="inline-edit-box">
+                        <div class="inline-box-header">
+                          <span class="inline-box-title">
+                            İşlem Düzenleme: <strong>{r.aciklama}</strong> · {r.tarih}
+                          </span>
+                          <button
+                            type="button"
+                            class="inline-close"
+                            aria-label="Kapat"
+                            onclick={() => (editing = null)}
+                          >✕</button>
+                        </div>
+                        {#key r.id}
+                          <HarcamaFormu
+                            {dataset}
+                            {source}
+                            {store}
+                            editing={r}
+                            onSaved={onFormSaved}
+                            onCancel={() => { editing = null; }}
+                          />
+                        {/key}
+                      </div>
+                    </td>
+                  </tr>
+                {/if}
+                {#if deleteTarget?.id === r.id}
+                  <tr class="inline-row inline-delete-row">
+                    <td colspan="8">
+                      <div class="confirm-delete">
+                        <p>
+                          <strong>{deleteTarget.tarih} · {deleteTarget.aciklama} ({deleteTarget.paraBirimi === 'USD' ? usd(deleteTarget.tutar) : tryFmt(deleteTarget.tutar)} {deleteTarget.paraBirimi})</strong>
+                          kaydı silinsin mi?
+                        </p>
+                        {#if deleteError}
+                          <p class="error">{deleteError}</p>
+                        {/if}
+                        <div class="confirm-actions">
+                          <button
+                            type="button"
+                            class="btn-secondary"
+                            onclick={() => { deleteTarget = null; deleteError = null; }}
+                            disabled={deleting}
+                          >
+                            Vazgeç
+                          </button>
+                          <button
+                            type="button"
+                            class="btn-danger"
+                            onclick={confirmDelete}
+                            disabled={deleting}
+                          >
+                            {deleting ? 'Siliniyor…' : 'Evet, Sil'}
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                {/if}
               {/each}
             </tbody>
           </table>
@@ -593,8 +654,58 @@
   td.center {
     text-align: center;
   }
-  tr.editing-row {
-    background: rgba(201, 168, 106, 0.08);
+  tbody tr.editing-row > td {
+    background: var(--surface-2);
+    border-bottom: none;
+  }
+  tbody tr.deleting-row > td {
+    background: rgba(224, 86, 96, 0.08);
+    border-bottom: none;
+  }
+  tbody tr.inline-row > td {
+    padding: 0.25rem 0.75rem 1rem;
+    white-space: normal;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .inline-edit-box {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--accent-defter, #c9a86a);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 0.25rem 0 0.5rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  }
+  .inline-box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .inline-box-title {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+  .inline-box-title strong {
+    color: var(--ink);
+  }
+  .inline-close {
+    appearance: none;
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .inline-close:hover {
+    color: var(--ink);
+    background: var(--surface-2);
   }
   tr.planned-row {
     opacity: 0.6;

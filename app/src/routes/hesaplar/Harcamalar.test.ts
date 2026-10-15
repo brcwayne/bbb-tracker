@@ -151,5 +151,66 @@ describe('Harcamalar sayfası', () => {
     await fireEvent.click(toggle)
     expect(container.querySelector('.future-accordion')).toBeNull()
   })
+
+  it('düzenle butonuna tıklayınca form ilgili satırın hemen altında inline açılır', async () => {
+    const source = { id: 'drive' as const, load: () => Promise.resolve(fixture), save: async () => {} }
+    const store = createAppStore()
+    const { container, getAllByTitle, getByLabelText } = render(Harcamalar, {
+      props: { dataset: fixture, source, store, today: '2026-09-08' },
+    })
+
+    const editButtons = getAllByTitle('Düzenle')
+    expect(editButtons.length).toBeGreaterThan(0)
+
+    const targetButton = editButtons[0]
+    const clickedTr = targetButton.closest('tr')!
+    expect(clickedTr).not.toBeNull()
+
+    // Tıklamadan önce inline satır yok
+    expect(container.querySelector('.inline-edit-row')).toBeNull()
+
+    // Düzenle'ye tıkla
+    await fireEvent.click(targetButton)
+
+    // Form ilgili satırın hemen arkasındaki <tr> olarak açılmalı
+    const inlineRow = container.querySelector('.inline-edit-row') as HTMLTableRowElement
+    expect(inlineRow).not.toBeNull()
+    expect(clickedTr.nextElementSibling).toBe(inlineRow)
+    expect(clickedTr.classList.contains('editing-row')).toBe(true)
+
+    // Form içi inputların dolu olduğunu doğrula
+    const tutarInput = container.querySelector('#hf-tutar') as HTMLInputElement
+    expect(tutarInput).not.toBeNull()
+    expect(tutarInput.value).toBeTruthy()
+
+    // Kapat butonuna basınca inline form kapanmalı
+    const closeBtn = container.querySelector('.inline-close') as HTMLButtonElement
+    await fireEvent.click(closeBtn)
+    expect(container.querySelector('.inline-edit-row')).toBeNull()
+    expect(clickedTr.classList.contains('editing-row')).toBe(false)
+  })
+
+  it('sil butonuna tıklayınca silme onayı ilgili satırın hemen altında açılır', async () => {
+    const source = { id: 'drive' as const, load: () => Promise.resolve(fixture), save: async () => {} }
+    const store = createAppStore()
+    const { container, getAllByTitle, getByText } = render(Harcamalar, {
+      props: { dataset: fixture, source, store, today: '2026-09-08' },
+    })
+
+    const deleteButtons = getAllByTitle('Sil')
+    const clickedTr = deleteButtons[0].closest('tr')!
+
+    await fireEvent.click(deleteButtons[0])
+
+    const deleteRow = container.querySelector('.inline-delete-row') as HTMLTableRowElement
+    expect(deleteRow).not.toBeNull()
+    expect(clickedTr.nextElementSibling).toBe(deleteRow)
+
+    // Vazgeç'e basınca kapanmalı
+    const cancelBtn = getByText('Vazgeç')
+    await fireEvent.click(cancelBtn)
+    expect(container.querySelector('.inline-delete-row')).toBeNull()
+  })
 })
+
 

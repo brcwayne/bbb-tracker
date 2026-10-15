@@ -171,5 +171,30 @@ describe('Hesap detayı', () => {
     const li = [...container.querySelectorAll('li.hareket')].find((el) => el.textContent?.includes('Planlandı'))
     expect(li?.classList.contains('planlandi')).toBe(true)
   })
+
+  it('harekette düzenle butonuna basınca form hareketin hemen altında inline açılır', async () => {
+    const source = { id: 'drive' as const, load: async () => fixture, save: async () => {} }
+    const { container } = render(HesapDetay, { dataset: fixture, param: 'NAKIT', today: TODAY, source })
+
+    const editBtns = container.querySelectorAll('.hareket .btn-icon[title="Düzenle"]')
+    expect(editBtns.length).toBeGreaterThan(0)
+
+    const clickedLi = editBtns[0].closest('li.hareket')!
+    expect(container.querySelector('.inline-edit-item')).toBeNull()
+
+    ;(editBtns[0] as HTMLButtonElement).click()
+    await Promise.resolve()
+
+    const inlineItem = container.querySelector('.inline-edit-item') as HTMLElement
+    expect(inlineItem).not.toBeNull()
+    expect(clickedLi.nextElementSibling).toBe(inlineItem)
+
+    // Kapat butonuna basınca kapanmalı
+    const closeBtn = inlineItem.querySelector('.inline-close') as HTMLButtonElement
+    closeBtn.click()
+    await Promise.resolve()
+    expect(container.querySelector('.inline-edit-item')).toBeNull()
+  })
 })
+
 
