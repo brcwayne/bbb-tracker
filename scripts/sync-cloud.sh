@@ -25,6 +25,8 @@ FILES=(
     "people.json"
     "payment_plans.json"
     "recurring_rules.json"
+    "invoices.json"
+    "item_prices.json"
 )
 
 check_ssh() {
