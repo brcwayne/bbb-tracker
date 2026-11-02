@@ -4,7 +4,7 @@ import HarcamaFormu from './HarcamaFormu.svelte'
 import { fixture } from '../../fixtures/dataset'
 import { createAppStore, load } from '../../lib/data/store'
 import { get } from 'svelte/store'
-import type { PersonalTx } from '../../lib/data/types'
+import type { PersonalTx, PaymentPlan } from '../../lib/data/types'
 
 async function setup() {
   const store = createAppStore()
