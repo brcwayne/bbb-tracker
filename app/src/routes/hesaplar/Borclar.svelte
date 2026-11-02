@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, Debt } from '../../lib/data/types'
+  import type { Dataset, Debt, PersonalTx } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { updateRecord, deleteRecord, load } from '../../lib/data/store'
+  import { updateRecord, deleteRecord, writeMultiAndCommit, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
-  import { debtBalances, type DebtBalanceItem } from '../../lib/data/personal'
-  import { fmtCurrency } from '../../lib/format'
+  import { debtBalances, resolvePersonCode, type DebtBalanceItem } from '../../lib/data/personal'
+  import { newPersonalId } from '../../lib/data/ids'
+  import { fmtCurrency, todayLocalIso } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import BorcFormu from './BorcFormu.svelte'
 
@@ -28,11 +29,16 @@
   let showAdd = $state(false)
 
   const isDrive = $derived(Boolean(source?.save))
-  const allDebts = $derived<Debt[]>(
-    (dataset?.debts ?? []).filter((d) => !fKisi || d.kisi === fKisi),
-  )
   const people = $derived(dataset?.people ?? [])
-  const personName = (kod: string) => people.find((p) => p.kod === kod)?.ad ?? kod
+  const allDebts = $derived<Debt[]>(
+    (dataset?.debts ?? []).filter(
+      (d) => !fKisi || resolvePersonCode(d.kisi, people) === resolvePersonCode(fKisi, people),
+    ),
+  )
+  const personName = (kod: string) => {
+    const resolved = resolvePersonCode(kod, people)
+    return people.find((p) => p.kod === resolved)?.ad ?? kod
+  }
 
   function resolveSahip(d: Debt): string {
     if (d.sahip) return d.sahip
@@ -49,7 +55,7 @@
   )
   const showSahip = $derived(distinctOwners >= 2)
 
-  const balances = $derived(debtBalances(allDebts))
+  const balances = $derived(debtBalances(allDebts, people))
 
   interface PersonDebtBalance {
     kisi: string
@@ -95,14 +101,56 @@
     closingId = debt.id
     closeError = null
     try {
-      await updateRecord<Debt>(
-        store,
-        source,
-        'debts',
-        (d) => d.id === debt.id,
-        { ...debt, durum: 'KAPALI' },
-        { allowKaynak: ['telegram', 'manual'] },
-      )
+      const targetHesap = debt.hesap && debt.hesap !== 'DUZELTME' ? debt.hesap : null
+      if (targetHesap) {
+        const settleTxId = newPersonalId()
+        const kisiAd = personName(debt.kisi)
+        const settleTx: PersonalTx = {
+          id: settleTxId,
+          tarih: todayLocalIso(),
+          tur: debt.yon === 'VERDIM' ? 'GELIR' : 'GIDER',
+          tutar: debt.tutar,
+          paraBirimi: debt.paraBirimi,
+          kategori: 'borc',
+          aciklama:
+            debt.yon === 'VERDIM'
+              ? `${kisiAd} borç tahsilatı`
+              : `${kisiAd} borç ödemesi`,
+          hesap: targetHesap,
+          sahip: resolveSahip(debt) || 'ENIS',
+          taksitPlaniId: null,
+          taksitNo: null,
+          taksitToplam: null,
+          not: `Borç kapama: ${debt.id}`,
+          ikizId: debt.id,
+          kaynak: 'manual',
+          olusturulma: new Date().toISOString(),
+        }
+        const closedDebt: Debt = {
+          ...debt,
+          durum: 'KAPALI',
+          kapatanKayitlar: [...(debt.kapatanKayitlar ?? []), settleTxId],
+        }
+        await writeMultiAndCommit(store, source, [
+          {
+            file: 'debts',
+            build: (curr) => (curr as Debt[]).map((d) => (d.id === debt.id ? closedDebt : d)),
+          },
+          {
+            file: 'personal_tx',
+            build: (curr) => [...(curr as PersonalTx[]), settleTx],
+          },
+        ])
+      } else {
+        await updateRecord<Debt>(
+          store,
+          source,
+          'debts',
+          (d) => d.id === debt.id,
+          { ...debt, durum: 'KAPALI' },
+          { allowKaynak: ['telegram', 'manual'] },
+        )
+      }
     } catch (err: any) {
       if (err instanceof ConflictError || err?.name === 'ConflictError') {
         if (store && source) {
@@ -175,13 +223,38 @@
     deleting = true
     deleteError = null
     try {
-      await deleteRecord<Debt>(
-        store,
-        source,
-        'debts',
-        (d) => d.id === deletingDebt!.id,
-        { allowKaynak: ['telegram', 'manual'] },
-      )
+      const target = deletingDebt
+      const linkedIds = new Set<string>([
+        ...(target.acilisKayitId ? [target.acilisKayitId] : []),
+        ...(target.kapatanKayitlar ?? []),
+      ])
+      const isLinkedTx = (r: PersonalTx): boolean =>
+        linkedIds.has(r.id) ||
+        r.ikizId === target.id ||
+        r.not === `Borç kaydı: ${target.id}` ||
+        r.not === `Borç kapama: ${target.id}`
+
+      const hasLinkedTx = (dataset?.personalTx ?? []).some(isLinkedTx)
+      if (hasLinkedTx) {
+        await writeMultiAndCommit(store, source, [
+          {
+            file: 'debts',
+            build: (curr) => (curr as Debt[]).filter((d) => d.id !== target.id),
+          },
+          {
+            file: 'personal_tx',
+            build: (curr) => (curr as PersonalTx[]).filter((r) => !isLinkedTx(r)),
+          },
+        ])
+      } else {
+        await deleteRecord<Debt>(
+          store,
+          source,
+          'debts',
+          (d) => d.id === target.id,
+          { allowKaynak: ['telegram', 'manual'] },
+        )
+      }
       deletingDebt = null
     } catch (err: any) {
       if (err instanceof ConflictError || err?.name === 'ConflictError') {

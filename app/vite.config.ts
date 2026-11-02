@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
@@ -8,6 +8,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { manifest, workbox } from './pwa.config'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const repoDataRoot = resolve(__dirname, '..', 'data')
 
 // Dev-only: Vite's root is `app/`, so `fetch('./data/*.json')` from
 // LocalFileSource would fall through to the SPA index.html (HTTP 200, HTML) and
@@ -21,7 +22,18 @@ const serveRepoData = {
   configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
     server.middlewares.use((req, res, next) => {
       if (!req.url?.startsWith('/data/')) return next()
-      const f = resolve(__dirname, '..', req.url.slice(1).split('?')[0])
+      let rel = ''
+      try {
+        rel = decodeURIComponent(req.url.slice('/data/'.length).split('?')[0])
+      } catch {
+        res.statusCode = 400
+        return res.end('bad request')
+      }
+      const f = resolve(repoDataRoot, rel)
+      if (f !== repoDataRoot && !f.startsWith(repoDataRoot + sep)) {
+        res.statusCode = 403
+        return res.end('forbidden')
+      }
 
       if (req.method === 'POST' || req.method === 'PUT') {
         let body = ''

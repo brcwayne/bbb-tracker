@@ -12,14 +12,14 @@
     type InstalmentScheduleItem,
   } from '../../lib/data/personal'
   import { cardStatement } from '../../lib/data/accounts'
-  import { fmtCurrency, tryFmt, usd, monthLabel, monthShort } from '../../lib/format'
+  import { fmtCurrency, tryFmt, usd, monthLabel, monthShort, todayLocalIso } from '../../lib/format'
   import BarChart from '../../lib/charts/BarChart.svelte'
   import Donut from '../../lib/charts/Donut.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
 
   let {
     dataset,
-    today = new Date().toISOString().slice(0, 10),
+    today = todayLocalIso(),
   }: {
     dataset?: Dataset | null
     today?: string
@@ -74,6 +74,7 @@
 
   const hasTry = $derived(rows.some((r) => r.paraBirimi === 'TRY' && r.tarih <= today))
   const hasUsd = $derived(rows.some((r) => r.paraBirimi === 'USD' && r.tarih <= today))
+  const hasEur = $derived(rows.some((r) => r.paraBirimi === 'EUR' && r.tarih <= today))
 
   const tryMonthlyBars = $derived(
     monthly
@@ -83,6 +84,11 @@
   const usdMonthlyBars = $derived(
     monthly
       .filter((m) => m.para === 'USD')
+      .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam, key: m.ay })),
+  )
+  const eurMonthlyBars = $derived(
+    monthly
+      .filter((m) => m.para === 'EUR')
       .map((m, i) => ({ label: axisLabel(m.ay, i), value: m.toplam, key: m.ay })),
   )
 
@@ -158,8 +164,10 @@
 
   const giderTry = $derived(summary.gider['TRY'] ?? 0)
   const giderUsd = $derived(summary.gider['USD'] ?? 0)
+  const giderEur = $derived(summary.gider['EUR'] ?? 0)
   const gelirTry = $derived(summary.gelir['TRY'] ?? 0)
   const gelirUsd = $derived(summary.gelir['USD'] ?? 0)
+  const gelirEur = $derived(summary.gelir['EUR'] ?? 0)
 
   // Boyutlu kırılım türetmeleri
   const dimensionGroups = $derived(
@@ -208,7 +216,8 @@
 
       // Ödenecek Ekstre
       if (stmt.odenecekEkstre) {
-        const tutar = stmt.odenecekEkstre.sahipToplami[personKod] ?? 0
+        const odenen = stmt.odenecekEkstre.sahipOdenen[personKod] ?? 0
+        const tutar = Math.max(0, Math.round(((stmt.odenecekEkstre.sahipToplami[personKod] ?? 0) - odenen) * 100) / 100)
         if (tutar > 0) {
           list.push({
             kartKod: card.kod,
@@ -225,7 +234,8 @@
 
       // Dönem İçi
       if (stmt.donemIci) {
-        const tutar = stmt.donemIci.sahipToplami[personKod] ?? 0
+        const odenen = stmt.donemIci.sahipOdenen[personKod] ?? 0
+        const tutar = Math.max(0, Math.round(((stmt.donemIci.sahipToplami[personKod] ?? 0) - odenen) * 100) / 100)
         if (tutar > 0) {
           list.push({
             kartKod: card.kod,
@@ -289,13 +299,16 @@
       {#each dimensionGroups as g (g.key)}
         {@const gTryMonthly = getGroupBars(g.monthly, 'TRY')}
         {@const gUsdMonthly = getGroupBars(g.monthly, 'USD')}
+        {@const gEurMonthly = getGroupBars(g.monthly, 'EUR')}
         {@const gDonut = getGroupDonut(g.categoryBreakdown)}
         {@const gInst = getGroupInstalments(g.instalments)}
         {@const gGiderTry = g.summary.gider['TRY'] ?? 0}
         {@const gGiderUsd = g.summary.gider['USD'] ?? 0}
+        {@const gGiderEur = g.summary.gider['EUR'] ?? 0}
         {@const gGelirTry = g.summary.gelir['TRY'] ?? 0}
         {@const gGelirUsd = g.summary.gelir['USD'] ?? 0}
-        {@const gHasActivity = g.summary.adet > 0 || gTryMonthly.some(b => b.value > 0) || gInst.some(b => b.value > 0)}
+        {@const gGelirEur = g.summary.gelir['EUR'] ?? 0}
+        {@const gHasActivity = g.summary.adet > 0 || gTryMonthly.some(b => b.value > 0) || gUsdMonthly.some(b => b.value > 0) || gEurMonthly.some(b => b.value > 0) || gInst.some(b => b.value > 0)}
 
         {#if gHasActivity}
           <div class="dimension-group-card" data-testid="dimension-group-{g.key}">
@@ -311,13 +324,19 @@
                 {#if gGiderUsd > 0}
                   <span class="figure-sub num">+ {usd(gGiderUsd)}</span>
                 {/if}
+                {#if gGiderEur > 0}
+                  <span class="figure-sub num">+ {fmtCurrency(gGiderEur, 'EUR')}</span>
+                {/if}
               </div>
-              {#if gGelirTry > 0 || gGelirUsd > 0}
+              {#if gGelirTry > 0 || gGelirUsd > 0 || gGelirEur > 0}
                 <div class="figure-block">
                   <span class="figure-label">Toplam Gelir</span>
                   <span class="figure-value num gain">{tryFmt(gGelirTry)}</span>
                   {#if gGelirUsd > 0}
                     <span class="figure-sub num gain">+ {usd(gGelirUsd)}</span>
+                  {/if}
+                  {#if gGelirEur > 0}
+                    <span class="figure-sub num gain">+ {fmtCurrency(gGelirEur, 'EUR')}</span>
                   {/if}
                 </div>
               {/if}
@@ -349,7 +368,7 @@
             {/if}
 
             <!-- Aylık Seyir -->
-            {#if gTryMonthly.some(b => b.value > 0) || gUsdMonthly.some(b => b.value > 0)}
+            {#if gTryMonthly.some(b => b.value > 0) || gUsdMonthly.some(b => b.value > 0) || gEurMonthly.some(b => b.value > 0)}
               <div class="charts-row">
                 {#if gTryMonthly.some(b => b.value > 0)}
                   <section class="chart-card" data-chart="aylik-seyir">
@@ -384,6 +403,24 @@
                         }
                       }}
                       fmt={(v) => usd(v, { whole: true })}
+                    />
+                  </section>
+                {/if}
+                {#if gEurMonthly.some(b => b.value > 0)}
+                  <section class="chart-card" data-chart="aylik-seyir">
+                    <div class="chart-card-header">
+                      <h4 class="chart-title">Aylık Seyir (€ EUR)</h4>
+                      <span class="chart-hint">Kategori dağılımı için aya tıklayın</span>
+                    </div>
+                    <BarChart
+                      bars={gEurMonthly}
+                      selectedKey={activeMonth}
+                      onSelect={(b) => {
+                        if (b.key) {
+                          selectedMonth = b.key === selectedMonth ? null : b.key
+                        }
+                      }}
+                      fmt={(v) => fmtCurrency(v, 'EUR', { whole: true })}
                     />
                   </section>
                 {/if}
@@ -459,7 +496,7 @@
                             </div>
                             <div class="detail-total-row">
                               <span class="detail-total-label">Toplam:</span>
-                              <span class="detail-total-val num">{tryFmt(groupCatTotal)} TRY</span>
+                              <span class="detail-total-val num">{fmtCurrency(groupCatTotal, 'TRY')}</span>
                             </div>
                           </div>
                           {#if groupCatTxs.length === 0}
@@ -479,7 +516,7 @@
                                     <div class="tx-desc" title={tx.aciklama}>{tx.aciklama}</div>
                                   </div>
                                   <div class="tx-item-right">
-                                    <span class="tx-amount num">{tryFmt(tx.tutar)} ₺</span>
+                                    <span class="tx-amount num">{fmtCurrency(tx.tutar, tx.paraBirimi)}</span>
                                   </div>
                                 </div>
                               {/each}
@@ -536,13 +573,19 @@
           {#if giderUsd > 0}
             <span class="figure-sub num">+ {usd(giderUsd)}</span>
           {/if}
+          {#if giderEur > 0}
+            <span class="figure-sub num">+ {fmtCurrency(giderEur, 'EUR')}</span>
+          {/if}
         </div>
-        {#if gelirTry > 0 || gelirUsd > 0}
+        {#if gelirTry > 0 || gelirUsd > 0 || gelirEur > 0}
           <div class="figure-block">
             <span class="figure-label">Toplam Gelir</span>
             <span class="figure-value num gain">{tryFmt(gelirTry)}</span>
             {#if gelirUsd > 0}
               <span class="figure-sub num gain">+ {usd(gelirUsd)}</span>
+            {/if}
+            {#if gelirEur > 0}
+              <span class="figure-sub num gain">+ {fmtCurrency(gelirEur, 'EUR')}</span>
             {/if}
           </div>
         {/if}
@@ -584,6 +627,24 @@
               }
             }}
             fmt={(v) => usd(v, { whole: true })}
+          />
+        </section>
+      {/if}
+      {#if hasEur}
+        <section class="chart-card" data-chart="aylik-seyir">
+          <div class="chart-card-header">
+            <h3 class="chart-title">Aylık Seyir (€ EUR)</h3>
+            <span class="chart-hint">Kategori dağılımı için aya tıklayın</span>
+          </div>
+          <BarChart
+            bars={eurMonthlyBars}
+            selectedKey={activeMonth}
+            onSelect={(b) => {
+              if (b.key) {
+                selectedMonth = b.key === selectedMonth ? null : b.key
+              }
+            }}
+            fmt={(v) => fmtCurrency(v, 'EUR', { whole: true })}
           />
         </section>
       {/if}
@@ -652,7 +713,7 @@
                   </div>
                   <div class="detail-total-row">
                     <span class="detail-total-label">Toplam:</span>
-                    <span class="detail-total-val num">{tryFmt(activeCatTotal)} TRY</span>
+                    <span class="detail-total-val num">{fmtCurrency(activeCatTotal, 'TRY')}</span>
                   </div>
                 </div>
                 {#if activeCatTransactions.length === 0}
@@ -672,7 +733,7 @@
                           <div class="tx-desc" title={tx.aciklama}>{tx.aciklama}</div>
                         </div>
                         <div class="tx-item-right">
-                          <span class="tx-amount num">{tryFmt(tx.tutar)} ₺</span>
+                          <span class="tx-amount num">{fmtCurrency(tx.tutar, tx.paraBirimi)}</span>
                         </div>
                       </div>
                     {/each}

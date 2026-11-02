@@ -31,7 +31,9 @@
 
   const instName = (kod: string) => dataset?.instruments.find((i) => i.kod === kod)?.ad ?? kod
   const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))].sort()
-  const isImported = (t: Transaction | null) => !!t && t.kaynak !== 'manual'
+  const isImported = (t: Transaction | null) =>
+    !!t && t.kaynak !== 'manual' && t.kaynak !== 'telegram'
+  const isTelegram = (t: Transaction | null) => t?.kaynak === 'telegram'
 
   const varlikOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.enstruman)))
   const kurumOptions = $derived(distinct((dataset?.transactions ?? []).map((t) => t.hesap)))
@@ -98,9 +100,10 @@
     deleteError = null
     try {
       const id = deleteTarget.id
+      const transfers = dataset.assetTransfers ?? []
       const prospective = dataset.transactions.filter((t) => t.id !== id)
-      const baselineErrors = derivePositions(dataset.transactions).errors.length
-      const prospectiveErrors = derivePositions(prospective).errors.length
+      const baselineErrors = derivePositions(dataset.transactions, transfers).errors.length
+      const prospectiveErrors = derivePositions(prospective, transfers).errors.length
       if (prospectiveErrors > baselineErrors) {
         deleteError = 'Bu kayıt silinirse daha sonraki bir satış geçersiz hale gelir.'
         deleting = false
@@ -210,17 +213,19 @@
                 {/if}
               </td>
               <td class="act">
-                {#if t.kaynak !== 'manual'}
+                {#if isTelegram(t)}
+                  <span class="lock" title="Telegram'dan gelen kayıt">🤖</span>
+                {:else if isImported(t)}
                   <span class="lock" title="Excel'den gelen kayıt — düzenlerken dikkat">🔒</span>
                 {/if}
                 <button
                   class="icon"
-                  title={t.kaynak === 'manual' ? 'Düzenle' : 'Excel kaydını düzelt'}
+                  title={isImported(t) ? 'Excel kaydını düzelt' : isTelegram(t) ? 'Telegram kaydını düzenle' : 'Düzenle'}
                   aria-label="Düzenle"
                   onclick={() => requestEdit(t)}>✎</button>
                 <button
                   class="icon danger"
-                  title={t.kaynak === 'manual' ? 'Sil' : 'Excel kaydını sil'}
+                  title={isImported(t) ? 'Excel kaydını sil' : isTelegram(t) ? 'Telegram kaydını sil' : 'Sil'}
                   aria-label="Sil"
                   onclick={() => requestDelete(t)}>🗑</button>
               </td>

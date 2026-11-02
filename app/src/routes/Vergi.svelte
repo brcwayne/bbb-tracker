@@ -2,7 +2,7 @@
   import type { Dataset } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
   import { money } from '../lib/settings.svelte'
-  import { dateShort, DASH } from '../lib/format'
+  import { dateShort, DASH, tryFmt } from '../lib/format'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
   import DataTable from '../lib/ui/DataTable.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
@@ -145,6 +145,39 @@
         <DataTable columns={sinifCols} rows={ozet.siniflar} initialSort={{ key: 'toplamHasilatUsd', dir: 'desc' }} />
       </div>
 
+      {#if ozet.fifoTl}
+        {@const endeksli = ozet.fifoTl.satislar.some((s) => s.endekslemeUygulandi)}
+        <!-- TL Bazlı Değer Artış Özeti (TCMB İşlem Günü Kuru + Yİ-ÜFE) -->
+        <SectionHeader
+          title="TL Bazlı Kazanç Özeti (FIFO + Yİ-ÜFE)"
+          note="GVK mükerrer 80 uyarınca işlem tarihindeki TCMB döviz alış kurları ve %10+ Yİ-ÜFE endekslemesi esas alınmıştır"
+        />
+        <dl class="mini">
+          <div>
+            <dt>TL Hasılat <span class="scope">İşlem Günü TCMB</span></dt>
+            <dd class="num">{tryFmt(ozet.fifoTl.toplamHasilatTl)} ₺</dd>
+          </div>
+          <div>
+            <dt>TL Maliyet <span class="scope">{endeksli ? 'Yİ-ÜFE Endeksli' : 'TCMB Alış'}</span></dt>
+            <dd class="num">{tryFmt(endeksli ? ozet.fifoTl.toplamEndeksliMaliyetTl : ozet.fifoTl.toplamMaliyetTl)} ₺</dd>
+          </div>
+          <div>
+            <dt>Net Değer Artış Kazancı <span class="scope">TL</span></dt>
+            <dd
+              class="num strong"
+              class:pos={ozet.fifoTl.toplamEndeksliKzTl > 0}
+              class:neg={ozet.fifoTl.toplamEndeksliKzTl < 0}
+            >
+              {tryFmt(ozet.fifoTl.toplamEndeksliKzTl, { sign: true })} ₺
+            </dd>
+          </div>
+          <div>
+            <dt>Endeksleme Durumu <span class="scope">Yİ-ÜFE &gt;= %10</span></dt>
+            <dd class="num">{endeksli ? 'Uygulandı' : 'Uygulanmadı'}</dd>
+          </div>
+        </dl>
+      {/if}
+
       <!-- Kapanan Satış İşlemleri Dökümü -->
       <SectionHeader title="Satış İşlemleri Dökümü" note={`${ozet.satislar.length} satır`} />
       <div class="table-container">
@@ -164,9 +197,9 @@
   }
 
   .disclaimer-banner {
-    background: var(--bg-card, #ffffff);
-    border: 1px solid var(--border-color, #e2e8f0);
-    border-left: 4px solid var(--accent, #3b82f6);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-left: 4px solid var(--gold);
     border-radius: 6px;
     padding: 0.75rem 1rem;
     margin-bottom: 1.25rem;
@@ -176,7 +209,7 @@
     margin: 0;
     font-size: 0.875rem;
     line-height: 1.4;
-    color: var(--text-muted, #64748b);
+    color: var(--ink-soft);
   }
 
   .vergi-toolbar {
@@ -197,16 +230,17 @@
   .yil-label {
     font-size: 0.875rem;
     font-weight: 500;
+    color: var(--ink);
   }
 
   .yil-select {
     padding: 0.375rem 0.75rem;
     font-size: 0.875rem;
     font-weight: 600;
-    border: 1px solid var(--border-color, #cbd5e1);
+    border: 1px solid var(--hairline);
     border-radius: 4px;
-    background: var(--bg-card, #ffffff);
-    color: inherit;
+    background: var(--surface);
+    color: var(--ink);
     cursor: pointer;
   }
 
@@ -215,23 +249,23 @@
     font-size: 0.875rem;
     font-weight: 500;
     border-radius: 4px;
-    border: 1px solid var(--border-color, #cbd5e1);
-    background: var(--bg-card, #ffffff);
-    color: inherit;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--ink);
     cursor: pointer;
     transition: background 0.15s ease;
   }
 
   .csv-btn:hover {
-    background: var(--bg-hover, #f1f5f9);
+    background: var(--row-hover);
   }
 
   .empty-year {
     padding: 2.5rem 1rem;
     text-align: center;
-    color: var(--text-muted, #64748b);
-    background: var(--bg-card, #ffffff);
-    border: 1px dashed var(--border-color, #cbd5e1);
+    color: var(--ink-soft);
+    background: var(--surface);
+    border: 1px dashed var(--hairline);
     border-radius: 6px;
     margin: 1.5rem 0;
   }
@@ -253,15 +287,15 @@
   }
 
   dl.mini > div {
-    background: var(--bg-card, #ffffff);
-    border: 1px solid var(--border-color, #e2e8f0);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
     border-radius: 6px;
     padding: 0.625rem 0.75rem;
   }
 
   dl.mini dt {
     font-size: 0.75rem;
-    color: var(--text-muted, #64748b);
+    color: var(--ink-soft);
     margin-bottom: 0.25rem;
   }
 
@@ -275,13 +309,14 @@
     margin: 0;
     font-size: 1.125rem;
     font-weight: 600;
+    color: var(--ink);
   }
 
   .pos {
-    color: var(--pos, #16a34a);
+    color: var(--gain);
   }
 
   .neg {
-    color: var(--neg, #dc2626);
+    color: var(--loss);
   }
 </style>

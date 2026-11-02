@@ -7,7 +7,7 @@
   import { ConflictError } from '../lib/data/drive'
   import { newCashflowId } from '../lib/data/ids'
   import { money, settings } from '../lib/settings.svelte'
-  import { tryFmt, usd } from '../lib/format'
+  import { tryFmt, usd, todayLocalIso } from '../lib/format'
 
   let {
     source,
@@ -16,7 +16,7 @@
     hesapAdi,
     hesaplananTl = 0,
     hesaplananUsd = 0,
-    today = new Date().toISOString().slice(0, 10),
+    today = todayLocalIso(),
     onSaved = () => {},
     onCancel,
   }: {
@@ -73,8 +73,10 @@
       const recordsToAppend: Cashflow[] = []
       if (farkTl !== 0) {
         const tutarUsd = Math.round((farkTl / settings.rate) * 100) / 100
+        const primaryId = newCashflowId()
+        const mahsupId = hesap !== 'TOPLU' ? newCashflowId() : null
         recordsToAppend.push({
-          id: newCashflowId(),
+          id: primaryId,
           tarih: today,
           hesap,
           portfoy: null,
@@ -85,10 +87,11 @@
           kur: settings.rate,
           aciklama: `TL nakit düzeltmesi (${tryFmt(hesaplananTl)} → ${tryFmt(tl)})`,
           kaynak: 'manual',
+          ikizId: mahsupId,
         })
-        if (hesap !== 'TOPLU') {
+        if (mahsupId) {
           recordsToAppend.push({
-            id: newCashflowId(),
+            id: mahsupId,
             tarih: today,
             hesap: 'TOPLU',
             portfoy: null,
@@ -99,12 +102,15 @@
             kur: settings.rate,
             aciklama: `${hesap} düzeltmesi mahsubu`,
             kaynak: 'otomatik-mahsup',
+            ikizId: primaryId,
           })
         }
       }
       if (farkUsd !== 0) {
+        const primaryId = newCashflowId()
+        const mahsupId = hesap !== 'TOPLU' ? newCashflowId() : null
         recordsToAppend.push({
-          id: newCashflowId(),
+          id: primaryId,
           tarih: today,
           hesap,
           portfoy: null,
@@ -115,10 +121,11 @@
           kur: settings.rate,
           aciklama: `USD nakit düzeltmesi (${usd(hesaplananUsd)} → ${usd(usdDirect)})`,
           kaynak: 'manual',
+          ikizId: mahsupId,
         })
-        if (hesap !== 'TOPLU') {
+        if (mahsupId) {
           recordsToAppend.push({
-            id: newCashflowId(),
+            id: mahsupId,
             tarih: today,
             hesap: 'TOPLU',
             portfoy: null,
@@ -129,6 +136,7 @@
             kur: settings.rate,
             aciklama: `${hesap} düzeltmesi mahsubu`,
             kaynak: 'otomatik-mahsup',
+            ikizId: primaryId,
           })
         }
       }

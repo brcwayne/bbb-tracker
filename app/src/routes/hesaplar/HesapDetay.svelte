@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, PersonalTx } from '../../lib/data/types'
+  import type { Dataset, PersonalTx, Cashflow, RecurringRule } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { accountBalances, cardStatement, monthMovements, type StatementPeriodInfo } from '../../lib/data/accounts'
-  import { deleteRecord, load } from '../../lib/data/store'
+  import { deleteRecord, updateRecord, writeMultiAndCommit, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
-  import { tryFmt, usd } from '../../lib/format'
+  import { fmtCurrency, todayLocalIso } from '../../lib/format'
   import AyTakvimi from '../../lib/ui/AyTakvimi.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HarcamaFormu from './HarcamaFormu.svelte'
@@ -19,7 +19,7 @@
     source,
     store,
     param,
-    today = new Date().toISOString().slice(0, 10),
+    today = todayLocalIso(),
   }: {
     dataset?: Dataset | null
     source?: DataSource
@@ -30,7 +30,7 @@
 
   const isDrive = $derived(Boolean(source?.save))
 
-  const rows = $derived(dataset?.personalTx ?? [])
+  const rows = $derived((dataset?.personalTx ?? []).filter((r) => r.durum !== 'atlandi'))
   const accounts = $derived(dataset?.personalAccounts ?? [])
   const account = $derived(accounts.find((a) => a.kod === param))
   const categories = $derived(dataset?.categories ?? [])
@@ -179,13 +179,12 @@
     'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
   ]
 
-  const fmt = (v: number, para = account?.paraBirimi ?? 'TRY') =>
-    para === 'USD' ? usd(v) : tryFmt(v)
+  const fmt = (v: number, para = account?.paraBirimi ?? 'TRY') => fmtCurrency(v, para)
 
   /** What this row did to THIS account — the same sign rule the balance uses. */
   function satirTutari(r: PersonalTx): { isaret: number; metin: string } {
     if (r.paraBirimi !== account?.paraBirimi) {
-      return { isaret: 0, metin: `${r.paraBirimi === 'USD' ? usd(r.tutar) : tryFmt(r.tutar)} ${r.paraBirimi}` }
+      return { isaret: 0, metin: `${fmtCurrency(r.tutar, r.paraBirimi)} ${r.paraBirimi}` }
     }
     if (r.tur === 'TRANSFER') {
       const giden = r.hesap === account.kod
@@ -217,14 +216,100 @@
     harcamaAcik = true
   }
 
+  function findBridgeTwinCashflow(px: PersonalTx): Cashflow | undefined {
+    const flows = dataset?.cashflows ?? []
+    const byId = flows.find((c) => c.ikizId === px.id || (px.ikizId && c.id === px.ikizId))
+    if (byId) return byId
+    const brokerCodes = new Set((dataset?.brokers ?? []).map((b) => b.kod))
+    const kBroker = brokerCodes.has(px.hesap)
+    const hBroker = brokerCodes.has(px.karsiHesap ?? '')
+    if (kBroker === hBroker) return undefined
+    const expectedTur = hBroker ? 'YATIRMA' : 'CEKME'
+    const expectedHesap = hBroker ? px.karsiHesap : px.hesap
+    return flows.find(
+      (c) =>
+        c.tarih === px.tarih &&
+        c.tur === expectedTur &&
+        c.hesap === expectedHesap &&
+        (c.tutar_tl === px.tutar ||
+          (px.paraBirimi === 'USD' && Math.abs(c.tutar_usd - px.tutar) < 0.02)),
+    )
+  }
+
+  async function onaylaPlanli(r: PersonalTx) {
+    if (!source || !store) return
+    const { durum: _d, ...rest } = r
+    try {
+      await updateRecord<PersonalTx>(store, source, 'personal_tx', (x) => x.id === r.id, rest as PersonalTx, {
+        allowKaynak: ['telegram', 'manual'],
+      })
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        try {
+          await load(store, source)
+        } catch {}
+      }
+    }
+  }
+
+  async function atlaPlanli(r: PersonalTx) {
+    if (!source || !store) return
+    const skippedRow: PersonalTx = { ...r, durum: 'atlandi' }
+    try {
+      if (r.tekrarKuralId && (dataset?.recurringRules ?? []).some((rr) => rr.id === r.tekrarKuralId)) {
+        const ruleId = r.tekrarKuralId
+        await writeMultiAndCommit(store, source, [
+          {
+            file: 'personal_tx',
+            build: (curr) => (curr as PersonalTx[]).map((x) => (x.id === r.id ? skippedRow : x)),
+          },
+          {
+            file: 'recurring_rules',
+            build: (curr) =>
+              (curr as RecurringRule[]).map((rr) => {
+                if (rr.id !== ruleId) return rr
+                const prev = rr.atlananTarihler ?? []
+                return prev.includes(r.tarih) ? rr : { ...rr, atlananTarihler: [...prev, r.tarih] }
+              }),
+          },
+        ])
+      } else {
+        await updateRecord<PersonalTx>(store, source, 'personal_tx', (x) => x.id === r.id, skippedRow, {
+          allowKaynak: ['telegram', 'manual'],
+        })
+      }
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        try {
+          await load(store, source)
+        } catch {}
+      }
+    }
+  }
+
   async function confirmDelete() {
     if (!silinecek || !source || !store) return
     deleting = true
     deleteError = null
     try {
-      await deleteRecord<PersonalTx>(store, source, 'personal_tx', (r) => r.id === silinecek!.id, {
-        allowKaynak: ['telegram', 'manual'],
-      })
+      const target = silinecek
+      const twinCf = target.tur === 'TRANSFER' ? findBridgeTwinCashflow(target) : undefined
+      if (twinCf) {
+        await writeMultiAndCommit(store, source, [
+          {
+            file: 'personal_tx',
+            build: (curr) => (curr as PersonalTx[]).filter((r) => r.id !== target.id),
+          },
+          {
+            file: 'cashflows',
+            build: (curr) => (curr as Cashflow[]).filter((c) => c.id !== twinCf.id),
+          },
+        ])
+      } else {
+        await deleteRecord<PersonalTx>(store, source, 'personal_tx', (r) => r.id === target.id, {
+          allowKaynak: ['telegram', 'manual'],
+        })
+      }
       silinecek = null
     } catch (e: any) {
       if (e instanceof ConflictError || e?.name === 'ConflictError') {
@@ -339,19 +424,21 @@
 
     {#if transferAcik && !duzenlenenTransfer && dataset}
       <div class="form-modal">
-        <TransferFormu
-          {dataset}
-          {source}
-          {store}
-          kaynakHesap={transferKaynak}
-          hedefHesap={transferHedef}
-          baslik={transferBasligi}
-          varsayilanTutar={transferTutar}
-          varsayilanSahip={transferSahip}
-          tarih={seciliGun ? iso(seciliGun) : today}
-          onSaved={() => { transferAcik = false; transferSahip = undefined; }}
-          onCancel={() => { transferAcik = false; transferSahip = undefined; }}
-        />
+        {#key `${transferKaynak ?? ''}:${transferHedef ?? ''}:${transferBasligi}:${transferTutar ?? ''}:${transferSahip ?? ''}`}
+          <TransferFormu
+            {dataset}
+            {source}
+            {store}
+            kaynakHesap={transferKaynak}
+            hedefHesap={transferHedef}
+            baslik={transferBasligi}
+            varsayilanTutar={transferTutar}
+            varsayilanSahip={transferSahip}
+            tarih={seciliGun ? iso(seciliGun) : today}
+            onSaved={() => { transferAcik = false; transferSahip = undefined; }}
+            onCancel={() => { transferAcik = false; transferSahip = undefined; }}
+          />
+        {/key}
       </div>
     {/if}
 
@@ -546,6 +633,24 @@
               </span>
               <span class="tutar num" class:gain={t.isaret > 0} class:loss={t.isaret < 0}>{t.metin}</span>
               <div class="hareket-islemler">
+                {#if r.durum === 'planlandi'}
+                  <button
+                    type="button"
+                    class="btn-icon gain"
+                    title="Gerçekleşti Olarak Onayla"
+                    aria-label="Onayla"
+                    disabled={!isDrive}
+                    onclick={() => onaylaPlanli(r)}
+                  >✓</button>
+                  <button
+                    type="button"
+                    class="btn-icon"
+                    title="Bu Tekrarı Atla"
+                    aria-label="Atla"
+                    disabled={!isDrive}
+                    onclick={() => atlaPlanli(r)}
+                  >✕</button>
+                {/if}
                 {#if r.tur === 'TRANSFER'}
                   <button
                     type="button"

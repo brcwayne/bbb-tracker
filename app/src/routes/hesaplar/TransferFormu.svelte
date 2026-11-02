@@ -3,10 +3,11 @@
   import type { Dataset, PersonalTx, Cashflow } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord, updateRecord, load } from '../../lib/data/store'
+  import { appendRecord, updateRecord, writeMultiAndCommit, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { newPersonalId, newCashflowId } from '../../lib/data/ids'
-  import { settings } from '../../lib/settings.svelte'
+  import { settings, toUsd } from '../../lib/settings.svelte'
+  import { todayLocalIso } from '../../lib/format'
 
   let {
     dataset,
@@ -41,7 +42,7 @@
   let tutarText = $state(
     editing ? String(editing.tutar) : varsayilanTutar != null && varsayilanTutar > 0 ? String(varsayilanTutar) : '',
   )
-  let tarihText = $state(editing?.tarih ?? tarih ?? new Date().toISOString().slice(0, 10))
+  let tarihText = $state(editing?.tarih ?? tarih ?? todayLocalIso())
   let aciklama = $state(editing?.aciklama ?? '')
   let sahip = $state(editing?.sahip ?? varsayilanSahip ?? '')
 
@@ -116,6 +117,55 @@
     return null
   }
 
+  function buildBridgeCashflow(
+    cfId: string,
+    pxId: string,
+    tutarVal: number,
+    currency: string,
+    kIsBroker: boolean,
+    hIsBroker: boolean,
+    desc: string,
+    kaynakTag = 'manual',
+  ): Cashflow | null {
+    if (!kIsBroker && !hIsBroker) return null
+    if (kIsBroker && hIsBroker) return null
+    const usdTry = settings.rate && settings.rate > 0 ? settings.rate : 1
+    const usdVal =
+      currency === 'USD' ? tutarVal : Number(toUsd(tutarVal, currency).toFixed(2))
+    return {
+      id: cfId,
+      tarih: tarihText,
+      hesap: hIsBroker ? hedef : kaynak,
+      portfoy: null,
+      tur: hIsBroker ? 'YATIRMA' : 'CEKME',
+      enstruman: null,
+      tutar_tl: currency === 'TRY' ? tutarVal : null,
+      kur: currency === 'TRY' ? usdTry : null,
+      tutar_usd: usdVal,
+      aciklama: desc,
+      kaynak: kaynakTag,
+      ikizId: pxId,
+    }
+  }
+
+  function findTwinCashflow(px: PersonalTx, flows: Cashflow[]): Cashflow | undefined {
+    const byId = flows.find((c) => c.ikizId === px.id || (px.ikizId && c.id === px.ikizId))
+    if (byId) return byId
+    const oldKBroker = isBroker(px.hesap)
+    const oldHBroker = isBroker(px.karsiHesap ?? '')
+    if (oldKBroker === oldHBroker) return undefined
+    const expectedTur = oldHBroker ? 'YATIRMA' : 'CEKME'
+    const expectedHesap = oldHBroker ? px.karsiHesap : px.hesap
+    return flows.find(
+      (c) =>
+        c.tarih === px.tarih &&
+        c.tur === expectedTur &&
+        c.hesap === expectedHesap &&
+        (c.tutar_tl === px.tutar ||
+          (px.paraBirimi === 'USD' && Math.abs(c.tutar_usd - px.tutar) < 0.02)),
+    )
+  }
+
   async function handleSubmit() {
     error = null
     const err = dogrula()
@@ -126,40 +176,92 @@
     if (!source || !store) return
     saving = true
     try {
+      const kIsBroker = isBroker(kaynak)
+      const hIsBroker = isBroker(hedef)
+      const tutarVal = Number(tutarText)
+      const desc = aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`
+      const currency =
+        (!kIsBroker ? accounts.find((a) => a.kod === kaynak)?.paraBirimi : null) ??
+        (!hIsBroker ? accounts.find((a) => a.kod === hedef)?.paraBirimi : null) ??
+        editing?.paraBirimi ??
+        'TRY'
+
       if (editing) {
+        const existingCf = findTwinCashflow(editing, dataset?.cashflows ?? [])
+        const cfId = existingCf?.id ?? newCashflowId()
+        const nextCf = buildBridgeCashflow(
+          cfId,
+          editing.id,
+          tutarVal,
+          currency,
+          kIsBroker,
+          hIsBroker,
+          desc,
+          existingCf?.kaynak ?? editing.kaynak ?? 'manual',
+        )
         const patch: PersonalTx = {
           ...editing,
           tarih: tarihText,
-          tutar: Number(tutarText),
+          tutar: tutarVal,
+          paraBirimi: currency as 'TRY' | 'USD' | 'EUR',
           hesap: kaynak,
           karsiHesap: hedef,
           sahip: sahip || editing.sahip || 'ENIS',
-          aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
+          aciklama: desc,
+          ikizId: nextCf ? nextCf.id : null,
         }
-        await updateRecord<PersonalTx>(store, source, 'personal_tx', (r) => r.id === editing!.id, patch, {
-          allowKaynak: ['telegram', 'manual'],
-        })
+        if (nextCf || existingCf) {
+          await writeMultiAndCommit(store, source, [
+            {
+              file: 'personal_tx',
+              build: (curr) =>
+                (curr as PersonalTx[]).map((r) => (r.id === editing!.id ? patch : r)),
+            },
+            {
+              file: 'cashflows',
+              build: (curr) => {
+                const arr = curr as Cashflow[]
+                if (nextCf) {
+                  if (existingCf && arr.some((c) => c.id === existingCf.id)) {
+                    return arr.map((c) => (c.id === existingCf.id ? nextCf : c))
+                  }
+                  return [...arr, nextCf]
+                }
+                return existingCf ? arr.filter((c) => c.id !== existingCf.id) : arr
+              },
+            },
+          ])
+        } else {
+          await updateRecord<PersonalTx>(store, source, 'personal_tx', (r) => r.id === editing!.id, patch, {
+            allowKaynak: ['telegram', 'manual'],
+          })
+        }
       } else {
-        const kIsBroker = isBroker(kaynak)
-        const hIsBroker = isBroker(hedef)
         const owner =
           sahip ||
           ((!kIsBroker ? accounts.find((a) => a.kod === kaynak)?.sahip : null) ??
           (!hIsBroker ? accounts.find((a) => a.kod === hedef)?.sahip : null) ??
           'ENIS')
-        const currency =
-          (!kIsBroker ? accounts.find((a) => a.kod === kaynak)?.paraBirimi : null) ??
-          (!hIsBroker ? accounts.find((a) => a.kod === hedef)?.paraBirimi : null) ??
-          'TRY'
+
+        const pxId = newPersonalId()
+        const cf = buildBridgeCashflow(
+          newCashflowId(),
+          pxId,
+          tutarVal,
+          currency,
+          kIsBroker,
+          hIsBroker,
+          desc,
+        )
 
         const satir: PersonalTx = {
-          id: newPersonalId(),
+          id: pxId,
           tarih: tarihText,
           tur: 'TRANSFER',
-          tutar: Number(tutarText),
+          tutar: tutarVal,
           paraBirimi: currency as 'TRY' | 'USD' | 'EUR',
           kategori: 'transfer',
-          aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
+          aciklama: desc,
           hesap: kaynak,
           karsiHesap: hedef,
           sahip: owner,
@@ -169,46 +271,22 @@
           not: '',
           kaynak: 'manual',
           olusturulma: new Date().toISOString(),
+          ...(cf ? { ikizId: cf.id } : {}),
         }
-        await appendRecord<PersonalTx>(store, source, 'personal_tx', satir)
 
-        // Köprü transfer: Harcama hesabı <-> Yatırım kurumu
-        if (!kIsBroker && hIsBroker) {
-          // Sermaye girişi (YATIRMA)
-          const tutarVal = Number(tutarText)
-          const rate = settings.rate && settings.rate > 0 ? settings.rate : 1
-          const cf: Cashflow = {
-            id: newCashflowId(),
-            tarih: tarihText,
-            hesap: hedef,
-            portfoy: null,
-            tur: 'YATIRMA',
-            enstruman: null,
-            tutar_tl: currency === 'TRY' ? tutarVal : null,
-            kur: currency === 'TRY' ? rate : null,
-            tutar_usd: currency === 'USD' ? tutarVal : Number((tutarVal / rate).toFixed(2)),
-            aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
-            kaynak: 'manual',
-          }
-          await appendRecord<Cashflow>(store, source, 'cashflows', cf)
-        } else if (kIsBroker && !hIsBroker) {
-          // Sermaye çıkışı (ÇEKME)
-          const tutarVal = Number(tutarText)
-          const rate = settings.rate && settings.rate > 0 ? settings.rate : 1
-          const cf: Cashflow = {
-            id: newCashflowId(),
-            tarih: tarihText,
-            hesap: kaynak,
-            portfoy: null,
-            tur: 'CEKME',
-            enstruman: null,
-            tutar_tl: currency === 'TRY' ? tutarVal : null,
-            kur: currency === 'TRY' ? rate : null,
-            tutar_usd: currency === 'USD' ? tutarVal : Number((tutarVal / rate).toFixed(2)),
-            aciklama: aciklama.trim() || `${accName(kaynak)} → ${accName(hedef)}`,
-            kaynak: 'manual',
-          }
-          await appendRecord<Cashflow>(store, source, 'cashflows', cf)
+        if (cf) {
+          await writeMultiAndCommit(store, source, [
+            {
+              file: 'personal_tx',
+              build: (curr) => [...(curr as PersonalTx[]), satir],
+            },
+            {
+              file: 'cashflows',
+              build: (curr) => [...(curr as Cashflow[]), cf],
+            },
+          ])
+        } else {
+          await appendRecord<PersonalTx>(store, source, 'personal_tx', satir)
         }
       }
       onSaved?.()

@@ -83,6 +83,10 @@ export class DriveSource implements DataSource {
   folderId: string | null = null
   /** Cache of `{id, md5Checksum}` per file basename, populated by `load()` and refreshed by `save()`. */
   private fileIds: Record<string, { id: string; md5Checksum: string }> = {}
+  /** Optional files present on Drive whose last `load()` failed or returned corrupt data. */
+  private unreadableFiles = new Set<string>()
+  /** True after at least one successful `load()` for the active folder. */
+  private hasLoaded = false
 
   constructor(
     private clientId: string,
@@ -172,6 +176,9 @@ export class DriveSource implements DataSource {
   /** Hatırlanan klasörü unutur, böylece bir dahaki bağlanışta yenisi seçilir. */
   forgetFolder(): void {
     this.folderId = null
+    this.fileIds = {}
+    this.unreadableFiles.clear()
+    this.hasLoaded = false
     try {
       localStorage.removeItem(FOLDER_KEY)
     } catch {}
@@ -254,6 +261,11 @@ export class DriveSource implements DataSource {
             .setCallback((data: any) => {
               if (data.action === google.picker.Action.PICKED) {
                 const id: string = data.docs[0].id
+                if (this.folderId !== id) {
+                  this.fileIds = {}
+                  this.unreadableFiles.clear()
+                  this.hasLoaded = false
+                }
                 this.folderId = id
                 try {
                   localStorage.setItem(FOLDER_KEY, id)
@@ -304,6 +316,8 @@ export class DriveSource implements DataSource {
     const { files } = (await listRes.json()) as {
       files: { id: string; name: string; md5Checksum?: string; modifiedTime?: string }[]
     }
+    this.fileIds = {}
+    this.unreadableFiles.clear()
     let latestTime: number | null = null
     for (const f of files) {
       const base = f.name.replace(/\.json$/, '')
@@ -335,11 +349,26 @@ export class DriveSource implements DataSource {
     const atFile = files.find((f) => f.name === 'assetTransfers.json')
     if (atFile) {
       // assetTransfers.json is optional (Ruling P2-4): a transient read failure on this one
-      // file shouldn't break the whole dataset load, so fall back to [] rather than throwing.
-      const atRes = await this.authFetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, {
-        cache: 'no-store',
-      })
-      dataset.assetTransfers = atRes.ok ? await atRes.json() : []
+      // file shouldn't break the whole dataset load, so fall back to [] rather than throwing,
+      // while marking it unreadable so a subsequent save() never clobbers remote data with [].
+      try {
+        const atRes = await this.authFetch(`https://www.googleapis.com/drive/v3/files/${atFile.id}?alt=media`, {
+          cache: 'no-store',
+        })
+        if (atRes.status === 401 || atRes.status === 403) {
+          this.setToken(null)
+          throw new NeedsAuthError('oturum süresi doldu')
+        }
+        if (!atRes.ok) throw new Error(`HTTP ${atRes.status}`)
+        const atData = await atRes.json()
+        if (!Array.isArray(atData)) throw new Error('beklenmeyen veri biçimi')
+        dataset.assetTransfers = atData
+      } catch (e) {
+        if (e instanceof NeedsAuthError) throw e
+        delete this.fileIds.assetTransfers
+        this.unreadableFiles.add('assetTransfers')
+        dataset.assetTransfers = []
+      }
     } else {
       dataset.assetTransfers = []
     }
@@ -360,11 +389,15 @@ export class DriveSource implements DataSource {
             this.setToken(null)
             throw new NeedsAuthError('oturum süresi doldu')
           }
-          const data = res.ok ? await res.json() : null
-          dataset[key] = Array.isArray(data) ? data : []
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          if (!Array.isArray(data)) throw new Error('beklenmeyen veri biçimi')
+          dataset[key] = data
         } catch (e) {
           if (e instanceof NeedsAuthError) throw e
           console.warn(`Drive: ${name}.json okunamadı:`, e)
+          delete this.fileIds[name]
+          this.unreadableFiles.add(name)
           dataset[key] = []
         }
       }),
@@ -376,14 +409,15 @@ export class DriveSource implements DataSource {
         const syncRes = await this.authFetch(`https://www.googleapis.com/drive/v3/files/${syncFile.id}?alt=media`, {
           cache: 'no-store',
         })
-        dataset.syncState = syncRes.ok ? await syncRes.json() : null
+        dataset.syncState = syncRes.ok ? await syncRes.json() : (dataset.meta?.syncState ?? null)
       } catch {
-        dataset.syncState = null
+        dataset.syncState = dataset.meta?.syncState ?? null
       }
     } else {
-      dataset.syncState = null
+      dataset.syncState = dataset.meta?.syncState ?? null
     }
 
+    this.hasLoaded = true
     this.lastModified =
       latestTime != null ? new Date(latestTime).toISOString() : (dataset.meta?.olusturulma ?? null)
     return dataset
@@ -401,6 +435,10 @@ export class DriveSource implements DataSource {
     if (!folderId) throw new NeedsAuthError('klasör seçilmedi')
     await this.ensureToken()
 
+    if (this.unreadableFiles.has(name)) {
+      throw new ConflictError(name)
+    }
+
     let cached = this.fileIds[name]
     if (!cached) {
       const q = `'${folderId}' in parents and trashed = false and name = '${name}.json'`
@@ -414,7 +452,12 @@ export class DriveSource implements DataSource {
       }
       if (!res.ok) throw new Error(`Drive: ${name}.json aranamadı (${res.status})`)
       const { files } = (await res.json()) as { files: { id: string; md5Checksum?: string }[] }
-      if (files[0]) cached = { id: files[0].id, md5Checksum: files[0].md5Checksum ?? '' }
+      if (files[0]) {
+        if (this.hasLoaded) {
+          throw new ConflictError(name)
+        }
+        cached = { id: files[0].id, md5Checksum: files[0].md5Checksum ?? '' }
+      }
     }
 
     if (!cached) {

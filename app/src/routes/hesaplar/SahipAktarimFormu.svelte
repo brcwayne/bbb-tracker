@@ -6,17 +6,20 @@
   import { appendRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { newPersonalId } from '../../lib/data/ids'
+  import { todayLocalIso } from '../../lib/format'
 
   let {
     dataset,
     source,
     store,
+    tarih = todayLocalIso(),
     onSaved,
     onCancel,
   }: {
     dataset?: Dataset | null
     source?: DataSource
     store?: Writable<AppState>
+    tarih?: string
     onSaved?: () => void
     onCancel?: () => void
   } = $props()
@@ -24,7 +27,7 @@
   let gonderen = $state('')
   let alan = $state('')
   let tutarText = $state('')
-  let tarihText = $state(new Date().toISOString().slice(0, 10))
+  let tarihText = $state(tarih)
   let paraBirimi = $state<'TRY' | 'USD'>('TRY')
   let aciklama = $state('')
 

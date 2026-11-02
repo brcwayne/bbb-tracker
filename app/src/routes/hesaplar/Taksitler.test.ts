@@ -226,5 +226,39 @@ describe('Taksitler sayfası', () => {
       expect(metas.some((m) => m?.includes('Zek'))).toBe(true)
     })
   })
+
+  it('USD taksitleri de taksit yükü grafiğine dahil edilir', () => {
+    const usdDataset: Dataset = {
+      ...fixture,
+      paymentPlans: [
+        {
+          id: 'pp_usd',
+          alisTarihi: '2026-09-01',
+          aciklama: 'Sunucu',
+          toplamTutar: 300,
+          paraBirimi: 'USD',
+          taksitSayisi: 3,
+          taksitTutari: 100,
+          sonTaksitTutari: 100,
+          kategori: 'is',
+          hesap: 'GARANTI-SANAL',
+          sahip: 'ENIS',
+          durum: 'AKTIF',
+          kaynak: 'manual',
+          olusturulma: '2026-09-01T10:00:00Z',
+        },
+      ],
+      personalTx: [
+        {
+          id: 'px_u1', tarih: '2026-10-01', tur: 'GIDER', tutar: 100, paraBirimi: 'USD',
+          kategori: 'is', aciklama: 'Sunucu 1/3', hesap: 'GARANTI-SANAL', sahip: 'ENIS',
+          taksitPlaniId: 'pp_usd', taksitNo: 1, taksitToplam: 3, not: '', kaynak: 'manual', olusturulma: '',
+        },
+      ],
+    }
+    const { container } = render(Taksitler, { dataset: usdDataset, today: '2026-09-08' })
+    const chart = container.querySelector('[data-chart="taksit-yuk"]')
+    expect(chart).not.toBeNull()
+  })
 })
 

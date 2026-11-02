@@ -106,17 +106,39 @@ describe('/prices', () => {
     expect(res.headers.get('cache-control')).toContain('s-maxage=300')
   })
 
-  it('rejects more than 45 symbols', async () => {
-    const many = Array.from({ length: 46 }, (_, i) => `S${i}`).join(',')
+  it('rejects more than 100 symbols', async () => {
+    const many = Array.from({ length: 101 }, (_, i) => `S${i}`).join(',')
     const res = await worker.fetch(new Request('https://w/prices?symbols=' + many), env, ctx)
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ error: 'en fazla 45 sembol' })
+    expect(await res.json()).toEqual({ error: 'en fazla 100 sembol' })
   })
 
-  it('dedupes before the cap check: 46 raw / 3 unique passes', async () => {
-    const many = ['THYAO.IS', 'GC=F', 'THYAO.IS', ...Array(43).fill('GC=F')].join(',')
+  it('dedupes before the cap check: 105 raw / 3 unique passes', async () => {
+    const many = ['THYAO.IS', 'GC=F', 'THYAO.IS', ...Array(102).fill('GC=F')].join(',')
     const res = await worker.fetch(new Request('https://w/prices?symbols=' + many), env, ctx)
     expect(res.status).toBe(200)
+  })
+
+  it('converts EUR, GBP, London pence (GBp), and CHF via TCMB cross rates instead of 1:1 USD', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (u: string | URL) => {
+      const s = String(u)
+      if (s.includes('tcmb.gov.tr')) return new Response(tcmbXml)
+      if (s.includes('ASML.AS'))
+        return new Response(JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: 700, currency: 'EUR' } }] } }))
+      if (s.includes('HSBA.L'))
+        return new Response(JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: 680, currency: 'GBp' } }] } }))
+      if (s.includes('NESN.SW'))
+        return new Response(JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: 90, currency: 'CHF' } }] } }))
+      return new Response('x', { status: 404 })
+    }))
+    const res = await worker.fetch(new Request('https://w/prices?symbols=ASML.AS,HSBA.L,NESN.SW'), env, ctx)
+    expect(res.status).toBe(200)
+    const b = (await res.json()) as any
+    expect(b.eurtry).toBeCloseTo(55.9713, 4)
+    expect(b.prices['ASML.AS'].priceUsd).toBeCloseTo((700 * 55.9713) / 48.2238, 3)
+    // 680 GBp = 6.80 GBP
+    expect(b.prices['HSBA.L'].priceUsd).toBeCloseTo((6.8 * 64.9761) / 48.2238, 4)
+    expect(b.prices['NESN.SW'].priceUsd).toBeCloseTo((90 * 59.4529) / 48.2238, 3)
   })
 
   it('a stray throw in the fan-out still returns 500 with the CORS header', async () => {

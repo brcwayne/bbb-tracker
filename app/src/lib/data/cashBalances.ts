@@ -87,12 +87,17 @@ export function cashSplitByHesap(
     const e = getEntry(t.hesap)
     const isTl = t.girisParaBirimi === 'TL'
     if (isTl) {
-      const costTl =
-        t.fiyat_tl != null && t.fiyat_tl > 0
-          ? t.fiyat_tl * t.lot
-          : t.net_usd * (t.kur && t.kur > 0 ? t.kur : rate)
-      if (t.yon === 'AL') e.tl -= costTl
-      else e.tl += costTl
+      const fx = t.kur && t.kur > 0 ? t.kur : rate
+      if (t.fiyat_tl != null && t.fiyat_tl > 0) {
+        const grossTl = t.fiyat_tl * t.lot
+        const commTl = (t.komisyon_usd || 0) * (fx > 0 ? fx : 0)
+        if (t.yon === 'AL') e.tl -= grossTl + commTl
+        else e.tl += grossTl - commTl
+      } else {
+        const costTl = t.net_usd * fx
+        if (t.yon === 'AL') e.tl -= costTl
+        else e.tl += costTl
+      }
     } else {
       if (t.yon === 'AL') e.usd -= t.net_usd
       else e.usd += t.net_usd

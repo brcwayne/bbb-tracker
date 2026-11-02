@@ -50,13 +50,30 @@ export function ownerLedger(
   people: Person[],
   today: string,
 ): OwnerLedger {
-  const personal = new Set(accounts.map((a) => a.kod))
+  const accByKod = new Map(accounts.map((a) => [a.kod, a]))
+  const personalByCurrency = new Map<string, Set<string>>()
+  for (const a of accounts) {
+    let set = personalByCurrency.get(a.paraBirimi)
+    if (!set) {
+      set = new Set<string>()
+      personalByCurrency.set(a.paraBirimi, set)
+    }
+    set.add(a.kod)
+  }
+
   const owners: Record<string, Money> = {}
   for (const p of people) if (p.aktif !== false) owners[p.kod] = {}
 
   for (const r of rows) {
-    if (r.tarih > today || r.durum === 'planlandi') continue
-    for (const [who, d] of ownerDeltas(r, personal)) add((owners[who] ??= {}), r.paraBirimi, d)
+    if (r.tarih > today || r.durum === 'planlandi' || r.durum === 'atlandi') continue
+    if (r.tur === 'GELIR' || r.tur === 'GIDER' || r.tur === 'DUZELTME') {
+      const acc = accByKod.get(r.hesap)
+      // Spec §3.4: a known account skips rows in a foreign currency; an unknown account
+      // (`!acc`) still accrues to the owner so orphaned rows surface in `gap`.
+      if (acc && acc.paraBirimi !== r.paraBirimi) continue
+    }
+    const matchingPersonal = personalByCurrency.get(r.paraBirimi) ?? new Set<string>()
+    for (const [who, d] of ownerDeltas(r, matchingPersonal)) add((owners[who] ??= {}), r.paraBirimi, d)
   }
 
   const ownerTotal: Money = {}

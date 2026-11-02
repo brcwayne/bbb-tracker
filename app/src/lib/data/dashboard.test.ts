@@ -43,7 +43,7 @@ describe('dashboardTotals', () => {
     const d = dashboardTotals(ds, pos, null)
     expect(d.cekimler).toBe(1000)
     expect(d.icerideKalan).toBeCloseTo(475 + 4 - 1000, 6)
-    expect(d.donemSonu).toBeCloseTo(5000 + d.icerideKalan - 1000, 6)
+    expect(d.donemSonu).toBeCloseTo(5000 + d.icerideKalan, 6)
   })
 })
 

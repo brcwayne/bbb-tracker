@@ -39,6 +39,8 @@ export interface Cashflow {
    *  hedef, kaynakla aynı tutar+para birimini alır (bugünkü davranış). */
   hedefTutarTl?: number | null
   hedefTutarUsd?: number | null
+  /** Köprü transferlerde (`personal_tx.json`) veya `DUZELTME` mahsubunda bağlı ikiz kayıt ID'si. */
+  ikizId?: string | null
 }
 
 export interface AssetTransfer {
@@ -52,6 +54,7 @@ export interface AssetTransfer {
   hedefPortfoy: string | null
   aciklama: string
   kaynak: string
+  olusturulma?: string | null
 }
 
 export interface Snapshot {
@@ -110,6 +113,7 @@ export interface Meta {
   kaynak: string
   nakitHesapBazli: Record<string, number>
   p0Sinirlari: string[]
+  syncState?: SyncState | null
 }
 
 export type FxRates = Record<string, number>
@@ -136,6 +140,8 @@ export interface RecurringRule {
   periyot?: RecurrencePeriod
   /** Toplam işlem sayısı (1 asıl + (n-1) tekrar). null veya tanımsız ise süresiz. */
   toplamTekrar?: number | null
+  /** Kullanıcı tarafından bilerek atlanan ('Hayır' / 'Atla') tarihler (YYYY-MM-DD). */
+  atlananTarihler?: string[]
 }
 
 export interface PersonalTx {
@@ -161,8 +167,10 @@ export interface PersonalTx {
   olusturulma: string
   /** Bir RecurringRule'dan üretilmişse o kuralın id'si. */
   tekrarKuralId?: string | null
-  /** 'planlandi' = henüz gerçekleşmemiş önizleme satırı; yoksa normal/gerçekleşmiş kayıt. */
-  durum?: 'planlandi'
+  /** 'planlandi' = henüz gerçekleşmemiş önizleme satırı; 'atlandi' = kullanıcı tarafından atlanmış mezar taşı; yoksa gerçekleşmiş kayıt. */
+  durum?: 'planlandi' | 'atlandi'
+  /** Köprü transferde (`cashflows.json`) veya borç kaydında (`debts.json`) bağlı kayıt ID'si. */
+  ikizId?: string | null
 }
 
 export interface PaymentPlan {
@@ -177,7 +185,7 @@ export interface PaymentPlan {
   kategori: string
   hesap: string
   sahip: string
-  durum: 'AKTIF' | 'BITTI' | 'IPTAL'
+  durum: 'AKTIF' | 'BITTI' | 'TAMAMLANDI' | 'IPTAL'
   kaynak: string
   olusturulma: string
 }
@@ -231,6 +239,8 @@ export interface Debt {
   olusturulma: string
   /** Kimin parasıyla verildiği/alındığı (yalnızca etiket, bakiye etkilemez). */
   sahip?: string
+  /** Borç açılırken oluşturulan `PersonalTx` kaydının ID'si (silme/düzenleme tutarlılığı için). */
+  acilisKayitId?: string | null
 }
 
 export interface Dataset {

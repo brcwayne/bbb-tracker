@@ -33,7 +33,7 @@ export interface AppState {
 export function deriveAll(ds: Dataset, range?: { from: string; to: string }) {
   const r = range ?? { from: '0000-01-01', to: '9999-12-31' }
   const inR = (iso: string) => iso >= r.from && iso <= r.to
-  const positions = derivePositions(ds.transactions)
+  const positions = derivePositions(ds.transactions, ds.assetTransfers ?? [])
   const closedInRange: ClosedPosition[] = positions.closed.filter((c) => inR(c.sonSatisTarih))
   // Snapshot'lardaki nakit_usd, defterden türetilmiş nakittir (turetilmisNakit(ds, s.tarih)).
   // Bu, kurum ekstre bakiyelerinin (cashBalanceByHesap) toplamından göç sınırındaki
@@ -129,51 +129,121 @@ export type Kind =
   | 'debts'
   | 'recurring_rules'
 
-async function writeAndCommit(
+export interface WriteStep {
+  file: Kind
+  build: (current: unknown[], dataset: Dataset) => unknown[]
+}
+
+const storeWriteQueues = new WeakMap<Writable<AppState>, Promise<unknown>>()
+
+function enqueueStoreWrite<T>(store: Writable<AppState>, task: () => Promise<T>): Promise<T> {
+  const prev = storeWriteQueues.get(store)
+  const next = prev ? prev.catch(() => undefined).then(task) : task()
+  const settled = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  storeWriteQueues.set(store, settled)
+  settled.then(() => {
+    if (storeWriteQueues.get(store) === settled) storeWriteQueues.delete(store)
+  })
+  return next
+}
+
+function datasetKeyFor(file: Kind): keyof Dataset {
+  return ((PERSONAL_KEY_MAP as Record<string, string>)[file] ?? file) as keyof Dataset
+}
+
+/**
+ * Serialized, rollback-safe multi-file write. If saving step K fails (conflict
+ * or network error), steps 0..K-1 are rolled back to their prior arrays in
+ * reverse order before retrying (on `ConflictError`) or propagating the error.
+ */
+export function writeMultiAndCommit(
+  store: Writable<AppState>,
+  source: DataSource,
+  steps: WriteStep[],
+): Promise<void> {
+  if (steps.length === 0) return Promise.resolve()
+  if (!source.save) {
+    return Promise.reject(
+      new Error("Bu kaynakta kayıt değiştirilemez — sadece Google Drive'a yazılabilir."),
+    )
+  }
+
+  return enqueueStoreWrite(store, async () => {
+    const state = get(store)
+    if (!state.dataset) throw new Error('Veri henüz yüklenmedi.')
+
+    let baseDs = state.dataset
+    let newDataset: Dataset | null = null
+
+    for (let retry = 0; retry < 2; retry++) {
+      let working = baseDs
+      const completed: { file: Kind; previous: unknown[] }[] = []
+      try {
+        for (const step of steps) {
+          const key = datasetKeyFor(step.file)
+          const prevArr = (working[key] ?? []) as unknown as unknown[]
+          const updatedArray = step.build(prevArr, working)
+          try {
+            await source.save!(step.file, updatedArray)
+            completed.push({ file: step.file, previous: prevArr })
+            working = { ...working, [key]: updatedArray }
+          } catch (stepErr) {
+            for (let i = completed.length - 1; i >= 0; i--) {
+              const c = completed[i]
+              try {
+                await source.save!(c.file, c.previous)
+              } catch (rbErr) {
+                console.error(`Drive rollback başarısız (${c.file}):`, rbErr)
+              }
+            }
+            throw stepErr
+          }
+        }
+        newDataset = working
+        break
+      } catch (e) {
+        if (retry === 0 && e instanceof ConflictError) {
+          baseDs = await source.load()
+          continue
+        }
+        throw e
+      }
+    }
+
+    if (!newDataset) throw new Error('Yazma işlemi tamamlanamadı.')
+
+    store.set({
+      status: 'ready',
+      dataset: newDataset,
+      derived: deriveAll(newDataset),
+      sourceText: describeSource(
+        source,
+        newDataset.meta,
+        source.lastModified,
+        newDataset.transactions?.length,
+      ),
+    })
+  })
+}
+
+function writeAndCommit(
   store: Writable<AppState>,
   source: DataSource,
   file: Kind,
   build: (current: unknown[]) => unknown[],
 ): Promise<void> {
-  if (!source.save) throw new Error("Bu kaynakta kayıt değiştirilemez — sadece Google Drive'a yazılabilir.")
-  const state = get(store)
-  if (!state.dataset) throw new Error('Veri henüz yüklenmedi.')
-
-  // The Drive file is `<file>.json`, but the Dataset field it lands in is
-  // camelCase for the personal ledger (personal_tx -> personalTx). Reading
-  // ds[file] there finds nothing and `build` throws "current is not iterable",
-  // so the file name and the dataset key must be resolved separately.
-  const key = (PERSONAL_KEY_MAP as Record<string, string>)[file] ?? file
-
-  const attempt = async (ds: Dataset): Promise<Dataset> => {
-    const updatedArray = build((ds[key as keyof Dataset] ?? []) as unknown as unknown[])
-    await source.save!(file, updatedArray)
-    return { ...ds, [key]: updatedArray }
-  }
-
-  let newDataset: Dataset
-  try {
-    newDataset = await attempt(state.dataset)
-  } catch (e) {
-    if (!(e instanceof ConflictError)) throw e
-    const fresh = await source.load()
-    newDataset = await attempt(fresh)
-  }
-
-  store.set({
-    status: 'ready',
-    dataset: newDataset,
-    derived: deriveAll(newDataset),
-    sourceText: describeSource(
-      source,
-      newDataset.meta,
-      source.lastModified,
-      newDataset.transactions?.length,
-    ),
-  })
+  return writeMultiAndCommit(store, source, [
+    {
+      file,
+      build: (current) => build(current),
+    },
+  ])
 }
 
-export async function appendRecord<T>(
+export function appendRecord<T>(
   store: Writable<AppState>,
   source: DataSource,
   file: Kind,
@@ -182,13 +252,13 @@ export async function appendRecord<T>(
   return writeAndCommit(store, source, file, (current) => [...(current as T[]), record])
 }
 
-export async function appendRecords<T>(
+export function appendRecords<T>(
   store: Writable<AppState>,
   source: DataSource,
   file: Kind,
   records: T[],
 ): Promise<void> {
-  if (records.length === 0) return
+  if (records.length === 0) return Promise.resolve()
   return writeAndCommit(store, source, file, (current) => [...(current as T[]), ...records])
 }
 
@@ -199,7 +269,7 @@ export async function appendRecords<T>(
  */
 export type MutateOpts = { allowImported?: boolean; allowKaynak?: string[] }
 
-export async function updateRecord<T extends { kaynak?: string }>(
+export function updateRecord<T extends { kaynak?: string }>(
   store: Writable<AppState>,
   source: DataSource,
   file: Kind,
@@ -223,7 +293,7 @@ export async function updateRecord<T extends { kaynak?: string }>(
 /** `updateRecord`'un çoğulu: `matches` ile eşleşen her satırı `patch(satır)` ile
  *  değiştirir, tek bir dosya yazımında. Bir RecurringRule'un tutarını "bundan
  *  sonraki tüm tekrarlar" seçeneğiyle değiştirmek için kullanılır. */
-export async function updateRecords<T extends { kaynak?: string }>(
+export function updateRecords<T extends { kaynak?: string }>(
   store: Writable<AppState>,
   source: DataSource,
   file: Kind,
@@ -247,7 +317,7 @@ export async function updateRecords<T extends { kaynak?: string }>(
 /** `deleteRecord`'un çoğulu: `matches` ile eşleşen her satırı tek bir dosya
  *  yazımında siler. Bir RecurringRule durdurulduğunda onun henüz onaylanmamış
  *  ('planlandi') personal_tx satırlarını topluca kaldırmak için kullanılır. */
-export async function deleteRecords<T extends { kaynak?: string }>(
+export function deleteRecords<T extends { kaynak?: string }>(
   store: Writable<AppState>,
   source: DataSource,
   file: Kind,
@@ -267,7 +337,7 @@ export async function deleteRecords<T extends { kaynak?: string }>(
   })
 }
 
-export async function deleteRecord<T extends { kaynak?: string }>(
+export function deleteRecord<T extends { kaynak?: string }>(
   store: Writable<AppState>,
   source: DataSource,
   file: Kind,

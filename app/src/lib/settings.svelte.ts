@@ -1,5 +1,5 @@
 import type { Dataset } from './data/types'
-import { DASH, usd, tryFmt } from './format'
+import { DASH, usd, tryFmt, todayLocalIso } from './format'
 
 export type Currency = 'USD' | 'TRY'
 export type PeriodKey = 'all' | 'ytd' | '1y' | '6m' | '3m' | '1m'
@@ -41,6 +41,7 @@ export const settings = $state({
     return (PERIODS.find((x) => x.key === p)?.key ?? 'all') as PeriodKey
   })(),
   rate: 1,
+  eurRate: 0,
   rateDate: '',
 })
 
@@ -67,11 +68,39 @@ export function initRate(ds: Dataset) {
 }
 
 /** Adopt a freshly fetched TCMB rate for this session (not persisted). */
-export function applyLiveRate(usdtry: number): void {
+export function applyLiveRate(usdtry: number, eurtry?: number | null): void {
   if (!Number.isFinite(usdtry) || usdtry <= 0) return
   settings.rate = usdtry
-  settings.rateDate = new Date().toISOString().slice(0, 10)
+  if (typeof eurtry === 'number' && Number.isFinite(eurtry) && eurtry > 0) {
+    settings.eurRate = eurtry
+  }
+  settings.rateDate = todayLocalIso()
   liveRateApplied = true
+}
+
+/** Active EUR/TRY rate: live TCMB EUR rate when available, else 1.16 × USD/TRY fallback. */
+export function activeEurTryRate(): number {
+  if (Number.isFinite(settings.eurRate) && settings.eurRate > 0) return settings.eurRate
+  return settings.rate > 0 ? settings.rate * 1.16 : 1.16
+}
+
+/** Convert an amount in `TRY` | `USD` | `EUR` into TRY using active session rates. */
+export function toTry(amount: number, paraBirimi?: string): number {
+  if (!Number.isFinite(amount)) return 0
+  const cur = (paraBirimi || 'TRY').toUpperCase()
+  if (cur === 'USD') return amount * (settings.rate > 0 ? settings.rate : 1)
+  if (cur === 'EUR') return amount * activeEurTryRate()
+  return amount
+}
+
+/** Convert an amount in `TRY` | `USD` | `EUR` into USD using active session rates. */
+export function toUsd(amount: number, paraBirimi?: string): number {
+  if (!Number.isFinite(amount)) return 0
+  const cur = (paraBirimi || 'TRY').toUpperCase()
+  if (cur === 'USD') return amount
+  const usdTry = settings.rate > 0 ? settings.rate : 1
+  if (cur === 'EUR') return (amount * activeEurTryRate()) / usdTry
+  return amount / usdTry
 }
 
 /** True once a live TCMB rate has been adopted this session (Fix 9 caption). */
@@ -95,24 +124,24 @@ export function periodRange(
   period: PeriodKey,
   today = new Date(),
 ): { from: string; to: string } {
-  const to = today.toISOString().slice(0, 10)
-  const d = new Date(today)
-  const y = today.getFullYear()
+  const to = todayLocalIso(today)
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const y = d.getFullYear()
   switch (period) {
     case 'ytd':
       return { from: `${y}-01-01`, to }
     case '1y':
       d.setFullYear(y - 1)
-      return { from: d.toISOString().slice(0, 10), to }
+      return { from: todayLocalIso(d), to }
     case '6m':
       d.setMonth(d.getMonth() - 6)
-      return { from: d.toISOString().slice(0, 10), to }
+      return { from: todayLocalIso(d), to }
     case '3m':
       d.setMonth(d.getMonth() - 3)
-      return { from: d.toISOString().slice(0, 10), to }
+      return { from: todayLocalIso(d), to }
     case '1m':
       d.setMonth(d.getMonth() - 1)
-      return { from: d.toISOString().slice(0, 10), to }
+      return { from: todayLocalIso(d), to }
     default:
       return { from: '0000-01-01', to: '9999-12-31' }
   }

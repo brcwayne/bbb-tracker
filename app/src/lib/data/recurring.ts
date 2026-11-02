@@ -63,6 +63,11 @@ export function materialize(
       .filter((r) => r.tekrarKuralId)
       .map((r) => `${r.tekrarKuralId}|${r.tarih}`),
   )
+  for (const rule of rules) {
+    for (const skipped of rule.atlananTarihler ?? []) {
+      existingKeys.add(`${rule.id}|${skipped}`)
+    }
+  }
   const [todayYear, todayMonth] = today.split('-').map(Number)
   const out: PersonalTx[] = []
 

@@ -60,6 +60,14 @@ export function pct(n: number, digits = 1): string {
   return (n * 100).toFixed(digits) + '%'
 }
 
+/** Local calendar YYYY-MM-DD (avoids UTC midnight 00:00–02:59 date shift in UTC+3). */
+export function todayLocalIso(d: Date = new Date()): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export function dateShort(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number)
   return `${d} ${AY[m - 1]} ${y}`

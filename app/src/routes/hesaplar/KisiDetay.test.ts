@@ -256,4 +256,57 @@ describe('KisiDetay sayfası', () => {
     expect(savedPeople).toBeDefined()
     expect(savedPeople!.some((p) => p.kod === 'BOS')).toBe(false)
   })
+
+  it('kredi kartı ekstre borcunda sahipOdenen miktarını düşer', () => {
+    const cardDataset: Dataset = {
+      ...ds,
+      personalAccounts: [
+        { kod: 'KK-1', ad: 'Bonus Kart', tur: 'KREDI_KARTI', paraBirimi: 'TRY', sahip: 'ZEK', aktif: true, hesapKesim: 15, sonOdeme: 25 },
+        { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ZEK', aktif: true },
+      ],
+      personalTx: [
+        {
+          id: 'tx_kk',
+          tarih: '2026-08-10',
+          tur: 'GIDER',
+          tutar: 1000,
+          paraBirimi: 'TRY',
+          kategori: 'market',
+          aciklama: 'Market',
+          hesap: 'KK-1',
+          sahip: 'ZEK',
+          taksitPlaniId: null,
+          taksitNo: null,
+          taksitToplam: null,
+          not: '',
+          kaynak: 'manual',
+          olusturulma: '2026-08-10T10:00:00Z',
+        },
+        {
+          id: 'tx_pay',
+          tarih: '2026-08-20',
+          tur: 'TRANSFER',
+          tutar: 600,
+          paraBirimi: 'TRY',
+          kategori: 'transfer',
+          aciklama: 'Kredi kartı ödemesi',
+          hesap: 'NAKIT',
+          karsiHesap: 'KK-1',
+          sahip: 'ZEK',
+          taksitPlaniId: null,
+          taksitNo: null,
+          taksitToplam: null,
+          not: '',
+          kaynak: 'manual',
+          olusturulma: '2026-08-20T10:00:00Z',
+        },
+      ],
+    }
+    const { container } = render(KisiDetay, { dataset: cardDataset, param: 'ZEK', today: '2026-09-08' })
+    const debtPill = container.querySelector('.debt-pill')!
+    expect(debtPill).not.toBeNull()
+    expect(debtPill.textContent).toContain('Bonus Kart')
+    expect(debtPill.textContent).toMatch(/400/)
+    expect(debtPill.textContent).not.toMatch(/1[.,]000/)
+  })
 })

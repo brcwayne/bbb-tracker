@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { DayBucket } from '../data/accounts'
-  import { tryFmt, usd } from '../format'
+  import { fmtCurrency, todayLocalIso } from '../format'
 
   let {
     yil,
@@ -8,7 +8,7 @@
     gunler,
     paraBirimi,
     secili = null,
-    bugun = new Date().toISOString().slice(0, 10),
+    bugun = todayLocalIso(),
     onSelect,
     onAdd,
     onAyDegis,
@@ -48,7 +48,7 @@
     return Math.round(v).toLocaleString('tr-TR')
   }
 
-  const tam = (v: number) => (paraBirimi === 'USD' ? usd(v) : tryFmt(v))
+  const tam = (v: number) => fmtCurrency(v, paraBirimi)
 
   function etiket(gun: number): string {
     const b = gunler.get(gun)

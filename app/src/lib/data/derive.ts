@@ -1,5 +1,6 @@
 import type { Transaction, Snapshot, Instrument, AssetTransfer } from './types'
 import { buildLedger, type SaleEvent } from './ledger'
+import { todayLocalIso } from '../format'
 
 export interface OpenPosition { kod: string; lot: number; ortMaliyetUsd: number; toplamMaliyetUsd: number }
 export interface ClosedPosition {
@@ -14,9 +15,9 @@ export interface Positions {
 
 const EPS = 1e-9
 
-export function derivePositions(txns: Transaction[]): Positions {
+export function derivePositions(txns: Transaction[], transfers: AssetTransfer[] = []): Positions {
   const ledger = buildLedger(txns, [], 'global')
-  const portLedger = buildLedger(txns, [], 'portfoy')
+  const portLedger = buildLedger(txns, transfers, 'portfoy')
   const g = ledger.byScope.get('')!
 
   const borrowedTxIds = new Set(
@@ -150,7 +151,7 @@ export function periodPerformance(snapshots: Snapshot[], today = new Date()) {
     const base = list[0]?.baslangicSermayesi_usd
     return { period, netKzUsd, pct: base ? netKzUsd / base : null }
   }
-  const thisMonth = ym(today.toISOString())
+  const thisMonth = ym(todayLocalIso(today))
   const q = (n: number) =>
     inRange(
       `${yr}-${String((n - 1) * 3 + 1).padStart(2, '0')}-01`,

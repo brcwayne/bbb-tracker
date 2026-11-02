@@ -3,11 +3,11 @@
   import type { Dataset, PersonalTx, RecurringRule } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord, appendRecords, updateRecord, deleteRecords, load } from '../../lib/data/store'
+  import { appendRecord, appendRecords, updateRecord, deleteRecords, writeMultiAndCommit, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { materialize } from '../../lib/data/recurring'
   import { newRecurringRuleId } from '../../lib/data/ids'
-  import { tryFmt, usd } from '../../lib/format'
+  import { tryFmt, usd, fmtCurrency, todayLocalIso } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
 
   let {
@@ -19,11 +19,6 @@
     source?: DataSource
     store?: Writable<AppState>
   } = $props()
-
-  function todayIso() {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
 
   const isDrive = $derived(Boolean(source?.save))
   const rules = $derived<RecurringRule[]>(dataset?.recurringRules ?? [])
@@ -38,12 +33,61 @@
   let tur = $state<'GIDER' | 'GELIR'>('GIDER')
   let aciklama = $state('')
   let tutar = $state('')
-  let paraBirimi = $state<'TRY' | 'USD'>('TRY')
+  let paraBirimi = $state<'TRY' | 'USD' | 'EUR'>('TRY')
   let kategori = $state('')
   let hesap = $state('')
   let sahip = $state('')
   let gunOfMonth = $state('1')
-  let baslangicTarihi = $state(todayIso())
+  let baslangicTarihi = $state(todayLocalIso())
+
+  const filteredCategories = $derived(categories.filter((c) => c.tur === tur && c.aktif !== false))
+
+  $effect(() => {
+    if (!kategori && filteredCategories.length > 0) {
+      kategori = filteredCategories[0].kod
+    } else if (kategori && !filteredCategories.some((c) => c.kod === kategori) && filteredCategories.length > 0) {
+      kategori = filteredCategories[0].kod
+    }
+  })
+
+  $effect(() => {
+    if (!hesap && accounts.length > 0) {
+      hesap = accounts[0].kod
+    }
+  })
+
+  $effect(() => {
+    if (!sahip && people.length > 0) {
+      sahip = people[0].kod
+    }
+  })
+
+  const pendingMaterializedRows = $derived(
+    materialize(rules, dataset?.personalTx ?? [], todayLocalIso()),
+  )
+  let materializing = $state(false)
+
+  async function materializePending() {
+    if (!store || !source || !dataset || pendingMaterializedRows.length === 0) return
+    materializing = true
+    error = null
+    try {
+      await appendRecords(store, source, 'personal_tx', pendingMaterializedRows)
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+        error = 'Bu dosya başka bir yerden değişti, sayfa yenilendi — tekrar dene.'
+      } else {
+        error = e instanceof Error ? e.message : String(e)
+      }
+    } finally {
+      materializing = false
+    }
+  }
 
   let saving = $state(false)
   let error = $state<string | null>(null)
@@ -60,6 +104,18 @@
     }
     if (!aciklama.trim()) {
       error = 'Açıklama girilmeli.'
+      return
+    }
+    if (!kategori) {
+      error = 'Kategori seçilmeli.'
+      return
+    }
+    if (!hesap) {
+      error = 'Hesap seçilmeli.'
+      return
+    }
+    if (!sahip) {
+      error = 'Sahip seçilmeli.'
       return
     }
     if (!gun || gun < 1 || gun > 31) {
@@ -84,9 +140,23 @@
         olusturulma: new Date().toISOString(),
         kaynak: 'manual',
       }
-      await appendRecord<RecurringRule>(store, source, 'recurring_rules', rule)
-      const newRows = materialize([rule], dataset.personalTx ?? [], todayIso())
-      await appendRecords(store, source, 'personal_tx', newRows)
+      const today = todayLocalIso()
+      const newRows = materialize([rule], dataset.personalTx ?? [], today).map((r) => {
+        if (r.tarih <= today) {
+          return { ...r, durum: undefined }
+        }
+        return r
+      })
+      await writeMultiAndCommit(store, source, [
+        {
+          file: 'recurring_rules',
+          build: (current) => [...(current as RecurringRule[]), rule],
+        },
+        {
+          file: 'personal_tx',
+          build: (current) => [...(current as PersonalTx[]), ...newRows],
+        },
+      ])
       showAdd = false
       aciklama = ''
       tutar = ''
@@ -111,20 +181,41 @@
     actionError = null
     const duruyor = rule.aktif // durduruluyor mu (true → false geçişi)
     try {
-      await updateRecord<RecurringRule>(
-        store, source, 'recurring_rules',
-        (r) => r.id === rule.id,
-        { ...rule, aktif: !rule.aktif },
-      )
-      // D9: kural durdurulduğunda, henüz onaylanmamış ('planlandi') ileri
-      // tarihli satırları da sil — devam ettirmede dokunma.
       if (duruyor) {
-        await deleteRecords<PersonalTx>(
-          store, source, 'personal_tx',
-          (r) => r.tekrarKuralId === rule.id && r.durum === 'planlandi',
+        await writeMultiAndCommit(store, source, [
+          {
+            file: 'recurring_rules',
+            build: (current) =>
+              (current as RecurringRule[]).map((r) =>
+                r.id === rule.id ? { ...r, aktif: false } : r,
+              ),
+          },
+          {
+            file: 'personal_tx',
+            build: (current) =>
+              (current as PersonalTx[]).filter(
+                (r) => !(r.tekrarKuralId === rule.id && r.durum === 'planlandi'),
+              ),
+          },
+        ])
+      } else {
+        await updateRecord<RecurringRule>(
+          store,
+          source,
+          'recurring_rules',
+          (r) => r.id === rule.id,
+          { ...rule, aktif: true },
+          { allowKaynak: ['telegram', 'manual'] },
         )
       }
     } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+      }
       actionError = e instanceof Error ? e.message : String(e)
     }
   }
@@ -152,9 +243,21 @@
 
   <div class="header-row">
     <h2>Tekrarlayan İşlemler</h2>
-    <button type="button" class="btn-primary" disabled={!isDrive} onclick={() => (showAdd = !showAdd)}>
-      {showAdd ? 'Vazgeç' : '+ Yeni Ekle'}
-    </button>
+    <div class="header-actions">
+      {#if pendingMaterializedRows.length > 0}
+        <button
+          type="button"
+          class="btn-secondary"
+          disabled={!isDrive || materializing}
+          onclick={materializePending}
+        >
+          {materializing ? 'İşleniyor…' : `Planlananları Oluştur (${pendingMaterializedRows.length})`}
+        </button>
+      {/if}
+      <button type="button" class="btn-primary" disabled={!isDrive} onclick={() => (showAdd = !showAdd)}>
+        {showAdd ? 'Vazgeç' : '+ Yeni Ekle'}
+      </button>
+    </div>
   </div>
 
   {#if showAdd}
@@ -182,6 +285,7 @@
           <select id="tk-para" bind:value={paraBirimi}>
             <option value="TRY">TRY</option>
             <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
           </select>
         </div>
         <div class="field">
@@ -193,7 +297,7 @@
         <div class="field">
           <label for="tk-kategori">Kategori</label>
           <select id="tk-kategori" bind:value={kategori}>
-            {#each categories.filter((c) => c.tur === tur) as c}
+            {#each filteredCategories as c}
               <option value={c.kod}>{c.ad}</option>
             {/each}
           </select>
@@ -240,7 +344,7 @@
             <span class="rule-sub">{catName(r.kategori)} · {ruleFrequencyText(r)}{#if showSahip} · {personName(r.sahip)}{/if}</span>
           </div>
           <div class="rule-amount num">
-            {r.paraBirimi === 'USD' ? usd(r.tutar) : tryFmt(r.tutar)}
+            {fmtCurrency(r.tutar, r.paraBirimi)}
           </div>
           <button
             type="button"
@@ -268,6 +372,28 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
+  }
+  .header-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .btn-secondary {
+    background: var(--surface-2);
+    color: var(--ink);
+    border: 1px solid var(--hairline);
+    padding: 0.5rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   .add-form {
     background: var(--surface);

@@ -3,9 +3,10 @@
   import type { Dataset, Debt, PersonalTx, Person } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord, load } from '../../lib/data/store'
+  import { writeMultiAndCommit, load, type WriteStep } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { newDebtId, newPersonalId } from '../../lib/data/ids'
+  import { todayLocalIso } from '../../lib/format'
 
   let {
     dataset,
@@ -34,7 +35,7 @@
   let tutarText = $state('')
   // svelte-ignore state_referenced_locally
   let paraBirimi = $state<'TRY' | 'USD' | 'EUR'>(defaultParaBirimi)
-  let tarihText = $state(new Date().toISOString().slice(0, 10))
+  let tarihText = $state(todayLocalIso())
   let isDuzeltme = $state(true)
   let hesap = $state('DUZELTME')
   let aciklama = $state('')
@@ -102,15 +103,30 @@
     saving = true
     try {
       const trimmedKisi = kisi.trim()
+      const currentPeople = dataset?.people ?? []
+      const slugKod = slug(trimmedKisi)
+      const matchedPerson = currentPeople.find(
+        (p) =>
+          p.kod === slugKod ||
+          p.kod.toLocaleLowerCase('tr') === trimmedKisi.toLocaleLowerCase('tr') ||
+          p.ad.trim().toLocaleLowerCase('tr') === trimmedKisi.toLocaleLowerCase('tr'),
+      )
+      const normalizedKisiKod = matchedPerson?.kod || slugKod || trimmedKisi
+
       const effectiveHesap = isDuzeltme
         ? (hesap || 'DUZELTME')
         : (hesap === 'DUZELTME' ? 'NAKIT' : hesap || 'NAKIT')
 
+      const debtId = newDebtId()
+      const createLiveTx = !isDuzeltme && effectiveHesap !== 'DUZELTME'
+      const openingTxId = createLiveTx ? newPersonalId() : null
+      const nowIso = new Date().toISOString()
+
       const yeniBorc: Debt = {
-        id: newDebtId(),
+        id: debtId,
         tarih: tarihText,
         yon,
-        kisi: trimmedKisi,
+        kisi: normalizedKisiKod,
         tutar: Math.round(Number(tutarText) * 100) / 100,
         paraBirimi,
         aciklama:
@@ -119,34 +135,35 @@
         hesap: effectiveHesap,
         durum: 'ACIK',
         kapatanKayitlar: [],
+        ...(openingTxId ? { acilisKayitId: openingTxId } : {}),
         kaynak: 'manual',
-        olusturulma: new Date().toISOString(),
+        olusturulma: nowIso,
         ...(showSahip && sahip ? { sahip } : {}),
       }
 
-      await appendRecord<Debt>(store, source, 'debts', yeniBorc)
+      const steps: WriteStep[] = [
+        {
+          file: 'debts',
+          build: (curr) => [...(curr as Debt[]), yeniBorc],
+        },
+      ]
 
-      // Tam entegrasyon: Kişi people.json'da yoksa otomatik ekle
-      const currentPeople = dataset?.people ?? []
-      const personKod = slug(trimmedKisi)
-      const personExists = currentPeople.some(
-        (p) => p.kod === personKod || p.ad.trim().toLocaleLowerCase('tr') === trimmedKisi.toLocaleLowerCase('tr'),
-      )
-      if (!personExists && personKod) {
+      if (!matchedPerson && slugKod) {
         const yeniKisi: Person = {
-          kod: personKod,
+          kod: slugKod,
           ad: trimmedKisi,
-          haneUyesi: true,
+          haneUyesi: false,
           aktif: true,
         }
-        await appendRecord<Person>(store, source, 'people', yeniKisi)
+        steps.push({
+          file: 'people',
+          build: (curr) => [...(curr as Person[]), yeniKisi],
+        })
       }
 
-      // Eğer kullanıcı canlı işlem seçmişse (düzeltme DEĞİLSE) ve geçerli bir hesap seçilmişse,
-      // hesap bakiyesini de günceller (personal_tx kaydı üretir):
-      if (!isDuzeltme && effectiveHesap !== 'DUZELTME') {
+      if (createLiveTx && openingTxId) {
         const tx: PersonalTx = {
-          id: newPersonalId(),
+          id: openingTxId,
           tarih: tarihText,
           tur: yon === 'VERDIM' ? 'GIDER' : 'GELIR',
           tutar: Math.round(Number(tutarText) * 100) / 100,
@@ -163,11 +180,17 @@
           taksitNo: null,
           taksitToplam: null,
           not: `Borç kaydı: ${yeniBorc.id}`,
+          ikizId: yeniBorc.id,
           kaynak: 'manual',
-          olusturulma: new Date().toISOString(),
+          olusturulma: nowIso,
         }
-        await appendRecord<PersonalTx>(store, source, 'personal_tx', tx)
+        steps.push({
+          file: 'personal_tx',
+          build: (curr) => [...(curr as PersonalTx[]), tx],
+        })
       }
+
+      await writeMultiAndCommit(store, source, steps)
 
       onSaved?.()
     } catch (e: any) {

@@ -6,7 +6,7 @@
   import { appendRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { ownerLedger, SAHIPSIZ } from '../../lib/data/owners'
-  import { tryFmt, usd } from '../../lib/format'
+  import { tryFmt, usd, todayLocalIso } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import SahipAktarimFormu from './SahipAktarimFormu.svelte'
 
@@ -14,14 +14,15 @@
     dataset,
     source,
     store,
+    today = todayLocalIso(),
   }: {
     dataset?: Dataset | null
     source?: DataSource
     store?: Writable<AppState>
+    today?: string
   } = $props()
 
   const isDrive = $derived(Boolean(source?.save))
-  const today = new Date().toISOString().slice(0, 10)
   const people = $derived(dataset?.people ?? [])
   const ledger = $derived(
     ownerLedger(dataset?.personalTx ?? [], dataset?.personalAccounts ?? [], people, today),

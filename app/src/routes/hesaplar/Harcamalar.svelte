@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, PersonalTx } from '../../lib/data/types'
+  import type { Dataset, PersonalTx, RecurringRule } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { deleteRecord, load } from '../../lib/data/store'
+  import { deleteRecord, updateRecord, writeMultiAndCommit, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
-  import { tryFmt, usd } from '../../lib/format'
+  import { tryFmt, usd, fmtCurrency, todayLocalIso } from '../../lib/format'
+  import { toTry } from '../../lib/settings.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HarcamaFormu from './HarcamaFormu.svelte'
   import KategoriFormu from './KategoriFormu.svelte'
@@ -14,7 +15,7 @@
     dataset,
     source,
     store,
-    today = new Date().toISOString().slice(0, 10),
+    today = todayLocalIso(),
   }: {
     dataset?: Dataset | null
     source?: DataSource
@@ -52,7 +53,9 @@
   }
 
   const allRows = $derived<PersonalTx[]>(
-    (dataset?.personalTx ?? []).filter((r) => r.tur === 'GIDER' || r.tur === 'GELIR'),
+    (dataset?.personalTx ?? []).filter(
+      (r) => (r.tur === 'GIDER' || r.tur === 'GELIR') && r.durum !== 'atlandi',
+    ),
   )
   const categories = $derived(dataset?.categories ?? [])
   const catName = (kod: string) => categories.find((c) => c.kod === kod)?.ad ?? kod
@@ -106,8 +109,8 @@
   const pastAndTodayRows = $derived(filteredRows.filter((r) => !isFutureTx(r)))
   const futureTotalTry = $derived(
     futureRows
-      .filter((r) => r.paraBirimi === 'TRY' && r.tur === 'GIDER')
-      .reduce((sum, r) => sum + r.tutar, 0),
+      .filter((r) => r.tur === 'GIDER')
+      .reduce((sum, r) => sum + toTry(r.tutar, r.paraBirimi), 0),
   )
 
   const duzenlenen = $derived(editing)
@@ -116,6 +119,78 @@
   function onFormSaved() {
     showAdd = false
     editing = null
+  }
+
+  async function confirmPlanned(r: PersonalTx) {
+    if (!source || !store) return
+    try {
+      await updateRecord<PersonalTx>(
+        store,
+        source,
+        'personal_tx',
+        (x) => x.id === r.id,
+        { ...r, durum: undefined },
+        { allowKaynak: ['telegram', 'manual'] },
+      )
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+      }
+      console.error(e)
+    }
+  }
+
+  async function skipPlanned(r: PersonalTx) {
+    if (!source || !store) return
+    try {
+      if (r.tekrarKuralId) {
+        await writeMultiAndCommit(store, source, [
+          {
+            file: 'recurring_rules',
+            build: (current) => {
+              const rules = current as RecurringRule[]
+              return rules.map((rule) => {
+                if (rule.id !== r.tekrarKuralId) return rule
+                const prevSkipped = rule.atlananTarihler ?? []
+                const atlananTarihler = prevSkipped.includes(r.tarih)
+                  ? prevSkipped
+                  : [...prevSkipped, r.tarih].sort()
+                return { ...rule, atlananTarihler }
+              })
+            },
+          },
+          {
+            file: 'personal_tx',
+            build: (current) => {
+              const txs = current as PersonalTx[]
+              return txs.map((tx) => (tx.id === r.id ? { ...tx, durum: 'atlandi' } : tx))
+            },
+          },
+        ])
+      } else {
+        await updateRecord<PersonalTx>(
+          store,
+          source,
+          'personal_tx',
+          (x) => x.id === r.id,
+          { ...r, durum: 'atlandi' },
+          { allowKaynak: ['telegram', 'manual'] },
+        )
+      }
+    } catch (e: any) {
+      if (e instanceof ConflictError || e?.name === 'ConflictError') {
+        if (store && source) {
+          try {
+            await load(store, source)
+          } catch {}
+        }
+      }
+      console.error(e)
+    }
   }
 
   async function confirmDelete() {
@@ -285,7 +360,7 @@
                   Kategori {sortCol === 'kategori' ? (sortDir === 'asc' ? '▴' : '▾') : ''}
                 </th>
                 <th class="sortable" onclick={() => toggleSort('aciklama')}>
-                  Açıklama {sortCol === 'aciklama' ? (sortDir === 'asc' ? '▾' : '▴') : ''}
+                  Açıklama {sortCol === 'aciklama' ? (sortDir === 'asc' ? '▴' : '▾') : ''}
                 </th>
                 <th class="sortable r" onclick={() => toggleSort('tutar')}>
                   Tutar {sortCol === 'tutar' ? (sortDir === 'asc' ? '▴' : '▾') : ''}
@@ -322,7 +397,7 @@
                   <td data-col="kategori">{catName(r.kategori)}</td>
                   <td data-col="aciklama">{r.aciklama}</td>
                   <td data-col="tutar" class="num r" class:pos={r.tur === 'GELIR'}>
-                    {r.tur === 'GELIR' ? '+' : ''}{r.paraBirimi === 'USD' ? usd(r.tutar) : tryFmt(r.tutar)} {r.paraBirimi}
+                    {r.tur === 'GELIR' ? '+' : ''}{fmtCurrency(r.tutar, r.paraBirimi)}
                   </td>
                   <td data-col="taksit" class="r">
                     {#if r.taksitPlaniId && r.taksitNo != null && r.taksitToplam != null}
@@ -334,6 +409,28 @@
                   <td data-col="hesap">{r.hesap}</td>
                   <td data-col="sahip">{r.sahip}</td>
                   <td data-col="islemler" class="center act">
+                    {#if isPlanned}
+                      <button
+                        type="button"
+                        class="btn-icon ok"
+                        title="Onayla"
+                        aria-label="Onayla"
+                        disabled={!isDrive}
+                        onclick={() => confirmPlanned(r)}
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon danger"
+                        title="Atla"
+                        aria-label="Atla"
+                        disabled={!isDrive}
+                        onclick={() => skipPlanned(r)}
+                      >
+                        ✕
+                      </button>
+                    {/if}
                     <button
                       type="button"
                       class="btn-icon"
@@ -735,6 +832,11 @@
   .btn-icon:hover:not(:disabled) {
     background: var(--surface-2);
     color: var(--ink);
+  }
+  .btn-icon.ok:hover:not(:disabled) {
+    background: rgba(35, 134, 54, 0.15);
+    color: var(--gain);
+    border-color: var(--gain);
   }
   .btn-icon.danger:hover:not(:disabled) {
     background: rgba(224, 86, 96, 0.15);

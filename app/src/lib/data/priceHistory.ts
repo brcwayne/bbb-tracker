@@ -68,16 +68,17 @@ export async function savePriceHistory(
     }
   }
 
-  // 2. Read from Node fs if in Node environment and not already loaded from localStorage
+  // 2. Read from Node fs only when targetPath is explicitly passed or outside Vitest/test runs
   const g = globalThis as unknown as {
-    process?: { cwd: () => string; versions?: { node?: string } }
+    process?: { cwd: () => string; env?: Record<string, string | undefined>; versions?: { node?: string } }
   }
   const isNode = typeof g.process !== 'undefined' && Boolean(g.process.versions?.node)
+  const isTestEnv = Boolean(g.process?.env?.VITEST || g.process?.env?.NODE_ENV === 'test')
   let fsModule: any = null
   let pathModule: any = null
   let filePath: string | undefined = targetPath
 
-  if (isNode && g.process) {
+  if (isNode && g.process && (Boolean(targetPath) || !isTestEnv)) {
     try {
       const fsName = 'node:fs'
       const pathName = 'node:path'

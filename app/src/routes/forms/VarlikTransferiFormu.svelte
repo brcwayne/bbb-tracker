@@ -4,6 +4,7 @@
   import type { DerivedBundle, AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord, updateRecord } from '../../lib/data/store'
+  import { buildLedger } from '../../lib/data/ledger'
 
   let {
     dataset,
@@ -44,14 +45,38 @@
       error = 'Tüm alanları doldurun.'
       return
     }
+    const lotNum = Number(lot)
+    if (!Number.isFinite(lotNum) || lotNum <= 0) {
+      error = 'Lot sıfırdan büyük olmalı.'
+      return
+    }
     if (tarih > todayIso()) {
       error = 'Tarih gelecekte olamaz.'
       return
     }
     const openLot = view.positions.open.find((p) => p.kod === enstruman)?.lot ?? 0
-    if (Number(lot) > openLot + 1e-9) {
+    if (lotNum > openLot + 1e-9) {
       error = `Bu enstrümanda açık pozisyondan (${openLot}) fazla transfer edemezsiniz.`
       return
+    }
+    const existingTransfers = (dataset.assetTransfers ?? []).filter(
+      (a) => !editing || a.id !== editing.id,
+    )
+    const hesapLedger = buildLedger(dataset.transactions, existingTransfers, 'hesap')
+    const hesapLot =
+      hesapLedger.byScope.get(kaynakHesap)?.open.find((p) => p.kod === enstruman)?.lot ?? 0
+    if (lotNum > hesapLot + 1e-9) {
+      error = `Seçilen kaynak hesapta (${kaynakHesap}) yalnızca ${hesapLot} lot açık pozisyon var.`
+      return
+    }
+    if (kaynakPortfoy) {
+      const portLedger = buildLedger(dataset.transactions, existingTransfers, 'portfoy')
+      const portLot =
+        portLedger.byScope.get(kaynakPortfoy)?.open.find((p) => p.kod === enstruman)?.lot ?? 0
+      if (lotNum > portLot + 1e-9) {
+        error = `Seçilen kaynak portföyde (${kaynakPortfoy}) yalnızca ${portLot} lot açık pozisyon var.`
+        return
+      }
     }
     if (kaynakHesap === hedefHesap && kaynakPortfoy === hedefPortfoy) {
       error = 'Kaynak ve hedef aynı — transfer yapılacak bir şey yok.'
@@ -74,10 +99,18 @@
         kaynakPortfoy: kaynakPortfoy || null,
         hedefPortfoy: hedefPortfoy || null,
         aciklama,
-        kaynak: 'manual',
+        kaynak: editing?.kaynak ?? 'manual',
+        olusturulma: editing?.olusturulma ?? new Date().toISOString(),
       }
       if (editing) {
-        await updateRecord<AssetTransfer>(store, source, 'assetTransfers', (a) => a.id === editing!.id, { ...base, id: editing.id })
+        await updateRecord<AssetTransfer>(
+          store,
+          source,
+          'assetTransfers',
+          (a) => a.id === editing!.id,
+          { ...base, id: editing.id },
+          { allowKaynak: ['telegram', 'manual'] },
+        )
       } else {
         const rand = crypto.getRandomValues(new Uint8Array(8))
         const id = 'at_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')
@@ -152,8 +185,7 @@
     </label>
   </div>
   <p class="muted">
-    Not: Transfer, bu enstrümandaki mevcut tüm pozisyonu taşır — girdiğiniz lot sayısı yalnızca
-    bilgi amaçlıdır.
+    Not: Transfer, girdiğiniz lot kadar pozisyonu ortalama maliyetiyle hedef kurum ve portföye taşır.
   </p>
   {#if error}<p class="error">{error}</p>{/if}
   <button onclick={review}>İncele</button>

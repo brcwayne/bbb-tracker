@@ -1,5 +1,6 @@
 import type { Transaction, AssetTransfer } from './types'
 import type { OpenPosition } from './derive'
+import { todayLocalIso } from '../format'
 
 /** Defterin hangi boyutta tutulacağı. 'global' = sembol bazlı (bugünkü derivePositions). */
 export type ScopeKind = 'global' | 'portfoy' | 'hesap'
@@ -98,26 +99,58 @@ export function buildLedger(
   today?: Date,
 ): LedgerResult {
   const todayDate = today ?? new Date()
-  const todayIso = todayDate.toISOString().slice(0, 10)
+  const todayIso = todayLocalIso(todayDate)
 
   type RawEvent =
-    | { kind: 'txn'; raw: Transaction; tarih: string; id: string }
-    | { kind: 'transfer'; raw: AssetTransfer; tarih: string; id: string }
+    | { kind: 'txn'; raw: Transaction; tarih: string; id: string; olusturulma: string }
+    | { kind: 'transfer'; raw: AssetTransfer; tarih: string; id: string; olusturulma: string }
+
+  const eventRank = (e: RawEvent): number => {
+    if (e.kind === 'transfer') return 1
+    return e.raw.yon === 'AL' ? 0 : 2
+  }
+
+  const activeTransfers = kind === 'global' ? [] : transfers
+  const transferDates = new Set(activeTransfers.map((tr) => tr.tarih))
 
   const events: RawEvent[] = [
-    ...txns.map((t) => ({ kind: 'txn' as const, raw: t, tarih: t.tarih, id: t.id })),
-    ...(kind === 'global' ? [] : transfers).map((tr) => ({
+    ...txns.map((t) => ({
+      kind: 'txn' as const,
+      raw: t,
+      tarih: t.tarih,
+      id: t.id,
+      olusturulma: t.olusturulma ?? '',
+    })),
+    ...activeTransfers.map((tr) => ({
       kind: 'transfer' as const,
       raw: tr,
       tarih: tr.tarih,
       id: tr.id,
+      olusturulma: tr.olusturulma ?? '',
     })),
   ]
 
+  const sortTuple = (e: RawEvent): [number, string, number, string] => {
+    if (transferDates.has(e.tarih)) {
+      return [eventRank(e), e.olusturulma, 0, e.id]
+    }
+    if (e.kind === 'txn' && e.raw.kaynak === 'migration') {
+      return [0, '', 0, e.id]
+    }
+    if (e.olusturulma) {
+      return [1, e.olusturulma, eventRank(e), e.id]
+    }
+    return [2, '', eventRank(e), e.id]
+  }
+
   events.sort((a, b) => {
     if (a.tarih !== b.tarih) return a.tarih < b.tarih ? -1 : 1
-    if (a.kind !== b.kind) return a.kind === 'txn' ? -1 : 1
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    const ta = sortTuple(a)
+    const tb = sortTuple(b)
+    if (ta[0] !== tb[0]) return ta[0] - tb[0]
+    if (ta[1] !== tb[1]) return ta[1] < tb[1] ? -1 : 1
+    if (ta[2] !== tb[2]) return ta[2] - tb[2]
+    return ta[3] < tb[3] ? -1 : ta[3] > tb[3] ? 1 : 0
   })
 
   const scopes = new Map<string, ScopeState>()
@@ -312,23 +345,31 @@ export function buildLedger(
       const srcPos = getPos(srcScope, tr.enstruman)
       const dstPos = getPos(dstScope, tr.enstruman)
 
-      const moveLot = Math.min(tr.lot, srcPos.lot > EPS ? srcPos.lot : tr.lot)
-      const moveCost = srcPos.lot > EPS ? srcPos.ortMaliyetUsd * moveLot : 0
+      if (srcPos.lot <= EPS) {
+        errors.push(`${tr.id}: yetersiz lot transferi ${tr.enstruman} (istenen ${tr.lot}, mevcut 0)`)
+        continue
+      }
 
-      if (srcPos.lot > EPS) {
-        srcPos.lot -= moveLot
-        srcPos.toplamMaliyetUsd -= moveCost
-        srcPos.ortMaliyetUsd = srcPos.lot > EPS ? srcPos.toplamMaliyetUsd / srcPos.lot : 0
-        if (srcPos.lot <= EPS) {
-          srcPos.lot = 0
-          srcPos.toplamMaliyetUsd = 0
-          srcPos.ortMaliyetUsd = 0
-          srcPos.ilkAlisTarih = ''
-        }
+      let moveLot = tr.lot
+      if (moveLot > srcPos.lot + EPS) {
+        errors.push(`${tr.id}: aşırı transfer ${tr.enstruman} (istenen ${tr.lot}, mevcut ${srcPos.lot})`)
+        moveLot = srcPos.lot
+      }
+      const moveCost = srcPos.ortMaliyetUsd * moveLot
+      const srcIlkAlis = srcPos.ilkAlisTarih
+
+      srcPos.lot -= moveLot
+      srcPos.toplamMaliyetUsd -= moveCost
+      srcPos.ortMaliyetUsd = srcPos.lot > EPS ? srcPos.toplamMaliyetUsd / srcPos.lot : 0
+      if (srcPos.lot <= EPS) {
+        srcPos.lot = 0
+        srcPos.toplamMaliyetUsd = 0
+        srcPos.ortMaliyetUsd = 0
+        srcPos.ilkAlisTarih = ''
       }
 
       if (!dstPos.ilkAlisTarih) {
-        dstPos.ilkAlisTarih = srcPos.ilkAlisTarih || tr.tarih
+        dstPos.ilkAlisTarih = srcIlkAlis || tr.tarih
       }
       dstPos.lot += moveLot
       dstPos.toplamMaliyetUsd += moveCost

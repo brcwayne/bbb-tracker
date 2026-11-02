@@ -31,6 +31,9 @@ export function txDelta(row: PersonalTx, kod: string, para: string): number {
   return d
 }
 
+const isUnexecuted = (r: PersonalTx): boolean =>
+  r.durum === 'planlandi' || r.durum === 'atlandi'
+
 /** Balance per account code, counting only `tarih <= today` (H9). */
 export function accountBalances(
   rows: PersonalTx[],
@@ -42,7 +45,7 @@ export function accountBalances(
     let sum = 0
     for (const r of rows) {
       if (r.tarih > today) continue
-      if (r.durum === 'planlandi') continue
+      if (isUnexecuted(r)) continue
       sum += txDelta(r, a.kod, a.paraBirimi)
     }
     out.set(a.kod, round2(sum))
@@ -136,57 +139,79 @@ function buildPeriod(
     return t > fromDate && t <= toDate
   }
 
-  const inPayPeriod = (t: string) => {
-    if (!payWindow) return inPeriod(t)
-    const inPay = kesim === 1
-      ? (t >= payWindow.fromDate && t < payWindow.toDate)
-      : (t > payWindow.fromDate && t <= payWindow.toDate)
-    return inPeriod(t) || inPay
+  const inPostCutWindow = (t: string) => {
+    if (!payWindow) return false
+    return kesim === 1
+      ? t >= payWindow.fromDate && t < payWindow.toDate
+      : t > payWindow.fromDate && t <= payWindow.toDate
   }
 
   const kayitlar: PersonalTx[] = []
+  const seenIds = new Set<string>()
   let expenseSum = 0
   let paymentSum = 0
   const sahipToplami: Record<string, number> = {}
   const sahipOdenen: Record<string, number> = {}
 
+  // Pass 1: card's own movements inside the billing cycle (including DUZELTME).
   for (const r of rows) {
-    if (r.durum === 'planlandi') continue
-    const matchThis = r.hesap === account.kod
-    const isPayment = r.tur === 'TRANSFER' && r.karsiHesap === account.kod
+    if (isUnexecuted(r)) continue
+    if (r.hesap !== account.kod) continue
+    if (!inPeriod(r.tarih)) continue
 
-    if (!matchThis && !isPayment) continue
+    kayitlar.push(r)
+    seenIds.add(r.id)
+    if (r.paraBirimi !== account.paraBirimi) continue
 
-    if (matchThis) {
-      if (!inPeriod(r.tarih)) continue
-      kayitlar.push(r)
-      if (r.paraBirimi !== account.paraBirimi) continue
+    const s = r.sahip || 'Diğer'
+    if (r.tur === 'GIDER' || r.tur === 'TRANSFER') {
+      expenseSum = round2(expenseSum + r.tutar)
+      sahipToplami[s] = round2((sahipToplami[s] ?? 0) + r.tutar)
+    } else if (r.tur === 'GELIR') {
+      expenseSum = round2(expenseSum - r.tutar)
+      sahipToplami[s] = round2((sahipToplami[s] ?? 0) - r.tutar)
+    } else if (r.tur === 'DUZELTME') {
+      // Negative balance adjustment increases credit card debt; positive reduces it.
+      expenseSum = round2(expenseSum - r.tutar)
+      sahipToplami[s] = round2((sahipToplami[s] ?? 0) - r.tutar)
+    }
+  }
 
-      if (r.tur === 'GIDER') {
-        expenseSum = round2(expenseSum + r.tutar)
-        const s = r.sahip || 'Diğer'
-        sahipToplami[s] = round2((sahipToplami[s] ?? 0) + r.tutar)
-      } else if (r.tur === 'GELIR') {
-        expenseSum = round2(expenseSum - r.tutar)
-        const s = r.sahip || 'Diğer'
-        sahipToplami[s] = round2((sahipToplami[s] ?? 0) - r.tutar)
-      } else if (r.tur === 'TRANSFER') {
-        expenseSum = round2(expenseSum + r.tutar)
-        const s = r.sahip || 'Diğer'
-        sahipToplami[s] = round2((sahipToplami[s] ?? 0) + r.tutar)
-      }
+  // Pass 2: incoming card payments in chronological order so post-cut payments are
+  // claimed only while this cut statement still has unpaid balance (avoiding double
+  // deduction across consecutive statements).
+  const candidatePayments = rows
+    .filter(
+      (r) =>
+        !isUnexecuted(r) &&
+        r.tur === 'TRANSFER' &&
+        r.karsiHesap === account.kod &&
+        !excludePayIds?.has(r.id),
+    )
+    .sort(
+      (a, b) =>
+        a.tarih.localeCompare(b.tarih) ||
+        (a.olusturulma || '').localeCompare(b.olusturulma || ''),
+    )
+
+  for (const r of candidatePayments) {
+    const inMain = inPeriod(r.tarih)
+    const inPostCut = !inMain && inPostCutWindow(r.tarih)
+    if (!inMain && !inPostCut) continue
+
+    if (inPostCut && r.paraBirimi === account.paraBirimi && paymentSum >= expenseSum - 0.005) {
+      continue
     }
 
-    if (isPayment) {
-      if (excludePayIds?.has(r.id)) continue
-      if (!inPayPeriod(r.tarih)) continue
+    if (!seenIds.has(r.id)) {
       kayitlar.push(r)
-      if (r.paraBirimi !== account.paraBirimi) continue
-
-      paymentSum = round2(paymentSum + r.tutar)
-      const s = r.sahip || 'Diğer'
-      sahipOdenen[s] = round2((sahipOdenen[s] ?? 0) + r.tutar)
+      seenIds.add(r.id)
     }
+    if (r.paraBirimi !== account.paraBirimi) continue
+
+    paymentSum = round2(paymentSum + r.tutar)
+    const s = r.sahip || 'Diğer'
+    sahipOdenen[s] = round2((sahipOdenen[s] ?? 0) + r.tutar)
   }
 
   kayitlar.sort((a, b) => b.tarih.localeCompare(a.tarih) || (b.olusturulma || '').localeCompare(a.olusturulma || ''))
@@ -229,9 +254,12 @@ export function cardStatement(
   const y = Number(today.slice(0, 4))
   const m = Number(today.slice(5, 7))
 
-  // C0 — the first cut date on or after today.
+  // C0 — the next cut date closing the active cycle.
+  // For `kesim === 1`, `buildPeriod` uses `[fromDate, toDate)`, so on the 1st of the
+  // month (`c0 === today`) the prior cycle has already closed at midnight and `c0`
+  // must advance to next month's 1st so today's transactions land in `donemIci`.
   let c0 = clampedDate(y, m, kesim)
-  if (c0 < today) {
+  if (kesim === 1 ? c0 <= today : c0 < today) {
     const [ny, nm] = shiftMonth(y, m, 1)
     c0 = clampedDate(ny, nm, kesim)
   }
@@ -249,7 +277,7 @@ export function cardStatement(
     let sum = 0
     for (const r of rows) {
       if (r.tarih <= from || r.tarih > to) continue
-      if (r.durum === 'planlandi') continue
+      if (isUnexecuted(r)) continue
       sum += txDelta(r, account.kod, account.paraBirimi)
     }
     return round2(-sum)
@@ -257,24 +285,44 @@ export function cardStatement(
 
   let borc = 0
   for (const r of rows) {
-    if (r.tarih > today) continue
-    if (r.durum === 'planlandi') continue
+    if (r.tarih > today && !r.taksitPlaniId) continue
+    if (isUnexecuted(r)) continue
     borc += txDelta(r, account.kod, account.paraBirimi)
   }
 
-  // Statements:
-  // donemIci: current open cycle (cPrev -> c0)
-  // odenecekEkstre: most recently closed statement (cPrev2 -> cPrev)
-  // oncekiEkstre: statement before that (cPrev3 -> cPrev2)
-  const odenecekEkstre = buildPeriod(rows, account, cPrev2, cPrev, kesim, sonOdeme, 'Ödenecek Ekstre', { fromDate: cPrev, toDate: c0 })
-  const oncekiEkstre = buildPeriod(rows, account, cPrev3, cPrev2, kesim, sonOdeme, undefined, { fromDate: cPrev2, toDate: cPrev })
+  // Compute chronologically (oncekiEkstre -> odenecekEkstre -> donemIci) so each
+  // card payment is matched to at most one statement period.
   const usedPayIds = new Set<string>()
-  for (const r of odenecekEkstre.kayitlar) {
-    if (r.tur === 'TRANSFER' && r.karsiHesap === account.kod) usedPayIds.add(r.id)
-  }
+  const oncekiEkstre = buildPeriod(
+    rows,
+    account,
+    cPrev3,
+    cPrev2,
+    kesim,
+    sonOdeme,
+    undefined,
+    { fromDate: cPrev2, toDate: cPrev },
+    usedPayIds,
+  )
   for (const r of oncekiEkstre.kayitlar) {
     if (r.tur === 'TRANSFER' && r.karsiHesap === account.kod) usedPayIds.add(r.id)
   }
+
+  const odenecekEkstre = buildPeriod(
+    rows,
+    account,
+    cPrev2,
+    cPrev,
+    kesim,
+    sonOdeme,
+    'Ödenecek Ekstre',
+    { fromDate: cPrev, toDate: c0 },
+    usedPayIds,
+  )
+  for (const r of odenecekEkstre.kayitlar) {
+    if (r.tur === 'TRANSFER' && r.karsiHesap === account.kod) usedPayIds.add(r.id)
+  }
+
   const donemIci = buildPeriod(rows, account, cPrev, c0, kesim, sonOdeme, 'Dönem İçi', undefined, usedPayIds)
 
   const ekstreler = [donemIci, odenecekEkstre, oncekiEkstre]
@@ -448,6 +496,7 @@ export function monthMovements(
 
   for (const r of rows) {
     if (!r.tarih.startsWith(prefix)) continue
+    if (r.durum === 'atlandi') continue
     const ilgili = r.hesap === account.kod || (r.tur === 'TRANSFER' && r.karsiHesap === account.kod)
     if (!ilgili) continue
 

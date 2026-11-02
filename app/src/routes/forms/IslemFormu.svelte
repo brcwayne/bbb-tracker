@@ -57,10 +57,23 @@
   let scopeWarnings = $state<ScopeWarning[]>([])
 
   const priceCurrency = $derived(instrumentOf(enstruman)?.girisParaBirimi === 'USD' ? 'USD' : 'TL')
+  const activeKur = $derived.by(() => {
+    if (priceCurrency !== 'TL') return null
+    if (editing && editing.kur != null && editing.kur > 0 && tarih === editing.tarih) {
+      return editing.kur
+    }
+    const hist = dataset.fxrates?.[tarih]
+    if (typeof hist === 'number' && Number.isFinite(hist) && hist > 0) return hist
+    return settings.rate
+  })
   const fiyatUsd = $derived(
-    priceCurrency === 'USD' ? Number(fiyatInput || 0) : Number(fiyatInput || 0) / settings.rate,
+    priceCurrency === 'USD'
+      ? Number(fiyatInput || 0)
+      : Number(fiyatInput || 0) / (activeKur && activeKur > 0 ? activeKur : settings.rate),
   )
-  const netUsd = $derived(Number(lot || 0) * fiyatUsd)
+  const brutUsd = $derived(Number(lot || 0) * fiyatUsd)
+  const komisyonUsd = $derived(editing ? (editing.komisyon_usd || 0) : 0)
+  const netUsd = $derived(yon === 'AL' ? brutUsd + komisyonUsd : brutUsd - komisyonUsd)
 
   function review(ignoreWarnings = false) {
     error = null
@@ -73,9 +86,18 @@
       return
     }
     const lotNum = Number(lot)
+    const fiyatVal = Number(fiyatInput)
+    if (!Number.isFinite(lotNum) || lotNum <= 0 || !Number.isFinite(fiyatVal) || fiyatVal <= 0) {
+      error = 'Lot ve fiyat sıfırdan büyük olmalı.'
+      return
+    }
+    const transfers = dataset.assetTransfers ?? []
     if (yon === 'SAT') {
       const openPositions = editing
-        ? derivePositions(dataset.transactions.filter((t) => t.id !== editing!.id)).open
+        ? derivePositions(
+            dataset.transactions.filter((t) => t.id !== editing!.id),
+            transfers,
+          ).open
         : view.positions.open
       const open = openPositions.find((p) => p.kod === enstruman)?.lot ?? 0
       if (lotNum > open + 1e-9) {
@@ -89,7 +111,7 @@
           : dataset.transactions
         const check = validateSaleScope(
           currentTxns,
-          dataset.assetTransfers ?? [],
+          transfers,
           enstruman,
           lotNum,
           portfoy,
@@ -113,16 +135,17 @@
         yon,
         lot: lotNum,
         girisParaBirimi: priceCurrency,
-        fiyat_tl: priceCurrency === 'TL' ? Number(fiyatInput) : null,
+        fiyat_tl: priceCurrency === 'TL' ? fiyatVal : null,
         fiyat_usd: fiyatUsd,
-        kur: priceCurrency === 'TL' ? settings.rate : null,
-        brut_usd: netUsd,
+        kur: activeKur,
+        komisyon_usd: komisyonUsd,
+        brut_usd: brutUsd,
         net_usd: netUsd,
         not: not_,
       }
       const prospective = dataset.transactions.map((t) => (t.id === editing!.id ? draftPatch : t))
-      const baselineErrors = derivePositions(dataset.transactions).errors.length
-      const prospectiveErrors = derivePositions(prospective).errors.length
+      const baselineErrors = derivePositions(dataset.transactions, transfers).errors.length
+      const prospectiveErrors = derivePositions(prospective, transfers).errors.length
       if (prospectiveErrors > baselineErrors) {
         error = 'Bu değişiklik daha sonraki bir satışı geçersiz kılar (yetersiz pozisyon oluşturur).'
         return
@@ -169,8 +192,9 @@
           girisParaBirimi: priceCurrency,
           fiyat_tl: priceCurrency === 'TL' ? Number(fiyatInput) : null,
           fiyat_usd: fiyatUsd,
-          kur: priceCurrency === 'TL' ? settings.rate : null,
-          brut_usd: netUsd,
+          kur: activeKur,
+          komisyon_usd: komisyonUsd,
+          brut_usd: brutUsd,
           net_usd: netUsd,
           not: not_,
         }
@@ -182,7 +206,10 @@
           'transactions',
           (t) => t.id === editing!.id,
           patch,
-          { allowImported: editing!.kaynak !== 'manual' },
+          {
+            allowImported: editing!.kaynak !== 'manual' && editing!.kaynak !== 'telegram',
+            allowKaynak: ['telegram', 'manual'],
+          },
         )
       } else {
         const rand = crypto.getRandomValues(new Uint8Array(8))
@@ -198,9 +225,9 @@
           girisParaBirimi: priceCurrency,
           fiyat_tl: priceCurrency === 'TL' ? Number(fiyatInput) : null,
           fiyat_usd: fiyatUsd,
-          kur: priceCurrency === 'TL' ? settings.rate : null,
+          kur: activeKur,
           komisyon_usd: 0,
-          brut_usd: netUsd,
+          brut_usd: brutUsd,
           net_usd: netUsd,
           not: not_,
           kaynak: 'manual',

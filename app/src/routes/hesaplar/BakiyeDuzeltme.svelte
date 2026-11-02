@@ -7,14 +7,14 @@
   import { appendRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { newPersonalId } from '../../lib/data/ids'
-  import { tryFmt, usd } from '../../lib/format'
+  import { fmtCurrency, todayLocalIso } from '../../lib/format'
 
   let {
     dataset,
     source,
     store,
     account,
-    today = new Date().toISOString().slice(0, 10),
+    today = todayLocalIso(),
     onSaved = () => {},
     onCancel,
   }: {
@@ -41,7 +41,7 @@
   let saving = $state(false)
   let error = $state<string | null>(null)
 
-  const fmt = (v: number) => (account.paraBirimi === 'USD' ? usd(v) : tryFmt(v))
+  const fmt = (v: number) => fmtCurrency(v, account.paraBirimi)
   const fark = $derived(
     gercekText === '' || gercekText === null || gercekText === undefined || !Number.isFinite(Number(gercekText))
       ? null

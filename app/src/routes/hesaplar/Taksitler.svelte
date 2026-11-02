@@ -3,10 +3,11 @@
   import type { Dataset, PaymentPlan, PersonalTx } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { deleteRecord, load } from '../../lib/data/store'
+  import { writeMultiAndCommit, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { activePlans, instalmentSchedule } from '../../lib/data/personal'
-  import { tryFmt, usd, monthLabel } from '../../lib/format'
+  import { tryFmt, usd, monthLabel, fmtCurrency, todayLocalIso } from '../../lib/format'
+  import { toTry } from '../../lib/settings.svelte'
   import BarChart from '../../lib/charts/BarChart.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
 
@@ -14,7 +15,7 @@
     dataset,
     source,
     store,
-    today = new Date().toISOString().slice(0, 10),
+    today = todayLocalIso(),
   }: {
     dataset?: Dataset | null
     source?: DataSource
@@ -43,17 +44,20 @@
   const showSahip = $derived(new Set(active.map((item) => item.plan.sahip).filter(Boolean)).size >= 2)
   const schedule = $derived(instalmentSchedule(rows, today, 12))
 
-  const scheduleBars = $derived(
-    schedule
-      .filter((s) => s.para === 'TRY')
-      .map((s) => ({
-        label: monthLabel(s.ay + '-01'),
-        value: s.toplam,
-      })),
-  )
+  const scheduleBars = $derived.by(() => {
+    const monthly = new Map<string, number>()
+    for (const s of schedule) {
+      const tryAmount = toTry(s.toplam, s.para)
+      monthly.set(s.ay, (monthly.get(s.ay) ?? 0) + tryAmount)
+    }
+    return Array.from(monthly.entries())
+      .sort(([ayA], [ayB]) => ayA.localeCompare(ayB))
+      .map(([ay, val]) => ({
+        label: monthLabel(ay + '-01'),
+        value: Math.round(val * 100) / 100,
+      }))
+  })
   const hasSchedule = $derived(scheduleBars.some((b) => b.value > 0))
-
-  const fmtAmount = (n: number, curr: string) => (curr === 'USD' ? usd(n) : tryFmt(n))
 
   function getFutureRows(planId: string): PersonalTx[] {
     return rows.filter((r) => r.taksitPlaniId === planId && r.tarih > today)
@@ -65,23 +69,19 @@
     cancelError = null
     const targetPlan = cancellingPlan
     try {
-      const futureRows = getFutureRows(targetPlan.id)
-      if (futureRows.length > 0) {
-        await deleteRecord<PersonalTx>(
-          store,
-          source,
-          'personal_tx',
-          (r) => r.taksitPlaniId === targetPlan.id && r.tarih > today,
-          { allowKaynak: ['telegram', 'manual'] },
-        )
-      }
-      await deleteRecord<PaymentPlan>(
-        store,
-        source,
-        'payment_plans',
-        (p) => p.id === targetPlan.id,
-        { allowKaynak: ['telegram', 'manual'] },
-      )
+      await writeMultiAndCommit(store, source, [
+        {
+          file: 'personal_tx',
+          build: (curr) =>
+            (curr as PersonalTx[]).filter(
+              (r) => !(r.taksitPlaniId === targetPlan.id && r.tarih > today),
+            ),
+        },
+        {
+          file: 'payment_plans',
+          build: (curr) => (curr as PaymentPlan[]).filter((p) => p.id !== targetPlan.id),
+        },
+      ])
       cancellingPlan = null
     } catch (err: any) {
       if (err instanceof ConflictError || err?.name === 'ConflictError') {
@@ -149,19 +149,19 @@
             <div class="figures-row">
               <div class="figure-item">
                 <span class="fig-label">Toplam</span>
-                <span class="fig-val num">{fmtAmount(p.toplamTutar, p.paraBirimi)}</span>
+                <span class="fig-val num">{fmtCurrency(p.toplamTutar, p.paraBirimi)}</span>
               </div>
               <div class="figure-item">
                 <span class="fig-label">Ödenen</span>
-                <span class="fig-val num gain">{fmtAmount(item.odenen, p.paraBirimi)}</span>
+                <span class="fig-val num gain">{fmtCurrency(item.odenen, p.paraBirimi)}</span>
               </div>
               <div class="figure-item">
                 <span class="fig-label">Kalan</span>
-                <span class="fig-val num loss">{fmtAmount(item.kalan, p.paraBirimi)}</span>
+                <span class="fig-val num loss">{fmtCurrency(item.kalan, p.paraBirimi)}</span>
               </div>
               <div class="figure-item">
                 <span class="fig-label">Aylık</span>
-                <span class="fig-val num">{fmtAmount(p.taksitTutari, p.paraBirimi)}</span>
+                <span class="fig-val num">{fmtCurrency(p.taksitTutari, p.paraBirimi)}</span>
               </div>
             </div>
 

@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { Dataset, Transaction, Cashflow, AssetTransfer, Broker, Portfolio } from '../lib/data/types'
+  import type { Dataset, Transaction, Cashflow, AssetTransfer, Broker, Portfolio, PersonalTx } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
   import type { Writable } from 'svelte/store'
   import type { AppState } from '../lib/data/store'
-  import { deleteRecord } from '../lib/data/store'
+  import { deleteRecord, deleteRecords, writeMultiAndCommit } from '../lib/data/store'
   import { derivePositions } from '../lib/data/derive'
   import { money } from '../lib/settings.svelte'
   import EmptyState from '../lib/ui/EmptyState.svelte'
@@ -76,10 +76,12 @@
     successMessage = 'Kayıt güncellendi.'
   }
 
-  const manualTxns = $derived((dataset?.transactions ?? []).filter((t) => t.kaynak === 'manual'))
-  const manualFlows = $derived((dataset?.cashflows ?? []).filter((c) => c.kaynak === 'manual'))
-  const manualTransfers = $derived((dataset?.assetTransfers ?? []).filter((a) => a.kaynak === 'manual'))
-  const manualBrokers = $derived((dataset?.brokers ?? []).filter((b) => b.kaynak === 'manual'))
+  const isUserEditable = (k?: string) => k === 'manual' || k === 'telegram'
+
+  const manualTxns = $derived((dataset?.transactions ?? []).filter((t) => isUserEditable(t.kaynak)))
+  const manualFlows = $derived((dataset?.cashflows ?? []).filter((c) => isUserEditable(c.kaynak)))
+  const manualTransfers = $derived((dataset?.assetTransfers ?? []).filter((a) => isUserEditable(a.kaynak)))
+  const manualBrokers = $derived((dataset?.brokers ?? []).filter((b) => isUserEditable(b.kaynak)))
 
   const txnRows = $derived(
     manualTxns.map((t) => ({ key: t.id, tarih: t.tarih, summary: `${t.yon} ${t.enstruman} · ${t.lot} lot · ${money(t.net_usd)}` })),
@@ -89,6 +91,7 @@
       key: c.id,
       tarih: c.tarih,
       summary: `${c.tur} · ${c.hesap}${c.hedefHesap ? ' → ' + c.hedefHesap : ''} · ${money(c.tutar_usd)}`,
+      canEdit: c.tur !== 'DUZELTME',
     })),
   )
   const transferRows = $derived(
@@ -109,6 +112,7 @@
       : k === 'kurum' ? manualBrokers.find((b) => b.kod === key)
       : dataset?.portfolios.find((p) => p.kod === key)
     if (!record) return
+    if (k === 'nakit' && (record as Cashflow).tur === 'DUZELTME') return
     deleteTarget = null
     successMessage = null
     editingRecord = { kind: k, record }
@@ -127,19 +131,65 @@
     deleteError = null
     try {
       const { kind: k, key } = deleteTarget
+      const allowUser = { allowKaynak: ['telegram', 'manual'] }
       if (k === 'islem') {
+        const transfers = dataset.assetTransfers ?? []
         const prospective = dataset.transactions.filter((t) => t.id !== key)
-        const baselineErrors = derivePositions(dataset.transactions).errors.length
-        const prospectiveErrors = derivePositions(prospective).errors.length
+        const baselineErrors = derivePositions(dataset.transactions, transfers).errors.length
+        const prospectiveErrors = derivePositions(prospective, transfers).errors.length
         if (prospectiveErrors > baselineErrors) {
           deleteError = 'Bu kayıt silinirse daha sonraki bir satış geçersiz hale gelir.'
           deleting = false
           return
         }
-        await deleteRecord<Transaction>(store, source, 'transactions', (t) => t.id === key)
-      } else if (k === 'nakit') await deleteRecord<Cashflow>(store, source, 'cashflows', (c) => c.id === key)
-      else if (k === 'transfer') await deleteRecord<AssetTransfer>(store, source, 'assetTransfers', (a) => a.id === key)
-      else if (k === 'kurum') {
+        await deleteRecord<Transaction>(store, source, 'transactions', (t) => t.id === key, allowUser)
+      } else if (k === 'nakit') {
+        const targetFlow = dataset.cashflows.find((c) => c.id === key)
+        if (targetFlow?.tur === 'DUZELTME') {
+          const idsToDelete = new Set<string>([key])
+          for (const c of dataset.cashflows) {
+            if (c.id === key) continue
+            if (
+              c.ikizId === key ||
+              (targetFlow.ikizId && c.id === targetFlow.ikizId) ||
+              (c.kaynak === 'otomatik-mahsup' &&
+                c.tur === 'DUZELTME' &&
+                c.hesap === 'TOPLU' &&
+                c.tarih === targetFlow.tarih &&
+                Math.abs(c.tutar_usd + targetFlow.tutar_usd) < 0.015)
+            ) {
+              idsToDelete.add(c.id)
+            }
+          }
+          await deleteRecords<Cashflow>(store, source, 'cashflows', (c) => idsToDelete.has(c.id), {
+            allowKaynak: ['telegram', 'manual', 'otomatik-mahsup'],
+          })
+        } else if (targetFlow?.ikizId && (dataset.personalTx ?? []).some((p) => p.id === targetFlow.ikizId)) {
+          const twinPxId = targetFlow.ikizId
+          await writeMultiAndCommit(store, source, [
+            {
+              file: 'cashflows',
+              build: (curr) => (curr as Cashflow[]).filter((c) => c.id !== key),
+            },
+            {
+              file: 'personal_tx',
+              build: (curr) => (curr as PersonalTx[]).filter((p) => p.id !== twinPxId),
+            },
+          ])
+        } else {
+          await deleteRecord<Cashflow>(store, source, 'cashflows', (c) => c.id === key, allowUser)
+        }
+      } else if (k === 'transfer') {
+        const prospectiveTransfers = (dataset.assetTransfers ?? []).filter((a) => a.id !== key)
+        const baselineErrors = derivePositions(dataset.transactions, dataset.assetTransfers ?? []).errors.length
+        const prospectiveErrors = derivePositions(dataset.transactions, prospectiveTransfers).errors.length
+        if (prospectiveErrors > baselineErrors) {
+          deleteError = 'Bu transfer silinirse daha sonraki bir satış geçersiz hale gelir.'
+          deleting = false
+          return
+        }
+        await deleteRecord<AssetTransfer>(store, source, 'assetTransfers', (a) => a.id === key, allowUser)
+      } else if (k === 'kurum') {
         const referenced =
           dataset.transactions.some((t) => t.hesap === key) ||
           dataset.cashflows.some((c) => c.hesap === key || c.hedefHesap === key) ||
@@ -149,7 +199,7 @@
           deleting = false
           return
         }
-        await deleteRecord<Broker>(store, source, 'brokers', (b) => b.kod === key)
+        await deleteRecord<Broker>(store, source, 'brokers', (b) => b.kod === key, allowUser)
       } else {
         const referenced = dataset.transactions.some((t) => t.portfoy === key)
         if (referenced) {

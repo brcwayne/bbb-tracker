@@ -129,4 +129,60 @@ describe('Tekrarlayanlar', () => {
       expect(subs.some((s) => s?.includes('ZEK'))).toBe(false)
     })
   })
+
+  it('yeni kural eklenirken bugünden önceki/bugünkü oluşumların durum:planlandi temizlenir ve writeMultiAndCommit kullanılır', async () => {
+    const store = writable<AppState>({ status: 'ready', dataset, derived: {} as any, sourceText: '' } as any)
+    const saved: Record<string, any[]> = {}
+    const source: any = {
+      id: 'drive',
+      load: () => Promise.resolve(dataset),
+      save: async (file: string, d: unknown) => { saved[file] = d as any[] },
+    }
+    const { getByText, getByLabelText, container } = render(Tekrarlayanlar, { dataset, source, store })
+
+    // Open form
+    await fireEvent.click(getByText('+ Yeni Ekle'))
+
+    await fireEvent.input(getByLabelText('Açıklama'), { target: { value: 'Fitness Salonu' } })
+    await fireEvent.input(getByLabelText('Tutar'), { target: { value: '500' } })
+    await fireEvent.change(getByLabelText('Para Birimi'), { target: { value: 'EUR' } })
+    await fireEvent.input(getByLabelText('Ayın Günü'), { target: { value: '1' } })
+
+    await fireEvent.click(getByText('Kaydet'))
+
+    expect(saved['recurring_rules']).toBeDefined()
+    const rule = saved['recurring_rules'].find((r) => r.aciklama === 'Fitness Salonu')
+    expect(rule).toBeDefined()
+    expect(rule.paraBirimi).toBe('EUR')
+
+    expect(saved['personal_tx']).toBeDefined()
+    const generated = saved['personal_tx'].filter((r) => r.aciklama === 'Fitness Salonu')
+    expect(generated.length).toBeGreaterThan(0)
+    // Any occurrence on or before today has durum undefined (confirmed)
+    const today = new Date().toISOString().slice(0, 10)
+    for (const r of generated) {
+      if (r.tarih <= today) {
+        expect(r.durum).toBeUndefined()
+      }
+    }
+  })
+
+  it('bekleyen planlı işlemler varsa üst çubukta Planlananları Oluştur butonu çıkar', async () => {
+    const store = writable<AppState>({ status: 'ready', dataset, derived: {} as any, sourceText: '' } as any)
+    const saved: Record<string, any[]> = {}
+    const source: any = {
+      id: 'drive',
+      load: () => Promise.resolve(dataset),
+      save: async (file: string, d: unknown) => { saved[file] = d as any[] },
+    }
+    // dataset has rr_1 (Netflix) but empty personalTx for rr_1, so materialize produces rows
+    const { getByText } = render(Tekrarlayanlar, { dataset, source, store })
+
+    const btn = getByText(/Planlananları Oluştur/i)
+    expect(btn).toBeInTheDocument()
+    await fireEvent.click(btn)
+
+    expect(saved['personal_tx']).toBeDefined()
+    expect(saved['personal_tx'].some((r) => r.tekrarKuralId === 'rr_1')).toBe(true)
+  })
 })

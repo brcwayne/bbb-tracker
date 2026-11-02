@@ -7,7 +7,7 @@
   import { ConflictError } from '../../lib/data/drive'
   import { cardStatement } from '../../lib/data/accounts'
   import { ownerLedger, SAHIPSIZ } from '../../lib/data/owners'
-  import { fmtCurrency, tryFmt, usd } from '../../lib/format'
+  import { fmtCurrency, todayLocalIso } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
 
   let {
@@ -15,7 +15,7 @@
     source,
     store,
     param,
-    today = new Date().toISOString().slice(0, 10),
+    today = todayLocalIso(),
   }: {
     dataset?: Dataset | null
     source?: DataSource
@@ -53,7 +53,7 @@
   )
   const balances = $derived(ledger.owners[kod] ?? {})
 
-  const fmt = (n: number, cur = 'TRY') => (cur === 'USD' ? usd(n) : tryFmt(n))
+  const fmt = (n: number, cur = 'TRY') => fmtCurrency(n, cur)
 
   const cardDebts = $derived.by(() => {
     if (!kod || kod === SAHIPSIZ) return []
@@ -74,7 +74,8 @@
 
       // Ödenecek Ekstre
       if (stmt.odenecekEkstre) {
-        const tutar = stmt.odenecekEkstre.sahipToplami[kod] ?? 0
+        const odenen = stmt.odenecekEkstre.sahipOdenen[kod] ?? 0
+        const tutar = Math.max(0, Math.round(((stmt.odenecekEkstre.sahipToplami[kod] ?? 0) - odenen) * 100) / 100)
         if (tutar > 0) {
           list.push({
             kartKod: card.kod,
@@ -91,7 +92,8 @@
 
       // Dönem İçi
       if (stmt.donemIci) {
-        const tutar = stmt.donemIci.sahipToplami[kod] ?? 0
+        const odenen = stmt.donemIci.sahipOdenen[kod] ?? 0
+        const tutar = Math.max(0, Math.round(((stmt.donemIci.sahipToplami[kod] ?? 0) - odenen) * 100) / 100)
         if (tutar > 0) {
           list.push({
             kartKod: card.kod,
@@ -563,7 +565,7 @@
               <span class="simple-sub">{catName(rule.kategori)} · Her ayın {rule.gunOfMonth}'i</span>
             </div>
             <span class="simple-amount num">
-              {rule.paraBirimi === 'USD' ? usd(rule.tutar) : tryFmt(rule.tutar)}
+              {fmtCurrency(rule.tutar, rule.paraBirimi)}
             </span>
           </li>
         {/each}

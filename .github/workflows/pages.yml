@@ -7,6 +7,12 @@ on:
       - 'app/**'
       - 'worker/**'
       - '.github/workflows/pages.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'worker/**'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -64,7 +70,8 @@ jobs:
       - run: npm test
 
   deploy:
-    needs: build
+    needs: [build, worker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

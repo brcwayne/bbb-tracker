@@ -79,7 +79,7 @@ describe('BorcFormu', () => {
 
     await vi.waitFor(() => expect(onSaved).toHaveBeenCalled())
     expect(savedDebts.length).toBeGreaterThan(0)
-    const added = savedDebts.find((d) => d.kisi === 'Ahmet' && d.tutar === 250)
+    const added = savedDebts.find((d) => d.kisi === 'AHMET' && d.tutar === 250)
     expect(added).toBeDefined()
     expect(added?.yon).toBe('VERDIM')
     expect(added?.paraBirimi).toBe('USD')
@@ -120,7 +120,7 @@ describe('BorcFormu', () => {
     await fireEvent.click(submitBtn)
 
     await vi.waitFor(() => expect(onSaved).toHaveBeenCalled())
-    const added = savedDebts.find((d) => d.kisi === 'Mehmet')
+    const added = savedDebts.find((d) => d.kisi === 'MEHMET')
     expect(added).toBeDefined()
     expect(added?.yon).toBe('ALDIM')
     expect(added?.paraBirimi).toBe('EUR')
@@ -167,7 +167,7 @@ describe('BorcFormu', () => {
     expect(savedDebts.length).toBeGreaterThan(0)
     // personal_tx'e hiçbir kayıt atılmamalıdır (hesap bakiyesi azalmaz)
     expect(savedPersonalTx.length).toBe(0)
-    const added = savedDebts.find((d) => d.kisi === 'Bora')
+    const added = savedDebts.find((d) => d.kisi === 'BORA')
     expect(added?.hesap).toBe('DUZELTME')
   })
 
@@ -232,7 +232,7 @@ describe('BorcFormu', () => {
     const addedPerson = savedPeople.find((p) => p.kod === 'YENI-KOMSU')
     expect(addedPerson).toBeDefined()
     expect(addedPerson?.ad).toBe('Yeni Komşu')
-    expect(addedPerson?.haneUyesi).toBe(true)
+    expect(addedPerson?.haneUyesi).toBe(false)
   })
 })
 

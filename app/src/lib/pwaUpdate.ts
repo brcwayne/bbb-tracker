@@ -41,6 +41,28 @@ export function reloadOnControllerChange(container: ControllerChangeTarget, relo
   })
 }
 
+export function safeReload(): void {
+  const active = typeof document !== 'undefined' ? document.activeElement : null
+  const isEditing =
+    active &&
+    (active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.tagName === 'SELECT' ||
+      (active as HTMLElement).isContentEditable)
+  if (!isEditing) {
+    window.location.reload()
+  } else {
+    // Wait until user blurs active input field before reloading
+    const onBlur = () => {
+      active?.removeEventListener('blur', onBlur)
+      setTimeout(() => {
+        window.location.reload()
+      }, 500)
+    }
+    active?.addEventListener('blur', onBlur)
+  }
+}
+
 export async function initPwaUpdates(): Promise<void> {
   if (!('serviceWorker' in navigator)) return
   const { registerSW } = await import('virtual:pwa-register')
@@ -50,5 +72,5 @@ export async function initPwaUpdates(): Promise<void> {
       schedulePeriodicUpdateChecks(() => void registration.update())
     },
   })
-  reloadOnControllerChange(navigator.serviceWorker, () => window.location.reload())
+  reloadOnControllerChange(navigator.serviceWorker, safeReload)
 }

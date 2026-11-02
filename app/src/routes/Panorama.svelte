@@ -2,7 +2,7 @@
   import type { Dataset, SyncState } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
-  import { pct, dateShort, dateTimeShort, DASH, monthLabel } from '../lib/format'
+  import { pct, dateShort, dateTimeShort, DASH, monthLabel, todayLocalIso } from '../lib/format'
   import { money as formatMoney, settings, PERIODS } from '../lib/settings.svelte'
   import KpiBand from '../lib/ui/KpiBand.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
@@ -68,6 +68,7 @@
     const p: PriceLookup = {
       bySymbol: prices.bySymbol,
       usdPerGram: prices.usdPerGram,
+      usdPerSilverGram: prices.usdPerSilverGram,
     }
 
     const openRaw = d.positions.open.filter((pp) => pp.lot > 1e-9)
@@ -112,9 +113,10 @@
 
     // G10 live equity
     const live = liveEquity(ds, d.positions, p, nakitUsd)
+    const kpiEquityUsd = Number.isFinite(equityUsd) ? equityUsd : live.canliOzkaynakUsd
 
     // Month note
-    const todayIso = new Date().toISOString().slice(0, 10)
+    const todayIso = todayLocalIso()
     const thisMonthIso = todayIso.slice(0, 7)
     const snapMonthIso = lastSnap ? lastSnap.tarih.slice(0, 7) : ''
     const isPastMonth = snapMonthIso !== '' && snapMonthIso < thisMonthIso
@@ -150,7 +152,7 @@
       monthNote,
       unpricedInDeger,
       kpiItems: [
-        { label: 'Toplam Özkaynak', value: money(equityUsd), num: equityUsd, fmt: (n: number) => money(n) },
+        { label: 'Toplam Özkaynak', value: money(kpiEquityUsd), num: kpiEquityUsd, fmt: (n: number) => money(n) },
         {
           label: 'Gerçekleşmiş Kâr',
           value: money(realizedUsd),
@@ -238,10 +240,13 @@
           ? null
           : (() => {
               const b = view.dashboard
-              const toplamGetiri = equityUsd - b.toplamSermaye
-              const toplamGetiriPct = b.toplamSermaye > 0 ? toplamGetiri / b.toplamSermaye : null
+              const toplamGetiri = live.canliOzkaynakUsd + b.cekimler - b.toplamSermaye
+              const toplamGetiriPct =
+                b.toplamSermaye > 0 && Number.isFinite(toplamGetiri)
+                  ? toplamGetiri / b.toplamSermaye
+                  : null
               return {
-                guncelOzkaynak: equityUsd,
+                guncelOzkaynak: Number.isFinite(equityUsd) ? equityUsd : live.canliOzkaynakUsd,
                 yatirilanSermaye: b.toplamSermaye,
                 toplamGetiri,
                 toplamGetiriPct,

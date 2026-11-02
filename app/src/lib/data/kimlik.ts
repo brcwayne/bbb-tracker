@@ -53,7 +53,16 @@ export function kimlikKontrol(
 
   const acikMaliyet = openPositions.reduce((s, p) => s + p.toplamMaliyetUsd, 0)
 
-  const gocNakitDuzeltmesi = turetilmisNakit(ds) - nakit
+  // Göç sınırındaki kurucu sermaye farkını yalnız migration kayıtlarından ve meta.nakitHesapBazli
+  // başlangıç bakiyelerinden bağımsız olarak hesapla. Böylece `nakit + gocNakitDuzeltmesi` cebirsel
+  // bir totolojiye dönüşmez; göç sonrası yetim DUZELTME veya hesaplar arası nakit sapmaları `fark`a yansır.
+  const migrationDs: Dataset = {
+    ...ds,
+    transactions: ds.transactions.filter((t) => t.kaynak === 'migration'),
+    cashflows: ds.cashflows.filter((c) => c.kaynak === 'migration'),
+  }
+  const migrationMetaCash = Object.values(ds.meta?.nakitHesapBazli ?? {}).reduce((s, v) => s + v, 0)
+  const gocNakitDuzeltmesi = turetilmisNakit(migrationDs) - migrationMetaCash
 
   const txById = new Map(ds.transactions.map((t) => [t.id, t]))
   let yuvarlamaArtigi = 0

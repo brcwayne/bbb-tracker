@@ -4,7 +4,10 @@ import type { Instrument } from './types'
 export interface PriceLookup {
   bySymbol: Record<string, { priceUsd: number | null }>
   usdPerGram: number | null
+  usdPerSilverGram?: number | null
 }
+
+const TROY_OUNCE_GRAMS = 31.1034768
 
 export interface Unrealized {
   kod: string
@@ -18,6 +21,13 @@ function currentUsd(inst: Instrument | undefined, p: PriceLookup): number | null
   if (inst.fiyatKaynagi === 'altin-turev') {
     if (p.usdPerGram == null || inst.altinKatsayi == null) return null
     return p.usdPerGram * inst.altinKatsayi
+  }
+  if (inst.fiyatKaynagi === 'gumus-turev') {
+    const silverGram =
+      p.usdPerSilverGram ??
+      (p.bySymbol['SI=F']?.priceUsd != null ? p.bySymbol['SI=F'].priceUsd / TROY_OUNCE_GRAMS : null)
+    if (silverGram == null) return null
+    return silverGram * (inst.altinKatsayi ?? 1)
   }
   const hit = p.bySymbol[inst.fiyatSembolu]
   return hit && hit.priceUsd != null ? hit.priceUsd : null

@@ -20,6 +20,7 @@
 
   async function degistir() {
     busy = true
+    const prevFolder = typeof localStorage !== 'undefined' ? localStorage.getItem('bbb-drive-folder') : null
     try {
       drive.forgetFolder()
       await drive.connect()
@@ -27,7 +28,15 @@
       onSwitched()
     } catch {
       // Kullanıcı hesap seçiminden ya da klasör penceresinden vazgeçti:
-      // sessizce eski görünümde kal, hata gösterme.
+      // önceki klasörü geri yükle ve sessizce eski görünümde kal, hata gösterme.
+      if (prevFolder && typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem('bbb-drive-folder', prevFolder)
+          if ((drive as any).folderId === null) {
+            ;(drive as any).folderId = prevFolder
+          }
+        } catch {}
+      }
     } finally {
       busy = false
     }

@@ -70,8 +70,25 @@
   let error = $state<string | null>(null)
   let saving = $state(false)
 
+  const activeTlKur = $derived.by(() => {
+    if (
+      editing &&
+      editing.tutar_tl != null &&
+      editing.kur != null &&
+      editing.kur > 0 &&
+      tarih === editing.tarih
+    ) {
+      return editing.kur
+    }
+    const hist = dataset.fxrates?.[tarih]
+    if (typeof hist === 'number' && Number.isFinite(hist) && hist > 0) return hist
+    return settings.rate
+  })
+
   const tutarUsd = $derived(
-    paraBirimi === 'USD' ? Number(tutarInput || 0) : Number(tutarInput || 0) / settings.rate,
+    paraBirimi === 'USD'
+      ? Number(tutarInput || 0)
+      : Number(tutarInput || 0) / (activeTlKur > 0 ? activeTlKur : settings.rate),
   )
 
   function calcHedefTutarFromKur() {
@@ -162,6 +179,11 @@
       error = 'Tüm alanları doldurun.'
       return
     }
+    const tutarVal = Number(tutarInput)
+    if (!Number.isFinite(tutarVal) || tutarVal <= 0) {
+      error = 'Tutar sıfırdan büyük olmalı.'
+      return
+    }
     if (tarih > todayIso()) {
       error = 'Tarih gelecekte olamaz.'
       return
@@ -213,9 +235,10 @@
           : tutarUsd,
         kur: isCrossXfer
           ? kVal
-          : (paraBirimi === 'TL' ? settings.rate : null),
+          : (paraBirimi === 'TL' ? activeTlKur : null),
         aciklama,
-        kaynak: 'manual',
+        kaynak: editing?.kaynak ?? 'manual',
+        ...(editing?.ikizId ? { ikizId: editing.ikizId } : {}),
         ...(tur === 'TRANSFER'
           ? {
               hedefHesap,
@@ -229,7 +252,14 @@
           : {}),
       }
       if (editing) {
-        await updateRecord<Cashflow>(store, source, 'cashflows', (c) => c.id === editing!.id, { ...base, id: editing.id })
+        await updateRecord<Cashflow>(
+          store,
+          source,
+          'cashflows',
+          (c) => c.id === editing!.id,
+          { ...base, id: editing.id },
+          { allowKaynak: ['telegram', 'manual'] },
+        )
       } else {
         const rand = crypto.getRandomValues(new Uint8Array(8))
         const id = 'c_' + Array.from(rand, (b) => b.toString(16).padStart(2, '0')).join('')

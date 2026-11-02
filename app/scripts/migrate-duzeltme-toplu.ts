@@ -37,10 +37,14 @@ const ds: Dataset = {
   snapshots,
   meta,
   brokers: [],
-  accounts: [],
-  personalTransactions: [],
+  personalAccounts: [],
+  personalTx: [],
   categories: [],
-  creditCards: [],
+  paymentPlans: [],
+  recurringRules: [],
+  debts: [],
+  people: [],
+  assetTransfers: [],
 }
 
 console.log('--- DUZELTME TOPLU Mahsup Göç Betiği ---')

@@ -211,6 +211,119 @@ describe('Harcamalar sayfası', () => {
     await fireEvent.click(cancelBtn)
     expect(container.querySelector('.inline-delete-row')).toBeNull()
   })
+
+  it('planlanan satırda Onayla ve Atla butonları çalışır', async () => {
+    const plannedTx = {
+      id: 'px_pl1', tarih: '2026-10-05', tur: 'GIDER' as const, tutar: 200, paraBirimi: 'TRY' as const,
+      kategori: 'market', aciklama: 'Kedi Maması', hesap: 'NAKIT', sahip: 'ENIS',
+      taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual' as const,
+      olusturulma: '', tekrarKuralId: 'rr_kedi', durum: 'planlandi' as const,
+    }
+    const rule = {
+      id: 'rr_kedi', tur: 'GIDER' as const, aciklama: 'Kedi Maması', kategori: 'market',
+      hesap: 'NAKIT', sahip: 'ENIS', paraBirimi: 'TRY' as const, tutar: 200,
+      gunOfMonth: 5, baslangicTarihi: '2026-01-01', bitisTarihi: null, aktif: true,
+      olusturulma: '', kaynak: 'manual' as const, atlananTarihler: [] as string[],
+    }
+    const ds: Dataset = {
+      ...fixture,
+      personalTx: [...(fixture.personalTx ?? []), plannedTx],
+      recurringRules: [rule],
+    }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+
+    let savedPersonalTx: any[] | undefined
+    let savedRules: any[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (n: string, data: unknown) => {
+        if (n === 'personal_tx') savedPersonalTx = data as any[]
+        if (n === 'recurring_rules') savedRules = data as any[]
+      },
+    }
+
+    const { getByTitle } = render(Harcamalar, {
+      props: { dataset: ds, source, store, today: '2026-09-08' },
+    })
+
+    const confirmBtn = getByTitle('Onayla')
+    expect(confirmBtn).toBeInTheDocument()
+    await fireEvent.click(confirmBtn)
+
+    expect(savedPersonalTx).toBeDefined()
+    const confirmed = savedPersonalTx!.find((r) => r.id === 'px_pl1')
+    expect(confirmed).toBeDefined()
+    expect(confirmed.durum).toBeUndefined()
+  })
+
+  it('planlanan satırda Atla butonuna basılınca recurring_rules atlananTarihler güncellenir ve tx atlandi olur', async () => {
+    const plannedTx = {
+      id: 'px_pl2', tarih: '2026-10-05', tur: 'GIDER' as const, tutar: 200, paraBirimi: 'TRY' as const,
+      kategori: 'market', aciklama: 'Kedi Maması', hesap: 'NAKIT', sahip: 'ENIS',
+      taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual' as const,
+      olusturulma: '', tekrarKuralId: 'rr_kedi2', durum: 'planlandi' as const,
+    }
+    const rule = {
+      id: 'rr_kedi2', tur: 'GIDER' as const, aciklama: 'Kedi Maması', kategori: 'market',
+      hesap: 'NAKIT', sahip: 'ENIS', paraBirimi: 'TRY' as const, tutar: 200,
+      gunOfMonth: 5, baslangicTarihi: '2026-01-01', bitisTarihi: null, aktif: true,
+      olusturulma: '', kaynak: 'manual' as const, atlananTarihler: ['2026-09-05'],
+    }
+    const ds: Dataset = {
+      ...fixture,
+      personalTx: [...(fixture.personalTx ?? []), plannedTx],
+      recurringRules: [rule],
+    }
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+
+    let savedPersonalTx: any[] | undefined
+    let savedRules: any[] | undefined
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (n: string, data: unknown) => {
+        if (n === 'personal_tx') savedPersonalTx = data as any[]
+        if (n === 'recurring_rules') savedRules = data as any[]
+      },
+    }
+
+    const { getByTitle } = render(Harcamalar, {
+      props: { dataset: ds, source, store, today: '2026-09-08' },
+    })
+
+    const skipBtn = getByTitle('Atla')
+    expect(skipBtn).toBeInTheDocument()
+    await fireEvent.click(skipBtn)
+
+    expect(savedRules).toBeDefined()
+    const updatedRule = savedRules!.find((r) => r.id === 'rr_kedi2')
+    expect(updatedRule.atlananTarihler).toContain('2026-10-05')
+    expect(updatedRule.atlananTarihler).toContain('2026-09-05')
+
+    expect(savedPersonalTx).toBeDefined()
+    const skippedTx = savedPersonalTx!.find((r) => r.id === 'px_pl2')
+    expect(skippedTx.durum).toBe('atlandi')
+  })
+
+  it('durum=atlandi olan satırlar listede gösterilmez', () => {
+    const ds: Dataset = {
+      ...fixture,
+      personalTx: [
+        {
+          id: 'px_skipped', tarih: '2026-09-01', tur: 'GIDER', tutar: 100, paraBirimi: 'TRY',
+          kategori: 'market', aciklama: 'Atlanan Kahve', hesap: 'NAKIT', sahip: 'ENIS',
+          taksitPlaniId: null, taksitNo: null, taksitToplam: null, not: '', kaynak: 'manual',
+          olusturulma: '', durum: 'atlandi',
+        },
+      ],
+    }
+    const { container } = render(Harcamalar, { dataset: ds })
+    expect(container.textContent).not.toContain('Atlanan Kahve')
+    expect(container.textContent).toMatch(/henüz kayıt yok/i)
+  })
 })
 
 

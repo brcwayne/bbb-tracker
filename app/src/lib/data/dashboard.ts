@@ -31,7 +31,7 @@ export function dashboardTotals(
   const temettu = sumBy(cf.filter((c) => c.tur === 'TEMETTU'), (c) => c.tutar_usd)
   const realized = positions.realizedTotalUsd
   const icerideKalan = realized + temettu - cekimler
-  const donemSonu = toplamSermaye + icerideKalan - cekimler
+  const donemSonu = toplamSermaye + icerideKalan
   const openCost = sumBy(positions.open, (p) => p.toplamMaliyetUsd)
   const totalGain = sumBy(positions.closed.filter((c) => c.gerceklesmisKzUsd > 0), (c) => c.gerceklesmisKzUsd)
   const totalLoss = sumBy(positions.closed.filter((c) => c.gerceklesmisKzUsd < 0), (c) => c.gerceklesmisKzUsd)
@@ -102,6 +102,13 @@ export function liveEquity(
       if (inst.fiyatKaynagi === 'altin-turev') {
         if (p.usdPerGram != null && inst.altinKatsayi != null) {
           cur = p.usdPerGram * inst.altinKatsayi
+        }
+      } else if (inst.fiyatKaynagi === 'gumus-turev') {
+        const silverGram =
+          p.usdPerSilverGram ??
+          (p.bySymbol['SI=F']?.priceUsd != null ? p.bySymbol['SI=F'].priceUsd / 31.1034768 : null)
+        if (silverGram != null) {
+          cur = silverGram * (inst.altinKatsayi ?? 1)
         }
       } else if (inst.fiyatSembolu && p.bySymbol[inst.fiyatSembolu]?.priceUsd != null) {
         cur = p.bySymbol[inst.fiyatSembolu].priceUsd

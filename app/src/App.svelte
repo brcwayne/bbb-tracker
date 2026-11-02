@@ -141,7 +141,7 @@
     prices.asOf ? new Date(prices.asOf).toLocaleString('tr-TR') : '',
   )
   function onRefreshPrices() {
-    if ($store.status === 'ready' && $store.dataset) refreshPrices($store.dataset)
+    if ($store.status === 'ready' && $store.dataset) refreshPrices($store.dataset, { fresh: true })
   }
 
   // Auto-refresh once per launch when the hydrated snapshot is missing or stale,
@@ -245,7 +245,9 @@
   <EmptyState title="Veri yüklenemedi" detail={$store.error} />
 {:else}
   <UyariSeridi {warnings} />
-  <Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} source={source} store={store} {param} />
+  {#key `${route}:${param ?? ''}`}
+    <Active dataset={$store.dataset} derived={activeDerived} view={activeDerived} source={source} store={store} {param} />
+  {/key}
 {/if}
 
 <nav class="tabs">

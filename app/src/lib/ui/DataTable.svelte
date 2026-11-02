@@ -51,7 +51,17 @@
     return [...rows].sort((a, b) => {
       const x = a[key]
       const y = b[key]
-      const c = x < y ? -1 : x > y ? 1 : 0
+      const xNil = x == null || (typeof x === 'number' && isNaN(x))
+      const yNil = y == null || (typeof y === 'number' && isNaN(y))
+      if (xNil && yNil) return 0
+      if (xNil) return 1
+      if (yNil) return -1
+      let c = 0
+      if (typeof x === 'string' && typeof y === 'string') {
+        c = x.localeCompare(y)
+      } else {
+        c = x < y ? -1 : x > y ? 1 : 0
+      }
       return dir === 'asc' ? c : -c
     })
   })

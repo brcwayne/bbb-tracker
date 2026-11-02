@@ -150,5 +150,88 @@ describe('Ozet sayfası', () => {
       expect(container.textContent).toContain('Nakit')
       expect(container.textContent).toContain('Garanti Bankası')
     })
+
+    it('kart borcunda sahipOdenen miktarını düşer', () => {
+      const cardDataset: Dataset = {
+        ...fixture,
+        people: [
+          { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+          { kod: 'ZEK', ad: 'Zek', haneUyesi: false, aktif: true },
+        ],
+        personalAccounts: [
+          { kod: 'KK-1', ad: 'Bonus Kart', tur: 'KREDI_KARTI', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true, hesapKesim: 15, sonOdeme: 25 },
+          { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true },
+        ],
+        personalTx: [
+          {
+            id: 'tx_kk',
+            tarih: '2026-08-10',
+            tur: 'GIDER',
+            tutar: 1000,
+            paraBirimi: 'TRY',
+            kategori: 'market',
+            aciklama: 'Market',
+            hesap: 'KK-1',
+            sahip: 'ENIS',
+            taksitPlaniId: null,
+            taksitNo: null,
+            taksitToplam: null,
+            not: '',
+            kaynak: 'manual',
+            olusturulma: '2026-08-10T10:00:00Z',
+          },
+          {
+            id: 'tx_pay',
+            tarih: '2026-08-20',
+            tur: 'TRANSFER',
+            tutar: 600,
+            paraBirimi: 'TRY',
+            kategori: 'transfer',
+            aciklama: 'Kredi kartı ödemesi',
+            hesap: 'NAKIT',
+            karsiHesap: 'KK-1',
+            sahip: 'ENIS',
+            taksitPlaniId: null,
+            taksitNo: null,
+            taksitToplam: null,
+            not: '',
+            kaynak: 'manual',
+            olusturulma: '2026-08-20T10:00:00Z',
+          },
+        ],
+      }
+      const { container } = render(Ozet, { dataset: cardDataset, today: '2026-09-08' })
+      expect(container.textContent).toMatch(/400/)
+      expect(container.textContent).not.toMatch(/1[.,]000/)
+    })
+  })
+
+  it('EUR kaydı varsa EUR grafiğini ve özetini ekler', () => {
+    const eurDataset: Dataset = {
+      ...fixture,
+      personalTx: [
+        ...fixture.personalTx!,
+        {
+          id: 'tx_eur',
+          tarih: '2026-09-02',
+          tur: 'GIDER',
+          tutar: 50,
+          paraBirimi: 'EUR',
+          kategori: 'market',
+          aciklama: 'Eur Harcaması',
+          hesap: 'NAKIT',
+          sahip: 'ENIS',
+          taksitPlaniId: null,
+          taksitNo: null,
+          taksitToplam: null,
+          not: '',
+          kaynak: 'manual',
+          olusturulma: '2026-09-02T10:00:00Z',
+        },
+      ],
+    }
+    const { container } = render(Ozet, { dataset: eurDataset, today: '2026-09-08' })
+    expect(container.querySelectorAll('[data-chart="aylik-seyir"]')).toHaveLength(3)
+    expect(container.textContent).toMatch(/€\s*50/)
   })
 })

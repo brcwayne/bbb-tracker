@@ -3,19 +3,14 @@
   import type { Dataset, PersonalTx, RecurringRule, PaymentPlan, Category, RecurrencePeriod } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { appendRecord, appendRecords, updateRecord, updateRecords, load } from '../../lib/data/store'
+  import { appendRecord, appendRecords, updateRecord, updateRecords, writeMultiAndCommit, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
-  import { tryFmt, usd, fmtCurrency } from '../../lib/format'
+  import { tryFmt, usd, fmtCurrency, todayLocalIso } from '../../lib/format'
   import { newPersonalId, newRecurringRuleId, newPaymentPlanId } from '../../lib/data/ids'
   import { materialize, getOccurrenceDate } from '../../lib/data/recurring'
   import { splitInstalments, instalmentDates } from '../../lib/data/personal'
   import KategoriFormu from './KategoriFormu.svelte'
   import KisiFormu from './KisiFormu.svelte'
-
-  function todayIso() {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
 
   let {
     dataset,
@@ -40,7 +35,7 @@
   } = $props()
 
   let tur = $state<'GIDER' | 'GELIR'>(editing?.tur === 'GELIR' ? 'GELIR' : 'GIDER')
-  let tarih = $state(editing?.tarih ?? tarihOn ?? todayIso())
+  let tarih = $state(editing?.tarih ?? tarihOn ?? todayLocalIso())
   let tutar = $state(editing ? String(editing.tutar) : '')
   let paraBirimi = $state<'TRY' | 'USD' | 'EUR'>((editing?.paraBirimi as any) ?? 'TRY')
   let kategori = $state(editing?.kategori ?? '')
@@ -73,6 +68,7 @@
   const anyRelevantFieldsChanged = $derived(
     editing ? (
       Number(tutar) !== editing.tutar ||
+      paraBirimi !== editing.paraBirimi ||
       kategori !== editing.kategori ||
       hesap !== editing.hesap ||
       sahip !== editing.sahip ||
@@ -237,7 +233,8 @@
               await updateRecord(
                 store, source, 'recurring_rules',
                 (r: any) => r.id === rule.id,
-                { ...rule, tutar: Number(tutar), kategori, hesap, sahip, aciklama: aciklama.trim() },
+                { ...rule, tutar: Number(tutar), paraBirimi, kategori, hesap, sahip, aciklama: aciklama.trim() },
+                { allowKaynak: ['telegram', 'manual'] },
               )
             }
             await updateRecords<PersonalTx>(
@@ -247,7 +244,8 @@
                 r.tekrarKuralId === editing!.tekrarKuralId &&
                 r.durum === 'planlandi' &&
                 r.tarih >= editing!.tarih,
-              (r) => ({ ...r, tutar: Number(tutar), kategori, hesap, sahip, aciklama: aciklama.trim() }),
+              (r) => ({ ...r, tutar: Number(tutar), paraBirimi, kategori, hesap, sahip, aciklama: aciklama.trim() }),
+              { allowKaynak: ['telegram', 'manual'] },
             )
           } else if (isInstalment) {
             const currentTaksitNo = editing!.taksitNo ?? 1
@@ -257,14 +255,38 @@
                 r.id !== editing!.id &&
                 r.taksitPlaniId === editing!.taksitPlaniId &&
                 (r.taksitNo ?? 0) >= currentTaksitNo,
-              (r) => ({ ...r, sahip, kategori, hesap, aciklama: aciklama.trim() }),
+              (r) => ({ ...r, tutar: Number(tutar), paraBirimi, sahip, kategori, hesap, aciklama: aciklama.trim() }),
+              { allowKaynak: ['telegram', 'manual'] },
             )
             const plan = (dataset.paymentPlans ?? []).find((p) => p.id === editing!.taksitPlaniId)
             if (plan) {
+              const planTxs = (dataset.personalTx ?? [])
+                .filter((r) => r.taksitPlaniId === editing!.taksitPlaniId)
+                .map((r) => {
+                  if (r.id === editing!.id || (r.taksitNo ?? 0) >= currentTaksitNo) {
+                    return { ...r, tutar: Number(tutar), paraBirimi }
+                  }
+                  return r
+                })
+              const recalculatedToplam = planTxs.length > 0
+                ? planTxs.reduce((sum, r) => sum + r.tutar, 0)
+                : Number(tutar) * (plan.taksitSayisi || 1)
+
               await updateRecord(
                 store, source, 'payment_plans',
                 (p: any) => p.id === plan.id,
-                { ...plan, sahip, kategori, hesap, aciklama: aciklama.trim() },
+                {
+                  ...plan,
+                  sahip,
+                  kategori,
+                  hesap,
+                  aciklama: aciklama.trim(),
+                  toplamTutar: recalculatedToplam,
+                  taksitTutari: Number(tutar),
+                  sonTaksitTutari: Number(tutar),
+                  paraBirimi,
+                },
+                { allowKaynak: ['telegram', 'manual'] },
               )
             }
           }
@@ -290,7 +312,6 @@
           kaynak: 'manual',
           olusturulma: new Date().toISOString(),
         }
-        await appendRecord<PaymentPlan>(store, source, 'payment_plans', plan)
 
         const rows: PersonalTx[] = dates.map((d, idx) => ({
           id: newPersonalId(),
@@ -309,7 +330,17 @@
           kaynak: 'manual',
           olusturulma: new Date().toISOString(),
         }))
-        await appendRecords<PersonalTx>(store, source, 'personal_tx', rows)
+
+        await writeMultiAndCommit(store, source, [
+          {
+            file: 'payment_plans',
+            build: (current) => [...(current as PaymentPlan[]), plan],
+          },
+          {
+            file: 'personal_tx',
+            build: (current) => [...(current as PersonalTx[]), ...rows],
+          },
+        ])
       } else {
         const ruleId = tekrarla ? newRecurringRuleId() : null
         const newRecord: PersonalTx = {
@@ -356,12 +387,20 @@
             periyot: tekrarPeriyot,
             toplamTekrar: numTekrar,
           }
-          await appendRecord<RecurringRule>(store, source, 'recurring_rules', rule)
 
           const allTx = [...(dataset?.personalTx ?? []), newRecord]
-          const futureRows = materialize([rule], allTx, todayIso(), 12)
+          const futureRows = materialize([rule], allTx, todayLocalIso(), 12)
           const txToAppend = [newRecord, ...futureRows]
-          await appendRecords<PersonalTx>(store, source, 'personal_tx', txToAppend)
+          await writeMultiAndCommit(store, source, [
+            {
+              file: 'recurring_rules',
+              build: (current) => [...(current as RecurringRule[]), rule],
+            },
+            {
+              file: 'personal_tx',
+              build: (current) => [...(current as PersonalTx[]), ...txToAppend],
+            },
+          ])
         } else {
           await appendRecord<PersonalTx>(store, source, 'personal_tx', newRecord)
         }

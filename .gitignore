@@ -19,4 +19,6 @@ Ekstreler/
 *.xlsm
 *.xlsx
 .venv/
+.vite/
+app/.vite/
 bbb-telegram-bot/

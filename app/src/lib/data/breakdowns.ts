@@ -17,6 +17,7 @@ export interface HoldingRow {
 
 export interface HoldingGroup {
   key: string
+  kod?: string
   sahip?: string
   rows: HoldingRow[]
   totalCostUsd: number
@@ -48,7 +49,7 @@ function rowsFor(
   })
 }
 
-function summarise(key: string, rows: HoldingRow[], sahip?: string): HoldingGroup {
+function summarise(key: string, rows: HoldingRow[], sahip?: string, kod?: string): HoldingGroup {
   const totalCostUsd = rows.reduce((s, r) => s + r.toplamMaliyetUsd, 0)
   const anyPriced = rows.some((r) => r.degerUsd != null)
   const totalValueUsd = anyPriced
@@ -56,6 +57,7 @@ function summarise(key: string, rows: HoldingRow[], sahip?: string): HoldingGrou
     : null
   return {
     key,
+    ...(kod !== undefined ? { kod } : {}),
     sahip,
     rows,
     totalCostUsd,
@@ -95,6 +97,6 @@ export function holdingsByBroker(
   return brokers.map((b) => {
     const scope = ledger.byScope.get(b.kod)
     const positions = (scope?.open ?? []).filter((pos) => pos.lot > 1e-9)
-    return summarise(b.ad, rowsFor(positions, instruments, p), b.sahip)
+    return summarise(b.ad, rowsFor(positions, instruments, p), b.sahip, b.kod)
   })
 }

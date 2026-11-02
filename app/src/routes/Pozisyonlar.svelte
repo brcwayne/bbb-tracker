@@ -7,7 +7,7 @@
   import { money } from '../lib/settings.svelte'
   import { prices } from '../lib/prices.svelte'
   import { unrealizedByKod } from '../lib/data/unrealized'
-  import { dayDiff } from '../lib/data/ledger'
+  import { buildLedger, dayDiff } from '../lib/data/ledger'
   import type { SaleEvent } from '../lib/data/ledger'
   import { calculateHoldingStats } from '../lib/data/holding'
   import KpiBand from '../lib/ui/KpiBand.svelte'
@@ -110,6 +110,30 @@
 
     const instByKod = new Map(ds.instruments.map((i) => [i.kod, i]))
     const latestTx = latestTxByKod(ds.transactions)
+    const transfers = ds.assetTransfers ?? []
+    const portLedger = buildLedger(ds.transactions, transfers, 'portfoy')
+    const hesapLedger = buildLedger(ds.transactions, transfers, 'hesap')
+
+    const activePortfoyByKod = new Map<string, string[]>()
+    for (const [scopeName, sc] of portLedger.byScope) {
+      if (!scopeName) continue
+      for (const pos of sc.open) {
+        if (pos.lot <= 1e-9) continue
+        const list = activePortfoyByKod.get(pos.kod) ?? []
+        list.push(scopeName)
+        activePortfoyByKod.set(pos.kod, list)
+      }
+    }
+    const activeHesapByKod = new Map<string, string[]>()
+    for (const [scopeName, sc] of hesapLedger.byScope) {
+      if (!scopeName) continue
+      for (const pos of sc.open) {
+        if (pos.lot <= 1e-9) continue
+        const list = activeHesapByKod.get(pos.kod) ?? []
+        list.push(scopeName)
+        activeHesapByKod.set(pos.kod, list)
+      }
+    }
 
     // Defensive: derivePositions can leave a phantom zero-lot entry.
     const openRaw = d.positions.open.filter((p) => p.lot > 1e-9)
@@ -118,6 +142,7 @@
     const unreal = unrealizedByKod(openRaw, ds.instruments, {
       bySymbol: prices.bySymbol,
       usdPerGram: prices.usdPerGram,
+      usdPerSilverGram: prices.usdPerSilverGram,
     })
 
     const salesByKod = new Map<string, SaleEvent[]>()
@@ -131,6 +156,8 @@
       const inst = instByKod.get(p.kod)
       const tx = latestTx.get(p.kod)
       const u = unreal.get(p.kod)
+      const portfoyler = activePortfoyByKod.get(p.kod) ?? (tx?.portfoy ? [tx.portfoy] : [])
+      const hesaplar = activeHesapByKod.get(p.kod) ?? (tx?.hesap ? [tx.hesap] : [])
 
       let nativePrice: number | null = null
       if (inst) {
@@ -157,8 +184,10 @@
         isClosed: false,
         kod: p.kod,
         sinif: inst?.sinif ?? DASH,
-        portfoy: tx?.portfoy ?? DASH,
-        hesap: tx?.hesap ?? DASH,
+        portfoy: portfoyler.length > 0 ? portfoyler.join(', ') : (tx?.portfoy ?? DASH),
+        hesap: hesaplar.length > 0 ? hesaplar.join(', ') : (tx?.hesap ?? DASH),
+        portfoyler,
+        hesaplar,
         lot: p.lot,
         ortMaliyetUsd: p.ortMaliyetUsd,
         toplamMaliyetUsd: p.toplamMaliyetUsd,
@@ -206,8 +235,14 @@
       closedRows,
       holdingStats: calculateHoldingStats(d.positions.sales ?? []),
       classOptions: distinct(ds.instruments.map((i) => i.sinif)),
-      portfoyOptions: distinct(ds.transactions.map((t) => t.portfoy)),
-      hesapOptions: distinct(ds.transactions.map((t) => t.hesap)),
+      portfoyOptions: distinct([
+        ...ds.transactions.map((t) => t.portfoy),
+        ...transfers.flatMap((tr) => [tr.kaynakPortfoy, tr.hedefPortfoy]).filter((x): x is string => Boolean(x)),
+      ]),
+      hesapOptions: distinct([
+        ...ds.transactions.map((t) => t.hesap),
+        ...transfers.flatMap((tr) => [tr.kaynakHesap, tr.hedefHesap]).filter(Boolean),
+      ]),
     }
   }
 
@@ -224,8 +259,8 @@
     return rows.filter(
       (r) =>
         (cls === '' || r.sinif === cls) &&
-        (prt === '' || r.portfoy === prt) &&
-        (hsp === '' || r.hesap === hsp),
+        (prt === '' || r.portfoyler.includes(prt) || r.portfoy === prt) &&
+        (hsp === '' || r.hesaplar.includes(hsp) || r.hesap === hsp),
     )
   }
 

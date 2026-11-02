@@ -62,13 +62,19 @@
       dataset.instruments,
       dataset.brokers,
       dataset.assetTransfers,
-      { bySymbol: prices.bySymbol, usdPerGram: prices.usdPerGram },
+      {
+        bySymbol: prices.bySymbol,
+        usdPerGram: prices.usdPerGram,
+        usdPerSilverGram: prices.usdPerSilverGram,
+      },
     )
   })
 
-  const summaryRows = $derived(
-    groups.map((g) => {
-      const kod = findBrokerKod(g.key, dataset?.brokers ?? [])
+  const topluSplit = $derived(splits['TOPLU'])
+
+  const summaryRows = $derived.by(() => {
+    const base = groups.map((g) => {
+      const kod = g.kod ?? findBrokerKod(g.key, dataset?.brokers ?? [])
       const split = splits[kod] ?? { tl: 0, usd: 0, totalUsd: 0 }
       return {
         kod,
@@ -80,8 +86,25 @@
         deger: g.totalValueUsd,
         kz: g.unrealUsd,
       }
-    }),
-  )
+    })
+    if (
+      topluSplit &&
+      Math.abs(topluSplit.totalUsd) >= 0.005 &&
+      !base.some((r) => r.kod === 'TOPLU')
+    ) {
+      base.push({
+        kod: 'TOPLU',
+        kurum: 'TOPLU (Göç Havuzu)',
+        sahip: '—',
+        nakit: topluSplit.totalUsd,
+        nakitSplit: topluSplit,
+        maliyet: 0,
+        deger: 0,
+        kz: null,
+      })
+    }
+    return base
+  })
   const summaryCols = [
     { key: 'kurum', label: 'Kurum', sortable: true },
     { key: 'sahip', label: 'Sahip' },
@@ -127,7 +150,7 @@
 
     <DataTable columns={summaryCols} rows={summaryRows} initialSort={{ key: 'maliyet', dir: 'desc' }} />
     {#each groups as g}
-      {@const kod = findBrokerKod(g.key, dataset.brokers)}
+      {@const kod = g.kod ?? findBrokerKod(g.key, dataset.brokers)}
       {@const split = splits[kod] ?? { tl: 0, usd: 0, totalUsd: 0 }}
       {@const isNegatif = split.totalUsd < -0.005}
       <div class="panel">

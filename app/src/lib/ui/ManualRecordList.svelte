@@ -6,9 +6,9 @@
     onDelete,
   }: {
     title: string
-    rows: { key: string; tarih: string; summary: string }[]
+    rows: { key: string; tarih: string; summary: string; canEdit?: boolean }[]
     onEdit: (key: string) => void
-    onDelete: (row: { key: string; tarih: string; summary: string }) => void
+    onDelete: (row: { key: string; tarih: string; summary: string; canEdit?: boolean }) => void
   } = $props()
 </script>
 
@@ -23,7 +23,9 @@
           {#if row.tarih !== '—'}<span class="tarih">{row.tarih}</span>{/if}
           <span class="summary">{row.summary}</span>
           <span class="actions">
-            <button onclick={() => onEdit(row.key)}>Düzenle</button>
+            {#if row.canEdit !== false}
+              <button onclick={() => onEdit(row.key)}>Düzenle</button>
+            {/if}
             <button class="danger" onclick={() => onDelete(row)}>Sil</button>
           </span>
         </li>

@@ -5,7 +5,7 @@
   import type { DataSource } from '../../lib/data/source'
   import { accountGroups, netWorthBand } from '../../lib/data/accounts'
   import type { AccountRow } from '../../lib/data/accounts'
-  import { fmtCurrency } from '../../lib/format'
+  import { fmtCurrency, todayLocalIso } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HesapFormu from './HesapFormu.svelte'
   import TransferFormu from './TransferFormu.svelte'
@@ -14,7 +14,7 @@
     dataset,
     source,
     store,
-    today = new Date().toISOString().slice(0, 10),
+    today = todayLocalIso(),
   }: {
     dataset?: Dataset | null
     source?: DataSource
@@ -108,7 +108,7 @@
         class="head-btn add"
         aria-label="Hesap ekle"
         disabled={!isDrive}
-        onclick={() => { yeniHesapAcik = true; transferAcik = false }}
+        onclick={() => { yeniHesapAcik = true; transferAcik = false; duzenlenenHesap = null }}
       >+</button>
     </div>
   </header>
@@ -127,20 +127,22 @@
 
   {#if (yeniHesapAcik || duzenlenenHesap) && dataset}
     <div class="form-modal">
-      <HesapFormu
-        {dataset}
-        {source}
-        {store}
-        editing={duzenlenenHesap ?? undefined}
-        onSaved={() => {
-          yeniHesapAcik = false
-          duzenlenenHesap = null
-        }}
-        onCancel={() => {
-          yeniHesapAcik = false
-          duzenlenenHesap = null
-        }}
-      />
+      {#key duzenlenenHesap?.kod ?? 'new'}
+        <HesapFormu
+          {dataset}
+          {source}
+          {store}
+          editing={duzenlenenHesap ?? undefined}
+          onSaved={() => {
+            yeniHesapAcik = false
+            duzenlenenHesap = null
+          }}
+          onCancel={() => {
+            yeniHesapAcik = false
+            duzenlenenHesap = null
+          }}
+        />
+      {/key}
     </div>
   {/if}
 

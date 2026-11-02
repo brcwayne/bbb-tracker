@@ -11,9 +11,11 @@ describe('parseChart', () => {
     })
     expect(parseChart(spcx)?.currency).toBe('USD')
   })
-  it('returns null for a malformed body', () => {
+  it('returns null for a malformed body or zero/negative price', () => {
     expect(parseChart({ chart: { result: null } })).toBeNull()
     expect(parseChart({})).toBeNull()
+    expect(parseChart({ chart: { result: [{ meta: { regularMarketPrice: 0, currency: 'USD' } }] } })).toBeNull()
+    expect(parseChart({ chart: { result: [{ meta: { regularMarketPrice: -5, currency: 'USD' } }] } })).toBeNull()
   })
 })
 

@@ -7,6 +7,9 @@ export interface MonthlyTotal {
   toplam: number
 }
 
+const isUnexecuted = (row: PersonalTx): boolean =>
+  row.durum === 'planlandi' || row.durum === 'atlandi'
+
 export function monthlyTotals(rows: PersonalTx[], today: string, months = 12): MonthlyTotal[] {
   if (!rows.length) return []
 
@@ -22,7 +25,7 @@ export function monthlyTotals(rows: PersonalTx[], today: string, months = 12): M
 
   for (const row of rows) {
     if (row.tur !== 'GIDER') continue
-    if (row.durum === 'planlandi') continue
+    if (isUnexecuted(row)) continue
     if (row.tarih > today) continue
     const ay = row.tarih.slice(0, 7)
     if (ay < startAy || ay > todayAy) continue
@@ -66,7 +69,7 @@ export function monthSummary(
   for (const row of rows) {
     if (!row.tarih.startsWith(prefix)) continue
     if (row.tarih > today) continue
-    if (row.durum === 'planlandi') continue
+    if (isUnexecuted(row)) continue
 
     if (row.tur === 'GIDER') {
       summary.gider[row.paraBirimi] =
@@ -92,6 +95,7 @@ export function categoryBreakdown(
   month: number,
   today: string,
   para: string,
+  convert?: (amount: number, paraBirimi: string) => number,
 ): CategoryBreakdown[] {
   const prefix = `${year}-${String(month).padStart(2, '0')}`
   const map = new Map<string, number>()
@@ -99,12 +103,13 @@ export function categoryBreakdown(
   for (const row of rows) {
     if (!row.tarih.startsWith(prefix)) continue
     if (row.tarih > today) continue
-    if (row.durum === 'planlandi') continue
+    if (isUnexecuted(row)) continue
     if (row.tur !== 'GIDER') continue
-    if (row.paraBirimi !== para) continue
+    if (!convert && row.paraBirimi !== para) continue
 
+    const amount = convert ? convert(row.tutar, row.paraBirimi) : row.tutar
     const current = map.get(row.kategori) ?? 0
-    map.set(row.kategori, Math.round((current + row.tutar) * 100) / 100)
+    map.set(row.kategori, Math.round((current + amount) * 100) / 100)
   }
 
   const result: CategoryBreakdown[] = []
@@ -140,6 +145,7 @@ export function instalmentSchedule(
 
   for (const row of rows) {
     if (!row.taksitPlaniId) continue
+    if (isUnexecuted(row)) continue
     if (row.tarih <= today) continue
     const ay = row.tarih.slice(0, 7)
     if (ay > endAy) continue
@@ -207,10 +213,15 @@ export function activePlans(
   for (const plan of plans) {
     if (plan.durum !== 'AKTIF') continue
 
-    const planRows = rows.filter((r) => r.taksitPlaniId === plan.id)
-    const paidRows = planRows.filter((r) => r.tarih <= today)
+    const planRows = rows.filter((r) => r.taksitPlaniId === plan.id && r.durum !== 'atlandi')
+    const paidRows = planRows.filter((r) => r.tarih <= today && r.durum !== 'planlandi')
+    const futureRows = planRows.filter((r) => r.tarih > today)
     const odenen = Math.round(paidRows.reduce((sum, r) => sum + r.tutar, 0) * 100) / 100
     const kalan = Math.max(0, Math.round((plan.toplamTutar - odenen) * 100) / 100)
+    // Auto-exclude plans whose instalments have all fallen due and have 0 future rows / 0 remaining
+    if (planRows.length > 0 && futureRows.length === 0 && paidRows.length >= plan.taksitSayisi) {
+      continue
+    }
     const ilerleme = `${paidRows.length}/${plan.taksitSayisi}`
 
     result.push({
@@ -232,7 +243,23 @@ export interface DebtBalanceItem {
   net: number
 }
 
-export function debtBalances(debts: Debt[]): DebtBalanceItem[] {
+export function resolvePersonCode(rawKisi: string, people?: Person[]): string {
+  const trimmed = (rawKisi || '').trim()
+  if (!trimmed) return ''
+  if (people && people.length > 0) {
+    const upper = trimmed.toLocaleUpperCase('tr')
+    const lower = trimmed.toLocaleLowerCase('tr')
+    const match = people.find(
+      (p) =>
+        p.kod.toLocaleUpperCase('tr') === upper ||
+        p.ad.trim().toLocaleLowerCase('tr') === lower,
+    )
+    if (match) return match.kod
+  }
+  return trimmed.toLocaleUpperCase('tr')
+}
+
+export function debtBalances(debts: Debt[], people?: Person[]): DebtBalanceItem[] {
   if (!debts.length) return []
 
   const map = new Map<string, DebtBalanceItem>()
@@ -240,11 +267,12 @@ export function debtBalances(debts: Debt[]): DebtBalanceItem[] {
   for (const d of debts) {
     if (d.durum !== 'ACIK') continue
 
-    const key = `${d.kisi}|${d.paraBirimi}`
+    const kisiKod = resolvePersonCode(d.kisi, people)
+    const key = `${kisiKod}|${d.paraBirimi}`
     let item = map.get(key)
     if (!item) {
       item = {
-        kisi: d.kisi,
+        kisi: kisiKod,
         para: d.paraBirimi,
         alacak: 0,
         borc: 0,
@@ -289,6 +317,7 @@ export function ozetDimensionGroups(
   today: string,
   year: number,
   month: number,
+  convert?: (amount: number, paraBirimi: string) => number,
 ): DimensionBreakdownGroup[] {
   if (dimension === 'kisi') {
     const list = people.filter((p) => p.aktif !== false)
@@ -299,7 +328,7 @@ export function ozetDimensionGroups(
         label: p.ad,
         summary: monthSummary(pRows, year, month, today),
         monthly: monthlyTotals(pRows, today, 12),
-        categoryBreakdown: categoryBreakdown(pRows, year, month, today, 'TRY'),
+        categoryBreakdown: categoryBreakdown(pRows, year, month, today, 'TRY', convert),
         instalments: instalmentSchedule(pRows, today, 3),
       }
     })
@@ -312,7 +341,7 @@ export function ozetDimensionGroups(
         label: a.ad,
         summary: monthSummary(aRows, year, month, today),
         monthly: monthlyTotals(aRows, today, 12),
-        categoryBreakdown: categoryBreakdown(aRows, year, month, today, 'TRY'),
+        categoryBreakdown: categoryBreakdown(aRows, year, month, today, 'TRY', convert),
         instalments: instalmentSchedule(aRows, today, 3),
       }
     })

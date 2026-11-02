@@ -522,5 +522,80 @@ describe('HarcamaFormu', () => {
     // payment_plans kaydı da güncellenmiş olmalı
     expect(savedPlans.find((p) => p.id === 'pp_test_1')!.sahip).toBe('CEREN')
   })
+
+  it('taksitli işlem tutar ve para birimi güncellenince payment_plans toplamTutar yeniden hesaplanır', async () => {
+    const plan: PaymentPlan = {
+      id: 'pp_test_2', alisTarihi: '2026-09-01', aciklama: 'Televizyon', toplamTutar: 3000,
+      paraBirimi: 'TRY', taksitSayisi: 3, taksitTutari: 1000, sonTaksitTutari: 1000,
+      kategori: 'elektronik', hesap: 'GARANTI-DIJI', sahip: 'ENIS', durum: 'AKTIF', kaynak: 'manual', olusturulma: '',
+    }
+    const t1: PersonalTx = {
+      id: 'tx_tv1', tarih: '2026-09-01', tur: 'GIDER', tutar: 1000, paraBirimi: 'TRY',
+      kategori: 'elektronik', aciklama: 'Televizyon 1/3', hesap: 'GARANTI-DIJI', sahip: 'ENIS',
+      taksitPlaniId: 'pp_test_2', taksitNo: 1, taksitToplam: 3, not: '', kaynak: 'manual', olusturulma: '',
+    }
+    const t2: PersonalTx = {
+      id: 'tx_tv2', tarih: '2026-10-01', tur: 'GIDER', tutar: 1000, paraBirimi: 'TRY',
+      kategori: 'elektronik', aciklama: 'Televizyon 2/3', hesap: 'GARANTI-DIJI', sahip: 'ENIS',
+      taksitPlaniId: 'pp_test_2', taksitNo: 2, taksitToplam: 3, not: '', kaynak: 'manual', olusturulma: '',
+    }
+    const t3: PersonalTx = {
+      id: 'tx_tv3', tarih: '2026-11-01', tur: 'GIDER', tutar: 1000, paraBirimi: 'TRY',
+      kategori: 'elektronik', aciklama: 'Televizyon 3/3', hesap: 'GARANTI-DIJI', sahip: 'ENIS',
+      taksitPlaniId: 'pp_test_2', taksitNo: 3, taksitToplam: 3, not: '', kaynak: 'manual', olusturulma: '',
+    }
+
+    const ds: any = {
+      ...fixture,
+      personalTx: [...(fixture.personalTx ?? []), t1, t2, t3],
+      paymentPlans: [plan],
+    }
+
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const onSaved = vi.fn()
+    let savedPersonalTx: PersonalTx[] = []
+    let savedPlans: PaymentPlan[] = []
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (n: string, data: unknown) => {
+        if (n === 'personal_tx') savedPersonalTx = data as PersonalTx[]
+        if (n === 'payment_plans') savedPlans = data as PaymentPlan[]
+      },
+    }
+
+    const { getByLabelText, getByText } = render(HarcamaFormu, {
+      props: { dataset: ds, source, store, onSaved, editing: t2 },
+    })
+
+    await fireEvent.input(getByLabelText('Tutar'), { target: { value: '1500' } })
+    await fireEvent.change(getByLabelText('Para Birimi'), { target: { value: 'USD' } })
+    await fireEvent.click(getByText('İncele'))
+
+    await fireEvent.click(getByLabelText('Bundan sonraki tüm taksitler (2. taksit ve sonrası)'))
+    await fireEvent.click(getByText('Onayla ve Güncelle'))
+
+    await vi.waitFor(() => {
+      expect(onSaved).toHaveBeenCalled()
+    })
+
+    // t1 değişmemeli
+    expect(savedPersonalTx.find((r) => r.id === 'tx_tv1')!.tutar).toBe(1000)
+    expect(savedPersonalTx.find((r) => r.id === 'tx_tv1')!.paraBirimi).toBe('TRY')
+    // t2 ve t3 1500 USD olmalı
+    expect(savedPersonalTx.find((r) => r.id === 'tx_tv2')!.tutar).toBe(1500)
+    expect(savedPersonalTx.find((r) => r.id === 'tx_tv2')!.paraBirimi).toBe('USD')
+    expect(savedPersonalTx.find((r) => r.id === 'tx_tv3')!.tutar).toBe(1500)
+    expect(savedPersonalTx.find((r) => r.id === 'tx_tv3')!.paraBirimi).toBe('USD')
+
+    // plan toplamTutar = 1000 + 1500 + 1500 = 4000 olmalı
+    const updatedPlan = savedPlans.find((p) => p.id === 'pp_test_2')
+    expect(updatedPlan).toBeDefined()
+    expect(updatedPlan!.toplamTutar).toBe(4000)
+    expect(updatedPlan!.taksitTutari).toBe(1500)
+    expect(updatedPlan!.sonTaksitTutari).toBe(1500)
+    expect(updatedPlan!.paraBirimi).toBe('USD')
+  })
 })
 
