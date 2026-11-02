@@ -114,6 +114,8 @@ export interface Meta {
 
 export type FxRates = Record<string, number>
 
+export type RecurrencePeriod = 'GUN' | 'HAFTA' | 'AY' | 'YIL'
+
 export interface RecurringRule {
   id: string
   tur: 'GIDER' | 'GELIR'
@@ -130,6 +132,10 @@ export interface RecurringRule {
   aktif: boolean
   olusturulma: string
   kaynak: 'manual'
+  /** Tekrar periyodu: GUN, HAFTA, AY, YIL. Belirtilmemişse varsayılan 'AY'. */
+  periyot?: RecurrencePeriod
+  /** Toplam işlem sayısı (1 asıl + (n-1) tekrar). null veya tanımsız ise süresiz. */
+  toplamTekrar?: number | null
 }
 
 export interface PersonalTx {

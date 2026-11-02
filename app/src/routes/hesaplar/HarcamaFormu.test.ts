@@ -274,6 +274,54 @@ describe('HarcamaFormu', () => {
     expect(realRow!.tekrarKuralId).toBe(rules[0].id)
   })
 
+  it('her AY 3 kere tekrarla seçildiğinde kural toplamTekrar: 3 ve 2 planlı satır üretir (toplam 3)', async () => {
+    const { state, store } = await setup()
+    const onSaved = vi.fn()
+    const savedFiles: Record<string, unknown> = {}
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (n: string, data: unknown) => {
+        savedFiles[n] = data
+      },
+    }
+    const { getByLabelText, getByText } = render(HarcamaFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved },
+    })
+
+    await fireEvent.change(getByLabelText('Tür'), { target: { value: 'GIDER' } })
+    await fireEvent.change(getByLabelText('Kategori'), { target: { value: 'eglence' } })
+    await fireEvent.input(getByLabelText('Açıklama'), { target: { value: 'Fitness' } })
+    await fireEvent.input(getByLabelText('Tutar'), { target: { value: '1000' } })
+    await fireEvent.change(getByLabelText('Hesap'), { target: { value: 'NAKIT' } })
+    await fireEvent.change(getByLabelText('Sahip'), { target: { value: 'ENIS' } })
+    await fireEvent.click(getByLabelText('Her ay tekrarla'))
+
+    // Periyot AY, Sayı 3
+    await fireEvent.change(getByLabelText('Tekrar periyodu'), { target: { value: 'AY' } })
+    await fireEvent.change(getByLabelText('Tekrar sayısı'), { target: { value: '3' } })
+
+    await fireEvent.click(getByText('İncele'))
+    expect(getByText(/Toplam 3 işlem \(1 asıl \+ 2 planlı tekrar/i)).toBeInTheDocument()
+    await fireEvent.click(getByText('Onayla ve Kaydet'))
+
+    await vi.waitFor(() => {
+      expect(onSaved).toHaveBeenCalled()
+    })
+
+    const rules = savedFiles['recurring_rules'] as any[]
+    expect(rules).toHaveLength(1)
+    expect(rules[0].aciklama).toBe('Fitness')
+    expect(rules[0].periyot).toBe('AY')
+    expect(rules[0].toplamTekrar).toBe(3)
+
+    const txs = savedFiles['personal_tx'] as PersonalTx[]
+    const fitnessRows = txs.filter((r) => r.aciklama === 'Fitness')
+    expect(fitnessRows).toHaveLength(3) // 1 asıl + 2 planlı = 3
+    const plannedRows = fitnessRows.filter((r) => r.durum === 'planlandi')
+    expect(plannedRows).toHaveLength(2)
+  })
+
   it('taksitli harcama seçildiğinde PaymentPlan ve n taksit satırı oluşturur', async () => {
     const { state, store } = await setup()
     const onSaved = vi.fn()

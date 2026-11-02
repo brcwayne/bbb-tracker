@@ -128,6 +128,18 @@
       actionError = e instanceof Error ? e.message : String(e)
     }
   }
+  function ruleFrequencyText(r: RecurringRule) {
+    let freq = ''
+    if (r.periyot === 'GUN') freq = 'her gün'
+    else if (r.periyot === 'HAFTA') freq = 'her hafta'
+    else if (r.periyot === 'YIL') freq = 'her yıl'
+    else freq = `her ayın ${r.gunOfMonth}'i`
+
+    if (r.toplamTekrar) {
+      freq += ` · Toplam ${r.toplamTekrar} kez`
+    }
+    return freq
+  }
 </script>
 
 <div class="tekrarlar-container">
@@ -225,7 +237,7 @@
         <li class="rule-row" class:pasif={!r.aktif}>
           <div class="rule-main">
             <strong>{r.aciklama}</strong>
-            <span class="rule-sub">{catName(r.kategori)} · her ayın {r.gunOfMonth}'i{#if showSahip} · {personName(r.sahip)}{/if}</span>
+            <span class="rule-sub">{catName(r.kategori)} · {ruleFrequencyText(r)}{#if showSahip} · {personName(r.sahip)}{/if}</span>
           </div>
           <div class="rule-amount num">
             {r.paraBirimi === 'USD' ? usd(r.tutar) : tryFmt(r.tutar)}

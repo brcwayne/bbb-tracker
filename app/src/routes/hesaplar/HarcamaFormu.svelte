@@ -1,13 +1,13 @@
 <script lang="ts">
   import type { Writable } from 'svelte/store'
-  import type { Dataset, PersonalTx, RecurringRule, PaymentPlan, Category } from '../../lib/data/types'
+  import type { Dataset, PersonalTx, RecurringRule, PaymentPlan, Category, RecurrencePeriod } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
   import { appendRecord, appendRecords, updateRecord, updateRecords, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { tryFmt, usd, fmtCurrency } from '../../lib/format'
   import { newPersonalId, newRecurringRuleId, newPaymentPlanId } from '../../lib/data/ids'
-  import { materialize } from '../../lib/data/recurring'
+  import { materialize, getOccurrenceDate } from '../../lib/data/recurring'
   import { splitInstalments, instalmentDates } from '../../lib/data/personal'
   import KategoriFormu from './KategoriFormu.svelte'
 
@@ -48,6 +48,8 @@
   let aciklama = $state(editing?.aciklama ?? '')
   let notText = $state(editing?.not ?? '')
   let tekrarla = $state(false)
+  let tekrarPeriyot = $state<RecurrencePeriod>('AY')
+  let tekrarSayisi = $state<string>('suresiz')
   let taksitli = $state(false)
   let taksitSayisi = $state(3)
   let showCategoryModal = $state(false)
@@ -68,6 +70,33 @@
   )
 
   const isInstalment = $derived(Boolean(editing?.taksitPlaniId))
+
+  const tekrarSummary = $derived.by(() => {
+    if (!tekrarla || editing) return null
+    const periyotMap: Record<RecurrencePeriod, string> = {
+      GUN: 'gün',
+      HAFTA: 'hafta',
+      AY: 'ay',
+      YIL: 'yıl',
+    }
+    const pLabel = periyotMap[tekrarPeriyot]
+    const gun = parseInt(tarih.split('-')[2], 10) || 1
+
+    if (tekrarSayisi === 'suresiz') {
+      if (tekrarPeriyot === 'AY') return `Her ayın ${gun}'i (Süresiz · Önümüzdeki 12 ay planlanır)`
+      if (tekrarPeriyot === 'GUN') return `Her gün (Süresiz · Önümüzdeki 30 gün planlanır)`
+      if (tekrarPeriyot === 'HAFTA') return `Her hafta (Süresiz · Önümüzdeki 12 hafta planlanır)`
+      return `Her yıl (Süresiz · Önümüzdeki 5 yıl planlanır)`
+    }
+
+    const n = Number(tekrarSayisi)
+    if (n === 1) {
+      return `Her ${pLabel} · Toplam 1 işlem (Yalnızca bu kayıt, planlı tekrar oluşturulmaz)`
+    }
+
+    const bitis = getOccurrenceDate(tarih, tekrarPeriyot, n - 1, gun)
+    return `Her ${pLabel} · Toplam ${n} işlem (1 asıl + ${n - 1} planlı tekrar · Son: ${bitis})`
+  })
 
   const taksitPreview = $derived.by(() => {
     if (!taksitli || !tutar || tur !== 'GIDER') return null
@@ -269,6 +298,12 @@
 
         if (tekrarla && ruleId) {
           const gunOfMonth = parseInt(tarih.split('-')[2], 10) || 1
+          const isSuresiz = tekrarSayisi === 'suresiz'
+          const numTekrar = isSuresiz ? null : Number(tekrarSayisi)
+          const bitisTarihi = (numTekrar && numTekrar > 1)
+            ? getOccurrenceDate(tarih, tekrarPeriyot, numTekrar - 1, gunOfMonth)
+            : (numTekrar === 1 ? tarih : null)
+
           const rule: RecurringRule = {
             id: ruleId,
             tur,
@@ -280,10 +315,12 @@
             tutar: Number(tutar),
             gunOfMonth,
             baslangicTarihi: tarih,
-            bitisTarihi: null,
+            bitisTarihi,
             aktif: true,
             olusturulma: new Date().toISOString(),
             kaynak: 'manual',
+            periyot: tekrarPeriyot,
+            toplamTekrar: numTekrar,
           }
           await appendRecord<RecurringRule>(store, source, 'recurring_rules', rule)
           const allTx = [...(dataset?.personalTx ?? []), newRecord]
@@ -508,9 +545,43 @@
               bind:checked={tekrarla}
               onchange={() => { if (tekrarla) taksitli = false; }}
             />
-            <span>Her ay tekrarla (Tekrarlayan kural)</span>
+            <span>Tekrarlayan işlem</span>
           </label>
         </div>
+
+        {#if tekrarla}
+          <div class="tekrar-card">
+            <div class="tekrar-phrase">
+              <span class="tekrar-label font-medium">Her</span>
+              <select
+                id="hf-tekrar-periyot"
+                class="tekrar-select"
+                aria-label="Tekrar periyodu"
+                bind:value={tekrarPeriyot}
+              >
+                <option value="GUN">gün</option>
+                <option value="HAFTA">hafta</option>
+                <option value="AY">ay</option>
+                <option value="YIL">yıl</option>
+              </select>
+              <select
+                id="hf-tekrar-sayisi"
+                class="tekrar-select"
+                aria-label="Tekrar sayısı"
+                bind:value={tekrarSayisi}
+              >
+                <option value="suresiz">Süresiz (∞)</option>
+                {#each Array.from({ length: 100 }, (_, i) => i + 1) as n}
+                  <option value={String(n)}>{n}</option>
+                {/each}
+              </select>
+              <span class="tekrar-label font-medium">kere tekrarla</span>
+            </div>
+            {#if tekrarSummary}
+              <div class="tekrar-hint">{tekrarSummary}</div>
+            {/if}
+          </div>
+        {/if}
       {/if}
 
       <div class="actions">
@@ -550,7 +621,7 @@
         {/if}
         {#if tekrarla && !editing}
           <dt>Tekrar:</dt>
-          <dd>Her ayın {parseInt(tarih.split('-')[2], 10)}'i (Önümüzdeki 12 ay planlanır)</dd>
+          <dd>{tekrarSummary}</dd>
         {/if}
       </dl>
 
@@ -847,6 +918,40 @@
     font-size: 0.75rem;
     color: var(--ink-soft);
     margin-top: 0.25rem;
+  }
+  .tekrar-card {
+    background: rgba(201, 168, 106, 0.08);
+    border: 1px solid rgba(201, 168, 106, 0.25);
+    border-radius: 6px;
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+  }
+  .tekrar-phrase {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
+  .tekrar-label {
+    color: var(--ink);
+  }
+  .tekrar-select {
+    padding: 0.3rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--hairline);
+    background: var(--surface-1);
+    color: var(--ink);
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .tekrar-hint {
+    font-size: 0.75rem;
+    color: var(--ink-soft);
   }
   .font-medium {
     font-weight: 500;
