@@ -294,8 +294,6 @@
           olusturulma: new Date().toISOString(),
           ...(ruleId ? { tekrarKuralId: ruleId } : {}),
         }
-        await appendRecord<PersonalTx>(store, source, 'personal_tx', newRecord)
-
         if (tekrarla && ruleId) {
           const gunOfMonth = parseInt(tarih.split('-')[2], 10) || 1
           const isSuresiz = tekrarSayisi === 'suresiz'
@@ -323,11 +321,13 @@
             toplamTekrar: numTekrar,
           }
           await appendRecord<RecurringRule>(store, source, 'recurring_rules', rule)
+
           const allTx = [...(dataset?.personalTx ?? []), newRecord]
           const futureRows = materialize([rule], allTx, todayIso(), 12)
-          if (futureRows.length > 0) {
-            await appendRecords<PersonalTx>(store, source, 'personal_tx', futureRows)
-          }
+          const txToAppend = [newRecord, ...futureRows]
+          await appendRecords<PersonalTx>(store, source, 'personal_tx', txToAppend)
+        } else {
+          await appendRecord<PersonalTx>(store, source, 'personal_tx', newRecord)
         }
       }
       onSaved()
