@@ -42,11 +42,10 @@
     bugun.startsWith(`${yil}-${String(ay).padStart(2, '0')}`) ? Number(bugun.slice(8, 10)) : -1,
   )
 
-  /** 1.234,56 → "1,2B" — a full figure never fits a calendar cell. */
+  /** 3548 → "3.548", 1.2M+ → "1,2M" */
   function kisa(v: number): string {
     if (v >= 1_000_000) return (v / 1_000_000).toFixed(1).replace('.', ',') + 'M'
-    if (v >= 1000) return (v / 1000).toFixed(1).replace('.', ',') + 'B'
-    return String(Math.round(v))
+    return Math.round(v).toLocaleString('tr-TR')
   }
 
   const tam = (v: number) => (paraBirimi === 'USD' ? usd(v) : tryFmt(v))

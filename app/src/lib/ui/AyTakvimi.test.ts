@@ -34,10 +34,14 @@ describe('AyTakvimi', () => {
     expect(container.querySelectorAll('[data-day]')).toHaveLength(28)
   })
 
-  it('hareketli günü giriş ve çıkış olarak işaretler', () => {
+  it('hareketli günü giriş ve çıkış olarak işaretler ve tutarı binlik nokta ile formatlar', () => {
     const { container } = render(AyTakvimi, base)
-    expect(container.querySelector('[data-day="2"] [data-out]')).toBeTruthy()
-    expect(container.querySelector('[data-day="5"] [data-in]')).toBeTruthy()
+    const outEl = container.querySelector('[data-day="2"] [data-out]')
+    const inEl = container.querySelector('[data-day="5"] [data-in]')
+    expect(outEl).toBeTruthy()
+    expect(outEl?.textContent).toBe('620')
+    expect(inEl).toBeTruthy()
+    expect(inEl?.textContent).toBe('75.000')
     expect(container.querySelector('[data-day="3"] [data-out]')).toBeFalsy()
   })
 
