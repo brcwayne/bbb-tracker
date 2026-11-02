@@ -407,6 +407,9 @@ export interface DayBucket {
   giris: number
   cikis: number
   adet: number
+  planlananGiris?: number
+  planlananCikis?: number
+  planlananAdet?: number
 }
 
 export interface MonthMovements {
@@ -417,6 +420,8 @@ export interface MonthMovements {
   giris: number
   cikis: number
   net: number
+  planlananGiris?: number
+  planlananCikis?: number
   /** rows listed but excluded from every figure because their currency
    *  differs from the account's (spec §3.4) */
   yabanciParaAdedi: number
@@ -437,6 +442,8 @@ export function monthMovements(
   const kayitlar: PersonalTx[] = []
   let giris = 0
   let cikis = 0
+  let planlananGiris = 0
+  let planlananCikis = 0
   let yabanciParaAdedi = 0
 
   for (const r of rows) {
@@ -445,9 +452,6 @@ export function monthMovements(
     if (!ilgili) continue
 
     kayitlar.push(r)
-    // Planlanan (henüz onaylanmamış) satır listede görünür — badge ile
-    // işaretlenir — ama giriş/çıkış toplamlarına ve gün hücrelerine katılmaz.
-    if (r.durum === 'planlandi') continue
 
     const d = txDelta(r, account.kod, account.paraBirimi)
     if (d === 0 && r.paraBirimi !== account.paraBirimi) {
@@ -457,6 +461,20 @@ export function monthMovements(
 
     const gun = Number(r.tarih.slice(8, 10))
     const b = gunler.get(gun) ?? { giris: 0, cikis: 0, adet: 0 }
+
+    if (r.durum === 'planlandi') {
+      if (d >= 0) {
+        b.planlananGiris = round2((b.planlananGiris ?? 0) + d)
+        planlananGiris = round2(planlananGiris + d)
+      } else {
+        b.planlananCikis = round2((b.planlananCikis ?? 0) - d)
+        planlananCikis = round2(planlananCikis - d)
+      }
+      b.planlananAdet = (b.planlananAdet ?? 0) + 1
+      gunler.set(gun, b)
+      continue
+    }
+
     if (d >= 0) b.giris = round2(b.giris + d)
     else b.cikis = round2(b.cikis - d)
     b.adet++
@@ -468,7 +486,16 @@ export function monthMovements(
 
   kayitlar.sort((a, b) => (a.tarih === b.tarih ? b.id.localeCompare(a.id) : b.tarih.localeCompare(a.tarih)))
 
-  return { gunler, kayitlar, giris, cikis, net: round2(giris - cikis), yabanciParaAdedi }
+  return {
+    gunler,
+    kayitlar,
+    giris,
+    cikis,
+    net: round2(giris - cikis),
+    planlananGiris,
+    planlananCikis,
+    yabanciParaAdedi,
+  }
 }
 
 

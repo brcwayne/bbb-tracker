@@ -392,12 +392,12 @@ describe('HarcamaFormu', () => {
         savedFiles[n] = data
       },
     }
-    const { getByText, container } = render(HarcamaFormu, {
+    const { getByTitle, getByText, container } = render(HarcamaFormu, {
       props: { dataset: state.dataset!, source, store, onSaved },
     })
 
-    // Click "+ Yeni" button
-    const addCatBtn = getByText('+ Yeni')
+    // Click "+ Yeni" button for category
+    const addCatBtn = getByTitle('Yeni kategori ekle')
     await fireEvent.click(addCatBtn)
 
     expect(getByText('Yeni Kategori Ekle')).toBeInTheDocument()
@@ -416,6 +416,111 @@ describe('HarcamaFormu', () => {
     // Modal should close and category select should have new category
     const catSelect = container.querySelector('#hf-kategori') as HTMLSelectElement
     expect(catSelect.value).toBe('kirtasiye')
+  })
+
+  it('kişi ekleme modalını açar ve yeni kişi ekleyip seçer', async () => {
+    const { state, store } = await setup()
+    const onSaved = vi.fn()
+    const savedFiles: Record<string, unknown> = {}
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(fixture),
+      save: async (n: string, data: unknown) => {
+        savedFiles[n] = data
+      },
+    }
+    const { getByTitle, getByText, container } = render(HarcamaFormu, {
+      props: { dataset: state.dataset!, source, store, onSaved },
+    })
+
+    const addPersonBtn = getByTitle('Yeni kişi ekle')
+    await fireEvent.click(addPersonBtn)
+
+    expect(getByText('Yeni Kişi Ekle')).toBeInTheDocument()
+
+    const perInput = container.querySelector('#per-ad') as HTMLInputElement
+    await fireEvent.input(perInput, { target: { value: 'Zeynep' } })
+
+    const submitPer = getByText('Kişiyi Kaydet') as HTMLButtonElement
+    await fireEvent.click(submitPer)
+
+    await vi.waitFor(() => {
+      expect(savedFiles['people']).toBeDefined()
+    })
+
+    const perSelect = container.querySelector('#hf-sahip') as HTMLSelectElement
+    expect(perSelect.value).toBe('ZEYNEP')
+  })
+
+  it('taksitli işlem düzenlenirken "bundan sonraki tüm taksitler" seçildiğinde sonraki taksitlerin sahibi de güncellenir', async () => {
+    const plan: PaymentPlan = {
+      id: 'pp_test_1', alisTarihi: '2026-09-01', aciklama: 'Koltuk', toplamTutar: 3000,
+      paraBirimi: 'TRY', taksitSayisi: 3, taksitTutari: 1000, sonTaksitTutari: 1000,
+      kategori: 'ev', hesap: 'GARANTI-DIJI', sahip: 'ENIS', durum: 'AKTIF', kaynak: 'manual', olusturulma: '',
+    }
+    const t1: PersonalTx = {
+      id: 'tx_p1', tarih: '2026-09-01', tur: 'GIDER', tutar: 1000, paraBirimi: 'TRY',
+      kategori: 'ev', aciklama: 'Koltuk', hesap: 'GARANTI-DIJI', sahip: 'ENIS',
+      taksitPlaniId: 'pp_test_1', taksitNo: 1, taksitToplam: 3, not: '', kaynak: 'manual', olusturulma: '',
+    }
+    const t2: PersonalTx = {
+      id: 'tx_p2', tarih: '2026-10-01', tur: 'GIDER', tutar: 1000, paraBirimi: 'TRY',
+      kategori: 'ev', aciklama: 'Koltuk', hesap: 'GARANTI-DIJI', sahip: 'ENIS',
+      taksitPlaniId: 'pp_test_1', taksitNo: 2, taksitToplam: 3, not: '', kaynak: 'manual', olusturulma: '',
+    }
+    const t3: PersonalTx = {
+      id: 'tx_p3', tarih: '2026-11-01', tur: 'GIDER', tutar: 1000, paraBirimi: 'TRY',
+      kategori: 'ev', aciklama: 'Koltuk', hesap: 'GARANTI-DIJI', sahip: 'ENIS',
+      taksitPlaniId: 'pp_test_1', taksitNo: 3, taksitToplam: 3, not: '', kaynak: 'manual', olusturulma: '',
+    }
+
+    const ds: any = {
+      ...fixture,
+      people: [
+        { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+        { kod: 'CEREN', ad: 'Ceren', haneUyesi: true, aktif: true },
+      ],
+      personalTx: [...(fixture.personalTx ?? []), t1, t2, t3],
+      paymentPlans: [plan],
+    }
+
+    const store = createAppStore()
+    await load(store, { id: 'local', load: () => Promise.resolve(ds) })
+    const onSaved = vi.fn()
+    let savedPersonalTx: PersonalTx[] = []
+    let savedPlans: PaymentPlan[] = []
+    const source = {
+      id: 'drive' as const,
+      load: () => Promise.resolve(ds),
+      save: async (n: string, data: unknown) => {
+        if (n === 'personal_tx') savedPersonalTx = data as PersonalTx[]
+        if (n === 'payment_plans') savedPlans = data as PaymentPlan[]
+      },
+    }
+
+    // Düzenlemeyi 2. taksit üzerinden yapıyoruz
+    const { getByLabelText, getByText } = render(HarcamaFormu, {
+      props: { dataset: ds, source, store, onSaved, editing: t2 },
+    })
+
+    await fireEvent.change(getByLabelText('Sahip'), { target: { value: 'CEREN' } })
+    await fireEvent.click(getByText('İncele'))
+
+    // "Bundan sonraki tüm taksitler" radyo butonunu seç
+    await fireEvent.click(getByLabelText('Bundan sonraki tüm taksitler (2. taksit ve sonrası)'))
+    await fireEvent.click(getByText('Onayla ve Güncelle'))
+
+    await vi.waitFor(() => {
+      expect(onSaved).toHaveBeenCalled()
+    })
+
+    // t1 (1. taksit) değişmemiş olmalı
+    expect(savedPersonalTx.find((r) => r.id === 'tx_p1')!.sahip).toBe('ENIS')
+    // t2 ve t3 CEREN olmalı
+    expect(savedPersonalTx.find((r) => r.id === 'tx_p2')!.sahip).toBe('CEREN')
+    expect(savedPersonalTx.find((r) => r.id === 'tx_p3')!.sahip).toBe('CEREN')
+    // payment_plans kaydı da güncellenmiş olmalı
+    expect(savedPlans.find((p) => p.id === 'pp_test_1')!.sahip).toBe('CEREN')
   })
 })
 

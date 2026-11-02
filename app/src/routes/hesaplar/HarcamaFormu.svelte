@@ -10,6 +10,7 @@
   import { materialize, getOccurrenceDate } from '../../lib/data/recurring'
   import { splitInstalments, instalmentDates } from '../../lib/data/personal'
   import KategoriFormu from './KategoriFormu.svelte'
+  import KisiFormu from './KisiFormu.svelte'
 
   function todayIso() {
     const d = new Date()
@@ -53,6 +54,7 @@
   let taksitli = $state(false)
   let taksitSayisi = $state(3)
   let showCategoryModal = $state(false)
+  let showPersonModal = $state(false)
 
   let step = $state<'form' | 'confirm'>('form')
   let error = $state<string | null>(null)
@@ -61,15 +63,29 @@
   type ApplyScope = 'single' | 'future'
   let applyScope = $state<ApplyScope>('single')
 
+  const isRecurringEdit = $derived(Boolean(editing?.tekrarKuralId))
+  const isInstalment = $derived(Boolean(editing?.taksitPlaniId))
+
   const isPlannedEdit = $derived(
-    Boolean(editing?.tekrarKuralId) && editing?.durum === 'planlandi',
-  )
-  const plannedFieldsChanged = $derived(
-    isPlannedEdit &&
-      (Number(tutar) !== editing!.tutar || kategori !== editing!.kategori || hesap !== editing!.hesap),
+    isRecurringEdit && editing?.durum === 'planlandi',
   )
 
-  const isInstalment = $derived(Boolean(editing?.taksitPlaniId))
+  const anyRelevantFieldsChanged = $derived(
+    editing ? (
+      Number(tutar) !== editing.tutar ||
+      kategori !== editing.kategori ||
+      hesap !== editing.hesap ||
+      sahip !== editing.sahip ||
+      aciklama.trim() !== editing.aciklama.trim()
+    ) : false
+  )
+
+  const showScopeSelector = $derived(
+    (isRecurringEdit || isInstalment) && anyRelevantFieldsChanged
+  )
+
+  // Geriye dönük uyumluluk için (testler ve eski referanslar)
+  const plannedFieldsChanged = $derived(showScopeSelector)
 
   const tekrarSummary = $derived.by(() => {
     if (!tekrarla || editing) return null
@@ -214,24 +230,44 @@
         await updateRecord<PersonalTx>(store, source, 'personal_tx', (r) => r.id === editing!.id, patch, {
           allowKaynak: ['telegram', 'manual'],
         })
-        if (plannedFieldsChanged && applyScope === 'future' && dataset) {
-          const rule = (dataset.recurringRules ?? []).find((r) => r.id === editing!.tekrarKuralId)
-          if (rule) {
-            await updateRecord(
-              store, source, 'recurring_rules',
-              (r: any) => r.id === rule.id,
-              { ...rule, tutar: Number(tutar), kategori, hesap },
+        if (showScopeSelector && applyScope === 'future' && dataset) {
+          if (isRecurringEdit) {
+            const rule = (dataset.recurringRules ?? []).find((r) => r.id === editing!.tekrarKuralId)
+            if (rule) {
+              await updateRecord(
+                store, source, 'recurring_rules',
+                (r: any) => r.id === rule.id,
+                { ...rule, tutar: Number(tutar), kategori, hesap, sahip, aciklama: aciklama.trim() },
+              )
+            }
+            await updateRecords<PersonalTx>(
+              store, source, 'personal_tx',
+              (r) =>
+                r.id !== editing!.id &&
+                r.tekrarKuralId === editing!.tekrarKuralId &&
+                r.durum === 'planlandi' &&
+                r.tarih >= editing!.tarih,
+              (r) => ({ ...r, tutar: Number(tutar), kategori, hesap, sahip, aciklama: aciklama.trim() }),
             )
+          } else if (isInstalment) {
+            const currentTaksitNo = editing!.taksitNo ?? 1
+            await updateRecords<PersonalTx>(
+              store, source, 'personal_tx',
+              (r) =>
+                r.id !== editing!.id &&
+                r.taksitPlaniId === editing!.taksitPlaniId &&
+                (r.taksitNo ?? 0) >= currentTaksitNo,
+              (r) => ({ ...r, sahip, kategori, hesap, aciklama: aciklama.trim() }),
+            )
+            const plan = (dataset.paymentPlans ?? []).find((p) => p.id === editing!.taksitPlaniId)
+            if (plan) {
+              await updateRecord(
+                store, source, 'payment_plans',
+                (p: any) => p.id === plan.id,
+                { ...plan, sahip, kategori, hesap, aciklama: aciklama.trim() },
+              )
+            }
           }
-          await updateRecords<PersonalTx>(
-            store, source, 'personal_tx',
-            (r) =>
-              r.id !== editing!.id &&
-              r.tekrarKuralId === editing!.tekrarKuralId &&
-              r.durum === 'planlandi' &&
-              r.tarih >= editing!.tarih,
-            (r) => ({ ...r, tutar: Number(tutar), kategori, hesap }),
-          )
         }
       } else if (taksitli && tur === 'GIDER') {
         const num = Number(tutar)
@@ -441,11 +477,32 @@
         </div>
 
         <div class="field flex-1">
-          <label for="hf-sahip">Sahip</label>
-          <select id="hf-sahip" aria-label="Sahip" bind:value={sahip}>
+          <div class="field-label-row">
+            <label for="hf-sahip">Sahip</label>
+            <button
+              type="button"
+              class="btn-text-link"
+              onclick={() => (showPersonModal = true)}
+              title="Yeni kişi ekle"
+            >
+              + Yeni
+            </button>
+          </div>
+          <select
+            id="hf-sahip"
+            aria-label="Sahip"
+            bind:value={sahip}
+            onchange={(e) => {
+              if ((e.target as HTMLSelectElement).value === '__yeni__') {
+                showPersonModal = true
+                sahip = people[0]?.kod ?? ''
+              }
+            }}
+          >
             {#each people as p}
               <option value={p.kod}>{p.ad}</option>
             {/each}
+            <option value="__yeni__">+ Yeni Kişi Ekle...</option>
           </select>
         </div>
       </div>
@@ -625,15 +682,17 @@
         {/if}
       </dl>
 
-      {#if plannedFieldsChanged}
-        <div class="field">
+      {#if showScopeSelector}
+        <div class="field scope-field">
           <label>
             <input type="radio" name="applyScope" value="single" bind:group={applyScope} />
-            Sadece bu kayıt
+            {isInstalment ? 'Sadece bu taksit' : 'Sadece bu kayıt'}
           </label>
           <label>
             <input type="radio" name="applyScope" value="future" bind:group={applyScope} />
-            Bundan sonraki tüm tekrarlar
+            {isInstalment
+              ? `Bundan sonraki tüm taksitler (${editing?.taksitNo}. taksit ve sonrası)`
+              : 'Bundan sonraki tüm tekrarlar'}
           </label>
         </div>
       {/if}
@@ -680,6 +739,35 @@
           showCategoryModal = false
         }}
         onCancel={() => (showCategoryModal = false)}
+      />
+    </div>
+  </div>
+{/if}
+
+{#if showPersonModal}
+  <div
+    class="cat-modal-backdrop"
+    role="presentation"
+    onclick={() => (showPersonModal = false)}
+    onkeydown={(e) => { if (e.key === 'Escape') showPersonModal = false; }}
+  >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+      class="cat-modal-dialog"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <KisiFormu
+        {dataset}
+        {source}
+        {store}
+        onSaved={(newPerson) => {
+          sahip = newPerson.kod
+          showPersonModal = false
+        }}
+        onCancel={() => (showPersonModal = false)}
       />
     </div>
   </div>

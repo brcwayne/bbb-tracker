@@ -6,6 +6,7 @@ import type { DayBucket } from '../data/accounts'
 const gunler = new Map<number, DayBucket>([
   [2, { giris: 0, cikis: 620, adet: 1 }],
   [5, { giris: 75000, cikis: 0, adet: 1 }],
+  [10, { giris: 0, cikis: 0, adet: 0, planlananCikis: 350, planlananAdet: 1 }],
 ])
 
 const base = { yil: 2026, ay: 9, gunler, paraBirimi: 'TRY', bugun: '2026-09-08' }
@@ -42,6 +43,9 @@ describe('AyTakvimi', () => {
     expect(outEl?.textContent).toBe('620')
     expect(inEl).toBeTruthy()
     expect(inEl?.textContent).toBe('75.000')
+    const plannedEl = container.querySelector('[data-day="10"] [data-planned]')
+    expect(plannedEl).toBeTruthy()
+    expect(plannedEl?.textContent).toBe('~350')
     expect(container.querySelector('[data-day="3"] [data-out]')).toBeFalsy()
   })
 

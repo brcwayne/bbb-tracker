@@ -402,15 +402,15 @@ describe('monthMovements', () => {
     expect(out.kayitlar.map((r) => r.id)).toEqual(['b', 'c', 'a'])
   })
 
-  it('planlandı satırı listede kalır ama giriş/çıkış/net toplamına katılmaz', () => {
+  it('planlandı satırı listede kalır, fiili giriş/çıkış/net toplamına katılmaz ama gün hücresinde planlanan olarak yer alır', () => {
     const out = monthMovements([
       tx({ id: 'a', tarih: '2026-09-02', tur: 'GIDER', tutar: 620 }),
       tx({ id: 'b', tarih: '2026-09-05', tur: 'GIDER', tutar: 229.9, durum: 'planlandi' }),
     ], nakit, 2026, 9)
     expect(out.kayitlar.map((r) => r.id)).toEqual(['b', 'a'])
     expect(out.kayitlar.find((r) => r.id === 'b')?.durum).toBe('planlandi')
-    expect(out).toMatchObject({ giris: 0, cikis: 620, net: -620 })
-    expect(out.gunler.has(5)).toBe(false)
+    expect(out).toMatchObject({ giris: 0, cikis: 620, net: -620, planlananCikis: 229.9 })
+    expect(out.gunler.get(5)).toMatchObject({ giris: 0, cikis: 0, planlananCikis: 229.9 })
   })
 })
 

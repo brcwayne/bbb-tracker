@@ -30,7 +30,7 @@
   let showAdd = $state(false)
   let showCategoryModal = $state(false)
   let showFutureInline = $state(false)
-  let futureExpanded = $state(false)
+  let futureExpanded = $state(true)
   let editing = $state<PersonalTx | null>(null)
   let deleteTarget = $state<PersonalTx | null>(null)
   let deleting = $state(false)

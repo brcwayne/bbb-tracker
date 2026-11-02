@@ -57,6 +57,8 @@
     const parcalar: string[] = []
     if (b.giris > 0) parcalar.push(`giriş ${tam(b.giris)}`)
     if (b.cikis > 0) parcalar.push(`çıkış ${tam(b.cikis)}`)
+    if ((b.planlananGiris ?? 0) > 0) parcalar.push(`planlanan giriş ${tam(b.planlananGiris!)}`)
+    if ((b.planlananCikis ?? 0) > 0) parcalar.push(`planlanan çıkış ${tam(b.planlananCikis!)}`)
     return `${tarih}, ${parcalar.join(', ')}`
   }
 
@@ -157,6 +159,12 @@
             <span class="gun-no">{gun}</span>
             {#if b && b.giris > 0}<span class="tutar in" data-in>{kisa(b.giris)}</span>{/if}
             {#if b && b.cikis > 0}<span class="tutar out" data-out>{kisa(b.cikis)}</span>{/if}
+            {#if b && (b.planlananGiris ?? 0) > 0 && b.giris === 0}
+              <span class="tutar in planli" data-in data-planned title="Planlanan Giriş">~{kisa(b.planlananGiris!)}</span>
+            {/if}
+            {#if b && (b.planlananCikis ?? 0) > 0 && b.cikis === 0}
+              <span class="tutar out planli" data-out data-planned title="Planlanan Çıkış">~{kisa(b.planlananCikis!)}</span>
+            {/if}
           </button>
           {#if gun === secili}
             <button
@@ -309,6 +317,10 @@
   }
   .tutar.out {
     color: var(--loss);
+  }
+  .tutar.planli {
+    opacity: 0.75;
+    font-style: italic;
   }
 
   .ekle {

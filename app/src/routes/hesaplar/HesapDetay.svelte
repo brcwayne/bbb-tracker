@@ -504,6 +504,9 @@
         <span>Giriş <b class="num gain">{fmt(hareket.giris)}</b></span>
         <span>Çıkış <b class="num loss">{fmt(hareket.cikis)}</b></span>
         <span>Net <b class="num">{fmt(hareket.net)}</b></span>
+        {#if (hareket.planlananCikis ?? 0) > 0}
+          <span class="planli-toplam" title="Bu ay henüz gerçekleşmemiş planlanan tekrarlar">Planlanan: <b class="num loss">~{fmt(hareket.planlananCikis ?? 0)}</b></span>
+        {/if}
       </div>
 
       {#if hareket.yabanciParaAdedi > 0}
