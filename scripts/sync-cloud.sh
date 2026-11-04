@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# BBB Cloud Sync Helper (Oracle VM <-> Local Mac)
+# BBB Cloud Sync Helper (Synology NAS / VM <-> Local Mac)
 # ==============================================================================
 set -euo pipefail
 
 SSH_KEY="${BBB_SSH_KEY:-${HOME}/.ssh/oracle_bbb}"
-VM_HOST="${BBB_VM_HOST:-ubuntu@130.210.62.219}"
-VM_DATA_DIR="/home/ubuntu/bbb-telegram-bot/data"
-VM_BBB_DATA_DIR="/home/ubuntu/BBB/data"
+VM_HOST="${BBB_VM_HOST:-admin@100.113.9.116}"
+VM_DATA_DIR="/volume1/docker/bbb-telegram-bot/data"
+VM_BBB_DATA_DIR="/volume1/docker/bbb-telegram-bot/data"
 LOCAL_DATA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/data"
 
 FILES=(
@@ -33,7 +33,7 @@ FILES=(
 
 check_ssh() {
     if ! ssh -i "${SSH_KEY}" -o ConnectTimeout=4 -o StrictHostKeyChecking=accept-new "${VM_HOST}" "true" 2>/dev/null; then
-        echo "❌ Oracle VM bağlantısı kurulamadı (${VM_HOST}). SSH anahtarını kontrol edin."
+        echo "❌ Sunucu/NAS bağlantısı kurulamadı (${VM_HOST}). SSH anahtarını kontrol edin."
         return 1
     fi
 }
@@ -95,9 +95,11 @@ cmd_push() {
         scp -q -i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new "${local_files[@]}" "${VM_HOST}:${VM_DATA_DIR}/"
         scp -q -i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new "${local_files[@]}" "${VM_HOST}:${VM_BBB_DATA_DIR}/"
     fi
-    echo "☁️ Google Drive senkronizasyonu tetikleniyor..."
-    ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new "${VM_HOST}" "/home/ubuntu/bbb-push.sh"
-    echo "✅ Yerel veriler Oracle VM ve Google Drive'a başarıyla yüklendi."
+    if ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new "${VM_HOST}" "test -f /home/ubuntu/bbb-push.sh" 2>/dev/null; then
+        echo "☁️ Google Drive senkronizasyonu tetikleniyor..."
+        ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new "${VM_HOST}" "/home/ubuntu/bbb-push.sh"
+    fi
+    echo "✅ Yerel veriler sunucuya başarıyla yüklendi."
     cmd_status
 }
 
