@@ -13,6 +13,11 @@ beforeEach(() => {
   settings.currency = 'USD'
   settings.rate = 1
   settings.rateDate = ''
+  settings.uiMode = 'classic'
+  settings.fontScale = 18
+  settings.quickDrawerOpen = false
+  document.documentElement.removeAttribute('data-ui')
+  document.documentElement.style.removeProperty('font-size')
 })
 
 describe('App — fiyat yenile', () => {
@@ -91,5 +96,30 @@ describe('App — iki cilt ve kabuk', () => {
     window.location.hash = '#/h/kisiler/ENIS'
     const { getByText } = render(App)
     expect(getByText('Kişi')).toBeInTheDocument()
+  })
+})
+
+describe('App — V2 Komuta Merkezi ve Hızlı Kayıt Çekmecesi', () => {
+  it('renders classic bottom tabs by default without v2-dock or quick-drawer-btn', () => {
+    window.location.hash = '#/'
+    const { queryByTestId, container } = render(App)
+    expect(queryByTestId('quick-drawer-btn')).toBeNull()
+    const nav = container.querySelector('nav.tabs')
+    expect(nav).not.toHaveClass('v2-dock')
+  })
+
+  it('in V2 mode, renders floating bottom dock and opens quick action drawer on button click', async () => {
+    const { setUiMode } = await import('./lib/settings.svelte')
+    setUiMode('v2')
+    window.location.hash = '#/'
+    const { getByTestId } = render(App)
+    const btn = getByTestId('quick-drawer-btn')
+    expect(btn).toBeInTheDocument()
+    expect(settings.quickDrawerOpen).toBe(false)
+
+    const { fireEvent } = await import('@testing-library/svelte')
+    await fireEvent.click(btn)
+    expect(settings.quickDrawerOpen).toBe(true)
+    expect(getByTestId('quick-action-drawer')).toBeInTheDocument()
   })
 })

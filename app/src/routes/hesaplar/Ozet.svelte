@@ -13,6 +13,7 @@
   } from '../../lib/data/personal'
   import { cardStatement } from '../../lib/data/accounts'
   import { fmtCurrency, tryFmt, usd, monthLabel, monthShort, todayLocalIso } from '../../lib/format'
+  import { settings } from '../../lib/settings.svelte'
   import BarChart from '../../lib/charts/BarChart.svelte'
   import Donut from '../../lib/charts/Donut.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
@@ -71,6 +72,19 @@
   const catBreakdown = $derived(categoryBreakdown(rows, activeYear, activeMonthNum, today, 'TRY'))
   const upcomingInstalments = $derived(instalmentSchedule(rows, today, 3))
   const activeMonthGiderTry = $derived(catBreakdown.reduce((sum, c) => sum + c.toplam, 0))
+
+  const isV2 = $derived(Boolean((settings as any)?.uiMode === 'v2'))
+  const activeSummary = $derived(
+    isCurrentMonth ? summary : monthSummary(rows, activeYear, activeMonthNum, today),
+  )
+  const activeGelirTry = $derived(activeSummary.gelir['TRY'] ?? 0)
+  const activeGiderTry = $derived(activeSummary.gider['TRY'] ?? 0)
+  const activeNetTry = $derived(activeGelirTry - activeGiderTry)
+  const savingsRate = $derived(
+    activeGelirTry > 0
+      ? Math.round(((activeGelirTry - activeGiderTry) / activeGelirTry) * 100)
+      : 0,
+  )
 
   const hasTry = $derived(rows.some((r) => r.paraBirimi === 'TRY' && r.tarih <= today))
   const hasUsd = $derived(rows.some((r) => r.paraBirimi === 'USD' && r.tarih <= today))
@@ -255,7 +269,7 @@
   }
 </script>
 
-<div class="ozet-container">
+<div class="ozet-container" class:v2-mode={(settings as any)?.uiMode === 'v2'}>
   {#if showDimensionSelector}
     <div class="dimension-selector-row" data-testid="dimension-selector">
       <span class="selector-label">Kırılım:</span>
@@ -274,6 +288,85 @@
         >
           Hesap
         </button>
+      </div>
+    </div>
+  {/if}
+
+  {#if (settings as any)?.uiMode === 'v2' && hasRows}
+    <div class="v2-ozet-top-deck">
+      <!-- İnteraktif Ay Seçici Hap Şeridi -->
+      <div class="v2-month-navigator">
+        <div class="v2-nav-header">
+          <div class="v2-nav-title-group">
+            <span class="v2-section-badge">⚡ OBSİDYEN & KEHRİBAR V2</span>
+            <h3 class="v2-nav-title">Dönem Gezgini: {activeMonthLabel}</h3>
+          </div>
+          {#if !isCurrentMonth}
+            <button
+              type="button"
+              class="v2-btn-reset-now"
+              onclick={() => (selectedMonth = null)}
+              title="Bu aya dön"
+            >
+              ↺ Bu Ay ({monthShort(currentMonthKey + '-01')})
+            </button>
+          {/if}
+        </div>
+
+        <div class="v2-month-pills-strip">
+          {#each emptyMonths.slice(-8) as m}
+            {@const isSelected = activeMonth === m.key}
+            <button
+              type="button"
+              class="v2-month-pill"
+              class:active={isSelected}
+              onclick={() => (selectedMonth = m.key)}
+            >
+              {m.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- Gelir / Gider / Net Nakit Akışı & Tasarruf Oranı (%) Kartı -->
+      <div class="v2-savings-card">
+        <div class="v2-savings-head">
+          <span class="v2-savings-title">Aylık Nakit Akışı & Tasarruf Oranı</span>
+          <span class="v2-savings-badge" class:gain={savingsRate > 0} class:loss={savingsRate < 0}>
+            Tasarruf: %{savingsRate}
+          </span>
+        </div>
+
+        <div class="v2-cashflow-grid">
+          <div class="v2-cf-item">
+            <span class="v2-cf-label">Gelir</span>
+            <span class="v2-cf-val num gain">{tryFmt(activeGelirTry)}</span>
+          </div>
+          <div class="v2-cf-item">
+            <span class="v2-cf-label">Gider</span>
+            <span class="v2-cf-val num loss">{tryFmt(activeGiderTry)}</span>
+          </div>
+          <div class="v2-cf-item">
+            <span class="v2-cf-label">Net Akış</span>
+            <span class="v2-cf-val num" class:gain={activeNetTry > 0} class:loss={activeNetTry < 0}>
+              {tryFmt(activeNetTry, { sign: true })}
+            </span>
+          </div>
+        </div>
+
+        <div class="v2-savings-bar-container">
+          <div class="v2-savings-bar-track">
+            <div
+              class="v2-savings-bar-fill"
+              class:gain={savingsRate > 0}
+              class:loss={savingsRate < 0}
+              style:width="{Math.max(0, Math.min(100, Math.abs(savingsRate)))}%"
+            ></div>
+          </div>
+          <span class="v2-savings-bar-hint">
+            {activeGelirTry > 0 ? `Gelirin %${Math.max(0, savingsRate)} kadarı tasarruf edildi` : 'Bu dönemde gelir kaydı bulunmuyor'}
+          </span>
+        </div>
       </div>
     </div>
   {/if}
@@ -1237,5 +1330,276 @@
   .pill-amount {
     font-size: 0.92rem;
     font-weight: 600;
+  }
+
+  /* =========================================================================
+     V2 KOMUTA MERKEZİ (OBSİDYEN & KEHRİBAR) STİLLERİ
+     ========================================================================= */
+  .v2-ozet-top-deck {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+  @media (max-width: 768px) {
+    .v2-ozet-top-deck {
+      grid-template-columns: 1fr;
+    }
+  }
+  .v2-month-navigator {
+    background: var(--surface, #12141a);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 16px;
+    padding: 1.25rem;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+    display: flex;
+    flex-direction: column;
+    gap: 0.95rem;
+  }
+  .v2-nav-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .v2-nav-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .v2-section-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gold, #f59e0b);
+  }
+  .v2-nav-title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--ink);
+  }
+  .v2-btn-reset-now {
+    appearance: none;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid var(--gold, #f59e0b);
+    color: var(--gold, #f59e0b);
+    padding: 0.35rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .v2-btn-reset-now:hover {
+    background: var(--gold, #f59e0b);
+    color: #0b0d11;
+  }
+  .v2-month-pills-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .v2-month-pill {
+    appearance: none;
+    background: var(--surface-2, #181b22);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    color: var(--ink-soft);
+    padding: 0.4rem 0.85rem;
+    border-radius: 9999px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .v2-month-pill:hover {
+    color: var(--ink);
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.08);
+  }
+  .v2-month-pill.active {
+    background: var(--gold, #f59e0b);
+    color: #0b0d11;
+    border-color: var(--gold, #f59e0b);
+    font-weight: 700;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+  }
+
+  .v2-savings-card {
+    background: var(--surface, #12141a);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    border-radius: 16px;
+    padding: 1.25rem;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 0.85rem;
+  }
+  .v2-savings-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .v2-savings-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .v2-savings-badge {
+    font-size: 0.88rem;
+    font-weight: 700;
+    padding: 0.25rem 0.65rem;
+    border-radius: 8px;
+    font-family: var(--font-num);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .v2-savings-badge.gain {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--gain, #10b981);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .v2-savings-badge.loss {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--loss, #ef4444);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  .v2-cashflow-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.6rem;
+    padding: 0.4rem 0;
+  }
+  .v2-cf-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .v2-cf-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .v2-cf-val {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .v2-savings-bar-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .v2-savings-bar-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+  .v2-savings-bar-fill {
+    height: 100%;
+    transition: width 0.35s ease;
+    border-radius: 9999px;
+  }
+  .v2-savings-bar-fill.gain {
+    background: linear-gradient(90deg, #10b981, #f59e0b);
+  }
+  .v2-savings-bar-fill.loss {
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+  }
+  .v2-savings-bar-hint {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  /* .ozet-container.v2-mode specific overrides */
+  .ozet-container.v2-mode {
+    max-width: 1100px;
+    gap: 1.5rem;
+    padding: 1.5rem;
+  }
+  .ozet-container.v2-mode .summary-card,
+  .ozet-container.v2-mode .chart-card,
+  .ozet-container.v2-mode .breakdown-card,
+  .ozet-container.v2-mode .dimension-group-card,
+  .ozet-container.v2-mode .instalment-card {
+    border-radius: 16px;
+    padding: 1.5rem;
+    background: var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .ozet-container.v2-mode .summary-card:hover,
+  .ozet-container.v2-mode .chart-card:hover,
+  .ozet-container.v2-mode .breakdown-card:hover,
+  .ozet-container.v2-mode .dimension-group-card:hover,
+  .ozet-container.v2-mode .instalment-card:hover {
+    border-color: rgba(245, 158, 11, 0.3);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.36);
+  }
+  .ozet-container.v2-mode .chart-title {
+    font-size: 1.25rem;
+    font-weight: 800;
+  }
+  .ozet-container.v2-mode .card-header h2 {
+    font-size: 1.4rem;
+    font-weight: 800;
+  }
+  .ozet-container.v2-mode .figure-label {
+    font-size: 0.88rem;
+  }
+  .ozet-container.v2-mode .figure-value {
+    font-size: 1.55rem;
+    font-weight: 800;
+  }
+  .ozet-container.v2-mode .cat-chip {
+    padding: 0.65rem 0.95rem;
+    border-radius: 12px;
+    font-size: 0.95rem;
+  }
+  .ozet-container.v2-mode .chip-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+  .ozet-container.v2-mode .chip-amount {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+  .ozet-container.v2-mode .chip-pct {
+    font-size: 0.88rem;
+  }
+  .ozet-container.v2-mode .detail-cat-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+  }
+  .ozet-container.v2-mode .detail-total-val {
+    font-size: 1.35rem;
+    font-weight: 800;
+  }
+  .ozet-container.v2-mode .detail-tx-item {
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    font-size: 0.98rem;
+  }
+  .ozet-container.v2-mode .tx-desc {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .ozet-container.v2-mode .tx-amount {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .ozet-container.v2-mode .tx-date {
+    font-size: 0.88rem;
   }
 </style>

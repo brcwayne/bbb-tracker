@@ -151,3 +151,128 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ==========================================================================
+   V2 DESIGN SYSTEM ("Obsidyen & Kehribar — Komuta Merkezi")
+   ========================================================================== */
+
+html[data-ui='v2'] {
+  --bg: #0b0e14;
+  --surface: #131822;
+  --surface-2: #1c2433;
+  --surface-hover: #232d40;
+  --ink: #f3f0e6;
+  --ink-soft: #b0b8c8;
+  --ink-num: #f3f0e6;
+  --hairline: #263042;
+  --gain: #34d399;
+  --loss: #f87171;
+  --warn: #fbbf24;
+  --gold: #e8c07a;
+  --accent-defter: #38bdf8;
+  --row-hover: rgba(232, 192, 122, 0.08);
+  --card-radius: 16px;
+  --card-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.55);
+}
+
+html[data-ui='v2'][data-theme='light'] {
+  --bg: #f8f6f0;
+  --surface: #ffffff;
+  --surface-2: #f1ede4;
+  --surface-hover: #e9e4d8;
+  --ink: #181d27;
+  --ink-soft: #535862;
+  --ink-num: #181d27;
+  --hairline: #e2dcd2;
+  --gain: #059669;
+  --loss: #dc2626;
+  --warn: #d97706;
+  --gold: #b48228;
+  --accent-defter: #0284c7;
+  --row-hover: rgba(180, 130, 40, 0.08);
+  --card-radius: 16px;
+  --card-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.08);
+}
+
+html[data-ui='v2'] body {
+  font-size: 1rem;
+  line-height: 1.6;
+  padding-bottom: 6.5rem;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* V2 Table legibility */
+html[data-ui='v2'] table th,
+html[data-ui='v2'] table td {
+  padding: 0.75rem 0.9rem;
+  font-size: 0.95rem;
+}
+
+html[data-ui='v2'] thead th {
+  font-size: 0.88rem;
+  letter-spacing: 0.03em;
+}
+
+/* Ensure no text falls below 0.85rem (15px @ 18px root) in V2 */
+html[data-ui='v2'] .stamp,
+html[data-ui='v2'] .ratenote,
+html[data-ui='v2'] small,
+html[data-ui='v2'] .badge,
+html[data-ui='v2'] .helper,
+html[data-ui='v2'] .sec-sub,
+html[data-ui='v2'] .card-sub {
+  font-size: 0.85rem;
+}
+
+/* Form controls & buttons in V2 */
+html[data-ui='v2'] input,
+html[data-ui='v2'] select,
+html[data-ui='v2'] textarea {
+  border-radius: 8px;
+  border-color: var(--hairline);
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 0.45rem 0.7rem;
+  font-size: 0.95rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+html[data-ui='v2'] input:focus,
+html[data-ui='v2'] select:focus,
+html[data-ui='v2'] textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(232, 192, 122, 0.25);
+}
+
+/* Cards & containers in V2 */
+html[data-ui='v2'] .card,
+html[data-ui='v2'] .box,
+html[data-ui='v2'] .panel,
+html[data-ui='v2'] .dt-wrap {
+  border-radius: var(--card-radius);
+}
+
+html[data-ui='v2'] .card,
+html[data-ui='v2'] .kpi-card,
+html[data-ui='v2'] .summary-card {
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+
+/* View Transitions API */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.22s;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
+}
+

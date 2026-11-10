@@ -14,6 +14,7 @@
   import EmptyState from './lib/ui/EmptyState.svelte'
   import ConnectDrive from './lib/ui/ConnectDrive.svelte'
   import HesapDegistir from './lib/ui/HesapDegistir.svelte'
+  import QuickActionDrawer from './lib/ui/QuickActionDrawer.svelte'
   import { createAppStore, load, pickSource, deriveAll } from './lib/data/store'
   import { DriveSource } from './lib/data/drive'
   import {
@@ -24,6 +25,7 @@
     PERIODS,
     periodRange,
     isLiveRate,
+    applyUiAttributes,
     type PeriodKey,
   } from './lib/settings.svelte'
   import { dateShort, tryFmt } from './lib/format'
@@ -56,6 +58,26 @@
   import UyariSeridi from './lib/ui/UyariSeridi.svelte'
   import { collectWarnings } from './lib/data/uyarilar'
 
+  const TAB_ICONS: Record<string, string> = {
+    panorama: '🧭',
+    portfoyler: '💼',
+    kurumlar: '🏛️',
+    pozisyonlar: '📊',
+    aylik: '📅',
+    banka: '🏦',
+    temettu: '🌱',
+    vergi: '⚖️',
+    ekle: '➕',
+    log: '📜',
+    'h-hesaplar': '💳',
+    'h-ozet': '📊',
+    'h-harcamalar': '🧾',
+    'h-taksitler': '🗓️',
+    'h-tekrarlar': '🔄',
+    'h-borclar': '🤝',
+    'h-kisiler': '👥',
+  }
+
   let cur = $state<CurrentRouteResult>(currentRoute())
   let route = $derived(cur.route)
   let volume = $derived(cur.volume)
@@ -63,9 +85,18 @@
   const source = pickSource()
   const drive = source instanceof DriveSource ? source : null
   onMount(() => {
+    applyUiAttributes()
     hydratePrices()
     load(store, source)
-    return onRouteChange((c) => (cur = c))
+    return onRouteChange((c) => {
+      if (settings.uiMode === 'v2' && typeof document !== 'undefined' && 'startViewTransition' in document) {
+        ;(document as any).startViewTransition(() => {
+          cur = c
+        })
+      } else {
+        cur = c
+      }
+    })
   })
   const pages: Record<string, any> = {
     panorama: Panorama,
@@ -250,11 +281,31 @@
   {/key}
 {/if}
 
-<nav class="tabs">
+<nav class="tabs" class:v2-dock={settings.uiMode === 'v2'}>
   {#each visibleRoutes(volume, $store.dataset?.people ?? []) as r}
-    <a href={r.path} class:active={r.id === route || (route === 'h-hesap' && r.id === 'h-hesaplar')}>{r.label}</a>
+    <a href={r.path} class:active={r.id === route || (route === 'h-hesap' && r.id === 'h-hesaplar')}>
+      {#if settings.uiMode === 'v2' && TAB_ICONS[r.id]}
+        <span aria-hidden="true" class="tab-icon">{TAB_ICONS[r.id]}</span>
+      {/if}
+      {r.label}
+    </a>
   {/each}
+  {#if settings.uiMode === 'v2'}
+    <button
+      type="button"
+      class="quick-action-btn"
+      data-testid="quick-drawer-btn"
+      onclick={() => (settings.quickDrawerOpen = true)}
+      title="Hızlı Kayıt Çekmecesini Aç"
+    >
+      <span aria-hidden="true" class="quick-icon">＋</span> Hızlı Kayıt
+    </button>
+  {/if}
 </nav>
+
+{#if settings.uiMode === 'v2'}
+  <QuickActionDrawer dataset={$store.dataset} view={activeDerived} {source} {store} {volume} />
+{/if}
 
 <style>
   .running {
@@ -408,6 +459,105 @@
     color: var(--ink);
     background: var(--bg);
     box-shadow: inset 0 2px 0 var(--gold);
+  }
+
+  /* V2 Floating Bottom Dock */
+  .tabs.v2-dock {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 1.15rem;
+    right: auto;
+    width: auto;
+    max-width: min(96vw, 1150px);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.35rem 0.55rem;
+    background: rgba(19, 24, 34, 0.88);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(232, 192, 122, 0.25);
+    border-radius: 9999px;
+    box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    z-index: 100;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs.v2-dock::-webkit-scrollbar {
+    display: none;
+  }
+  :global(html[data-ui='v2'][data-theme='light']) .tabs.v2-dock {
+    background: rgba(255, 255, 255, 0.94);
+    border-color: rgba(180, 130, 40, 0.25);
+    box-shadow: 0 14px 36px -6px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  }
+  .tabs.v2-dock a {
+    border: 0;
+    border-radius: 9999px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.88rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .tabs.v2-dock a:hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.06);
+  }
+  :global(html[data-ui='v2'][data-theme='light']) .tabs.v2-dock a:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+  .tabs.v2-dock a.active {
+    background: rgba(232, 192, 122, 0.18);
+    color: var(--gold);
+    box-shadow: none;
+    font-weight: 600;
+  }
+  :global(html[data-ui='v2'][data-theme='light']) .tabs.v2-dock a.active {
+    background: rgba(180, 130, 40, 0.14);
+    color: #926618;
+  }
+  .tab-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+  .quick-action-btn {
+    appearance: none;
+    border: 0;
+    background: linear-gradient(135deg, #e8c07a 0%, #caa050 100%);
+    color: #0b0e14;
+    font: inherit;
+    font-size: 0.86rem;
+    font-weight: 600;
+    padding: 0.45rem 0.95rem;
+    border-radius: 9999px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0.35rem;
+    white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(232, 192, 122, 0.4);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+    flex-shrink: 0;
+  }
+  .quick-action-btn:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(232, 192, 122, 0.55);
+  }
+  .quick-action-btn:active {
+    transform: translateY(0);
+  }
+  .quick-icon {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
   }
   :global(body) {
     padding-bottom: 2.75rem;

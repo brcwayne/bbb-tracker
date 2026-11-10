@@ -6,6 +6,7 @@
   import { accountGroups, netWorthBand } from '../../lib/data/accounts'
   import type { AccountRow } from '../../lib/data/accounts'
   import { fmtCurrency, todayLocalIso } from '../../lib/format'
+  import { settings } from '../../lib/settings.svelte'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
   import HesapFormu from './HesapFormu.svelte'
   import TransferFormu from './TransferFormu.svelte'
@@ -29,11 +30,41 @@
   let yeniHesapAcik = $state(false)
   let transferAcik = $state(false)
   let duzenlenenHesap = $state<PersonalAccount | null>(null)
+  let qHesap = $state('')
+  let activeGroupFilter = $state<string>('ALL')
+
+  const isV2 = $derived(Boolean((settings as any)?.uiMode === 'v2'))
 
   const accounts = $derived(dataset?.personalAccounts ?? [])
   const groups = $derived(
     accountGroups(dataset?.personalTx ?? [], accounts, today, { pasifDahil }),
   )
+
+  const visibleGroups = $derived.by(() => {
+    if (!isV2) return groups
+    let res = groups
+    if (activeGroupFilter !== 'ALL') {
+      res = res.filter((g) => g.tur === activeGroupFilter)
+    }
+    if (qHesap.trim()) {
+      const q = qHesap.trim().toLowerCase()
+      res = res
+        .map((g) => {
+          const matchingRows = g.satirlar.filter(
+            (r) =>
+              r.ad.toLowerCase().includes(q) ||
+              r.kod.toLowerCase().includes(q) ||
+              (r.banka && r.banka.toLowerCase().includes(q)),
+          )
+          return {
+            ...g,
+            satirlar: matchingRows,
+          }
+        })
+        .filter((g) => g.satirlar.length > 0)
+    }
+    return res
+  })
   const band = $derived(netWorthBand(groups))
   const paralar = $derived(Object.keys(band).sort())
 
@@ -82,7 +113,7 @@
   }
 </script>
 
-<div class="page-container">
+<div class="page-container" class:v2-mode={(settings as any)?.uiMode === 'v2'}>
   <header class="hesaplar-head">
     <h2>Hesaplar</h2>
     <div class="head-actions">
@@ -167,7 +198,92 @@
       {/each}
     </section>
 
-    {#each groups as g}
+    {#if (settings as any)?.uiMode === 'v2'}
+      <div class="v2-net-worth-enhancement">
+        {#each paralar as para}
+          {@const v = band[para].varliklar}
+          {@const b = Math.abs(band[para].borclar)}
+          {@const totalVol = v + b}
+          {@const vPct = totalVol > 0 ? Math.round((v / totalVol) * 100) : 100}
+          {@const bPct = 100 - vPct}
+          <div class="v2-ratio-bar-box">
+            <div class="v2-ratio-labels">
+              <span class="v2-ratio-title">Varlık & Borç Oran Dengesi ({para})</span>
+              <div class="v2-ratio-stats">
+                <span class="v2-ratio-stat gain">%{vPct} Varlık</span>
+                {#if b > 0}
+                  <span class="v2-ratio-sep">·</span>
+                  <span class="v2-ratio-stat loss">%{bPct} Borç</span>
+                {/if}
+              </div>
+            </div>
+            <div class="v2-progress-track">
+              <div class="v2-track-asset" style:width="{vPct}%"></div>
+              {#if b > 0}
+                <div class="v2-track-debt" style:width="{bPct}%"></div>
+              {/if}
+            </div>
+          </div>
+        {/each}
+
+        <div class="v2-hesap-toolbar">
+          <div class="v2-search-wrapper">
+            <span class="v2-search-icon">🔍</span>
+            <input
+              type="search"
+              class="v2-search-input"
+              placeholder="Hesap veya banka ara..."
+              bind:value={qHesap}
+            />
+            {#if qHesap}
+              <button
+                type="button"
+                class="v2-clear-btn"
+                onclick={() => (qHesap = '')}
+                aria-label="Aramayı temizle"
+              >✕</button>
+            {/if}
+          </div>
+
+          <div class="v2-group-pills">
+            <button
+              type="button"
+              class="v2-filter-pill"
+              class:active={activeGroupFilter === 'ALL'}
+              onclick={() => (activeGroupFilter = 'ALL')}
+            >
+              Tümü
+            </button>
+            <button
+              type="button"
+              class="v2-filter-pill"
+              class:active={activeGroupFilter === 'BANKA'}
+              onclick={() => (activeGroupFilter = activeGroupFilter === 'BANKA' ? 'ALL' : 'BANKA')}
+            >
+              Vadesiz & Banka
+            </button>
+            <button
+              type="button"
+              class="v2-filter-pill"
+              class:active={activeGroupFilter === 'KREDI_KARTI'}
+              onclick={() => (activeGroupFilter = activeGroupFilter === 'KREDI_KARTI' ? 'ALL' : 'KREDI_KARTI')}
+            >
+              Kredi Kartı
+            </button>
+            <button
+              type="button"
+              class="v2-filter-pill"
+              class:active={activeGroupFilter === 'NAKIT'}
+              onclick={() => (activeGroupFilter = activeGroupFilter === 'NAKIT' ? 'ALL' : 'NAKIT')}
+            >
+              Nakit
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#each visibleGroups as g}
       <section class="group" data-group={g.tur}>
         <header class="group-head">
           <h3>{g.baslik}</h3>
@@ -572,5 +688,233 @@
     margin-left: 0.45rem;
     color: var(--ink-soft);
     font-weight: 600;
+  }
+
+  /* =========================================================================
+     V2 KOMUTA MERKEZİ (OBSİDYEN & KEHRİBAR) STİLLERİ
+     ========================================================================= */
+  .v2-net-worth-enhancement {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: -0.25rem;
+  }
+  .v2-ratio-bar-box {
+    background: var(--surface, #12141a);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    border-radius: 14px;
+    padding: 0.9rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+  .v2-ratio-labels {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.88rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .v2-ratio-title {
+    color: var(--ink-soft);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .v2-ratio-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--font-num);
+    font-weight: 700;
+  }
+  .v2-ratio-stat.gain {
+    color: var(--gain, #10b981);
+  }
+  .v2-ratio-stat.loss {
+    color: var(--loss, #ef4444);
+  }
+  .v2-ratio-sep {
+    color: var(--ink-soft);
+    opacity: 0.5;
+  }
+  .v2-progress-track {
+    width: 100%;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 9999px;
+    overflow: hidden;
+    display: flex;
+  }
+  .v2-track-asset {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #059669);
+    transition: width 0.35s ease;
+  }
+  .v2-track-debt {
+    height: 100%;
+    background: linear-gradient(90deg, #ef4444, #dc2626);
+    transition: width 0.35s ease;
+  }
+
+  .v2-hesap-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    background: var(--surface, #12141a);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+  .v2-search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+  }
+  .v2-search-icon {
+    position: absolute;
+    left: 0.8rem;
+    font-size: 0.95rem;
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .v2-search-input {
+    width: 100%;
+    padding: 0.6rem 2.2rem 0.6rem 2.4rem;
+    background: var(--surface-2, #181b22);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    color: var(--ink);
+    font-size: 0.95rem;
+    outline: none;
+    transition: all 0.18s ease;
+  }
+  .v2-search-input:focus {
+    border-color: var(--gold, #f59e0b);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+    background: var(--surface);
+  }
+  .v2-clear-btn {
+    position: absolute;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-size: 0.88rem;
+    padding: 0.2rem 0.4rem;
+  }
+  .v2-clear-btn:hover {
+    color: var(--ink);
+  }
+  .v2-group-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+  .v2-filter-pill {
+    appearance: none;
+    background: var(--surface-2, #181b22);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    color: var(--ink-soft);
+    padding: 0.4rem 0.9rem;
+    border-radius: 9999px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .v2-filter-pill:hover {
+    color: var(--ink);
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.08);
+  }
+  .v2-filter-pill.active {
+    background: var(--gold, #f59e0b);
+    color: #0b0d11;
+    border-color: var(--gold, #f59e0b);
+    font-weight: 700;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+  }
+
+  /* .page-container.v2-mode specific overrides */
+  .page-container.v2-mode {
+    max-width: 880px;
+    gap: 1.5rem;
+    padding: 1.5rem;
+  }
+  .page-container.v2-mode .band {
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem;
+    background: var(--surface);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  }
+  .page-container.v2-mode .band-head {
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding-bottom: 0.6rem;
+  }
+  .page-container.v2-mode .band-row {
+    font-size: 1.25rem;
+    padding-top: 0.65rem;
+  }
+  .page-container.v2-mode .group {
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .page-container.v2-mode .group:hover {
+    border-color: rgba(245, 158, 11, 0.3);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.36);
+  }
+  .page-container.v2-mode .group-head {
+    padding: 0.95rem 1.35rem;
+  }
+  .page-container.v2-mode .group-head h3 {
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+  }
+  .page-container.v2-mode .group-total {
+    font-size: 1.05rem;
+  }
+  .page-container.v2-mode .bank-group-head {
+    padding: 0.85rem 1.35rem;
+    font-size: 1.02rem;
+  }
+  .page-container.v2-mode .bank-name {
+    font-size: 1.08rem;
+    font-weight: 700;
+  }
+  .page-container.v2-mode .bank-total {
+    font-size: 1.05rem;
+  }
+  .page-container.v2-mode .row {
+    min-height: 60px;
+    font-size: 1.05rem;
+    padding: 0.85rem 1.35rem;
+  }
+  .page-container.v2-mode .row-name {
+    font-size: 1.05rem;
+    font-weight: 600;
+  }
+  .page-container.v2-mode .num {
+    font-size: 1.15rem;
+  }
+  .page-container.v2-mode .sub {
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+  }
+  .page-container.v2-mode .currency-tag {
+    font-size: 0.82rem;
+    padding: 0.15rem 0.5rem;
   }
 </style>

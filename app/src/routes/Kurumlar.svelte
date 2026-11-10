@@ -43,7 +43,10 @@
   }
 
   let duzeltHesap = $state<string | null>(null)
+  let selectedBroker = $state<string>('ALL')
+  let brokerSearch = $state('')
   const isDrive = $derived(Boolean(source?.save))
+  const isV2 = $derived(Boolean((settings as any)?.uiMode === 'v2'))
 
   const splits = $derived(
     dataset ? cashSplitByHesap(dataset, settings.rate) : {},
@@ -68,6 +71,31 @@
         usdPerSilverGram: prices.usdPerSilverGram,
       },
     )
+  })
+
+  const visibleGroups = $derived.by<HoldingGroup[]>(() => {
+    if (!isV2) return groups
+    let res = groups
+    if (selectedBroker !== 'ALL') {
+      res = res.filter((g) => {
+        const kod = g.kod ?? findBrokerKod(g.key, dataset?.brokers ?? [])
+        return kod === selectedBroker || g.key === selectedBroker
+      })
+    }
+    if (brokerSearch.trim()) {
+      const q = brokerSearch.trim().toLowerCase()
+      res = res
+        .map((g) => ({
+          ...g,
+          rows: g.rows.filter(
+            (r) =>
+              r.kod.toLowerCase().includes(q) ||
+              (r.sinif && r.sinif.toLowerCase().includes(q)),
+          ),
+        }))
+        .filter((g) => g.rows.length > 0 || selectedBroker !== 'ALL')
+    }
+    return res
   })
 
   const topluSplit = $derived(splits['TOPLU'])
@@ -134,8 +162,62 @@
 </script>
 
 {#if dataset && view}
-  <section class="kurumlar">
+  <section class="kurumlar" class:v2-mode={(settings as any)?.uiMode === 'v2'}>
     <SectionHeader title="Kurumlar" />
+
+    {#if (settings as any)?.uiMode === 'v2'}
+      <div class="v2-kurum-controls">
+        <div class="v2-controls-header">
+          <div class="v2-controls-title">
+            <span class="v2-section-badge">⚡ OBSİDYEN & KEHRİBAR V2</span>
+            <h3 class="v2-heading">Kurum Komuta & Pozisyon Filtresi</h3>
+          </div>
+          <div class="v2-search-box">
+            <span class="v2-search-icon">🔍</span>
+            <input
+              type="search"
+              class="v2-search-input"
+              placeholder="Hisse veya sınıf ara..."
+              bind:value={brokerSearch}
+            />
+            {#if brokerSearch}
+              <button
+                type="button"
+                class="v2-clear-btn"
+                onclick={() => (brokerSearch = '')}
+                aria-label="Aramayı temizle"
+              >✕</button>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Quick Broker Pills -->
+        <div class="v2-broker-pills">
+          <button
+            type="button"
+            class="v2-broker-pill"
+            class:active={selectedBroker === 'ALL'}
+            onclick={() => (selectedBroker = 'ALL')}
+          >
+            <span class="pill-name">Tümü</span>
+            <span class="pill-val num">{money(summaryRows.reduce((acc, r) => acc + (r.deger ?? r.maliyet), 0))}</span>
+          </button>
+          {#each groups as g}
+            {@const kod = g.kod ?? findBrokerKod(g.key, dataset.brokers)}
+            {@const val = g.totalValueUsd ?? g.totalCostUsd}
+            <button
+              type="button"
+              class="v2-broker-pill"
+              class:active={selectedBroker === kod || selectedBroker === g.key}
+              onclick={() => (selectedBroker = (selectedBroker === kod || selectedBroker === g.key) ? 'ALL' : kod)}
+            >
+              <span class="pill-name">{g.key}</span>
+              <span class="pill-val num">{money(val)}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <!-- H7: Sayfa üstünde bir kez toplam nakit ve uyarı notu -->
     <div class="kurum-nakit-banner" data-testid="kurum-nakit-banner">
@@ -149,7 +231,7 @@
     </div>
 
     <DataTable columns={summaryCols} rows={summaryRows} initialSort={{ key: 'maliyet', dir: 'desc' }} />
-    {#each groups as g}
+    {#each visibleGroups as g}
       {@const kod = g.kod ?? findBrokerKod(g.key, dataset.brokers)}
       {@const split = splits[kod] ?? { tl: 0, usd: 0, totalUsd: 0 }}
       {@const isNegatif = split.totalUsd < -0.005}
@@ -404,5 +486,200 @@
   }
   .foot {
     margin-top: 1.5rem;
+  }
+
+  /* =========================================================================
+     V2 KOMUTA MERKEZİ (OBSİDYEN & KEHRİBAR) STİLLERİ
+     ========================================================================= */
+  .v2-kurum-controls {
+    margin-bottom: 1.75rem;
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.04) 0%, transparent 100%);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 18px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+  .v2-controls-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  .v2-controls-title {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .v2-section-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gold, #f59e0b);
+  }
+  .v2-heading {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--ink);
+  }
+  .v2-search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 260px;
+  }
+  .v2-search-icon {
+    position: absolute;
+    left: 0.75rem;
+    font-size: 0.95rem;
+    pointer-events: none;
+    opacity: 0.6;
+  }
+  .v2-search-input {
+    width: 100%;
+    padding: 0.55rem 2rem 0.55rem 2.25rem;
+    background: var(--surface-2, #181b22);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    color: var(--ink);
+    font-size: 0.95rem;
+    outline: none;
+    transition: all 0.18s ease;
+  }
+  .v2-search-input:focus {
+    border-color: var(--gold, #f59e0b);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+    background: var(--surface);
+  }
+  .v2-clear-btn {
+    position: absolute;
+    right: 0.6rem;
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+    font-size: 0.88rem;
+    padding: 0.2rem 0.4rem;
+  }
+  .v2-clear-btn:hover {
+    color: var(--ink);
+  }
+
+  .v2-broker-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .v2-broker-pill {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    background: var(--surface, #12141a);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    color: var(--ink);
+    padding: 0.45rem 0.95rem;
+    border-radius: 9999px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .v2-broker-pill:hover {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.08);
+  }
+  .v2-broker-pill.active {
+    background: var(--gold, #f59e0b);
+    color: #0b0d11;
+    border-color: var(--gold, #f59e0b);
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+    font-weight: 700;
+  }
+  .v2-broker-pill.active .pill-val {
+    color: #0b0d11;
+    opacity: 0.9;
+  }
+  .pill-val {
+    font-size: 0.88rem;
+    color: var(--gold, #f59e0b);
+    font-weight: 700;
+  }
+
+  /* .kurumlar.v2-mode specific overrides */
+  .kurumlar.v2-mode .panel {
+    border-radius: 16px;
+    padding: 1.25rem 1.5rem 1.5rem;
+    background: var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+    margin-bottom: 1.75rem;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .kurumlar.v2-mode .panel:hover {
+    border-color: rgba(245, 158, 11, 0.3);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.38);
+  }
+  .kurumlar.v2-mode .broker-cash-box {
+    border-radius: 12px;
+    padding: 0.5rem 1rem;
+    background: var(--surface-2);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    font-size: 1.05rem;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+  }
+  .kurumlar.v2-mode .cash-label {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--gold, #f59e0b);
+  }
+  .kurumlar.v2-mode .cash-badge {
+    font-size: 1.15rem;
+  }
+  .kurumlar.v2-mode .cash-total {
+    font-size: 0.95rem;
+  }
+  .kurumlar.v2-mode .kurum-nakit-banner {
+    border-radius: 14px;
+    padding: 1.1rem 1.35rem;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    background: rgba(239, 68, 68, 0.08);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  }
+  .kurumlar.v2-mode .banner-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .kurumlar.v2-mode .banner-title strong {
+    font-size: 1.3rem;
+    color: var(--gold, #f59e0b);
+  }
+  .kurumlar.v2-mode .banner-warn-tag {
+    font-size: 0.88rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 6px;
+  }
+  .kurumlar.v2-mode .btn-duzelt {
+    font-size: 0.88rem;
+    padding: 0.45rem 0.85rem;
+    border-radius: 8px;
+    border-color: rgba(245, 158, 11, 0.3);
+    background: rgba(245, 158, 11, 0.08);
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .kurumlar.v2-mode .badge-neg-nakit {
+    font-size: 0.88rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+  }
+  .kurumlar.v2-mode .hint,
+  .kurumlar.v2-mode .muted,
+  .kurumlar.v2-mode .foot {
+    font-size: 0.95rem;
   }
 </style>

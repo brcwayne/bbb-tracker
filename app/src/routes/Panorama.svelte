@@ -2,7 +2,7 @@
   import type { Dataset, SyncState } from '../lib/data/types'
   import type { DerivedBundle } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
-  import { pct, dateShort, dateTimeShort, DASH, monthLabel, todayLocalIso } from '../lib/format'
+  import { pct, lot, dateShort, dateTimeShort, DASH, monthLabel, todayLocalIso } from '../lib/format'
   import { money as formatMoney, settings, PERIODS } from '../lib/settings.svelte'
   import KpiBand from '../lib/ui/KpiBand.svelte'
   import SectionHeader from '../lib/ui/SectionHeader.svelte'
@@ -281,6 +281,24 @@
   ]
 
   let selectedSnapIdx = $state<number | null>(null)
+  let selectedAllocClass = $state<string | null>(null)
+
+  function toggleLatestWaterfall(sliceLen: number) {
+    if (selectedSnapIdx != null) {
+      selectedSnapIdx = null
+    } else {
+      selectedSnapIdx = sliceLen > 0 ? sliceLen - 1 : 0
+    }
+  }
+
+  function navigateToFilteredPositions(cls: string) {
+    try {
+      sessionStorage.setItem('bbb-v2-filter-class', cls)
+    } catch {
+      /* ignore */
+    }
+    window.location.hash = '#/pozisyonlar'
+  }
 
   function getWaterfall(
     ds: Dataset,
@@ -314,7 +332,8 @@
 {#if dataset && derived}
   {@const vm = buildView(dataset, derived)}
   {@const waterfall = getWaterfall(dataset, derived, vm.equityCurveSlice, vm.fullEquityCurve, selectedSnapIdx)}
-  <section class="panorama">
+  {@const isV2 = (settings as any)?.uiMode === 'v2'}
+  <section class="panorama" class:v2-mode={isV2}>
     <!-- Künye Şeridi (K7 / H2) -->
     <div class="meta-strip">
       <span>Kaynak: {vm.metaStrip.kaynak}</span>
@@ -338,6 +357,163 @@
       <span class="sep">·</span>
       <span data-testid="meta-sync">Senkron: {vm.metaStrip.senkron}</span>
     </div>
+
+    <!-- V2 Hero Bento Grid (Yalnızca settings.uiMode === 'v2') -->
+    {#if isV2}
+      {@const ytdObj = vm.periods.find((p) => p.period === 'YTD')}
+      {@const ytdNet = ytdObj?.netKzUsd ?? 0}
+      <div class="v2-panorama-hero" data-testid="v2-panorama-hero">
+        <!-- Sol Kart: Canlı Özkaynak & Performans -->
+        <div class="v2-hero-card v2-equity-card">
+          <div class="v2-card-head">
+            <div class="v2-badge-row">
+              <span class="v2-live-indicator"><span class="v2-pulse-dot"></span> CANLI ÖZKAYNAK</span>
+              {#if vm.unpricedInDeger}
+                <span class="v2-tag-warn">≈ Maliyet Bazlı</span>
+              {/if}
+            </div>
+            {#if Number.isFinite(ytdNet) && ytdNet !== 0}
+              <div class="v2-perf-pill" class:pos={ytdNet > 0} class:neg={ytdNet < 0}>
+                <span>{ytdNet > 0 ? '▲' : '▼'} {money(ytdNet, { sign: true })} YTD</span>
+              </div>
+            {/if}
+          </div>
+
+          <div class="v2-big-equity">
+            <span class="v2-equity-val">{vm.unpricedInDeger ? '≈ ' : ''}{money(vm.live.canliOzkaynakUsd)}</span>
+            {#if vm.ozet?.toplamGetiriPct != null}
+              <span class="v2-total-return" class:pos={vm.ozet.toplamGetiri > 0} class:neg={vm.ozet.toplamGetiri < 0}>
+                {vm.ozet.toplamGetiri > 0 ? '+' : ''}{pct(vm.ozet.toplamGetiriPct)} tüm zamanlar getiri
+              </span>
+            {/if}
+          </div>
+
+          <!-- 3 Hızlı Metrik -->
+          <div class="v2-metric-triad">
+            <div class="v2-metric-box">
+              <span class="v2-m-lbl">Açık K/Z (Unrealized)</span>
+              <span
+                class="v2-m-val num"
+                class:pos={(vm.ozet?.gerceklesmemisKz ?? 0) > 0}
+                class:neg={(vm.ozet?.gerceklesmemisKz ?? 0) < 0}
+              >
+                {vm.unpricedInDeger ? '≈ ' : ''}{vm.ozet?.gerceklesmemisKz == null ? DASH : money(vm.ozet.gerceklesmemisKz, { sign: true })}
+              </span>
+            </div>
+            <div class="v2-metric-box">
+              <span class="v2-m-lbl">Gerçekleşmiş Kâr</span>
+              <span
+                class="v2-m-val num"
+                class:pos={(vm.ozet?.gerceklesmisKz ?? 0) > 0}
+                class:neg={(vm.ozet?.gerceklesmisKz ?? 0) < 0}
+              >
+                {money(vm.ozet?.gerceklesmisKz ?? 0, { sign: true })}
+              </span>
+            </div>
+            <div class="v2-metric-box">
+              <span class="v2-m-lbl">Toplam Nakit & Oran</span>
+              <span class="v2-m-val num">
+                {money(vm.cashRatio.nakitVeFonParaUsd)}
+                <span class="v2-sub-val">({vm.cashRatio.nakitOrani == null ? DASH : pct(vm.cashRatio.nakitOrani)})</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Hızlı Şelale İncele Aksiyonu -->
+          <div class="v2-card-footer">
+            <button
+              type="button"
+              class="v2-action-btn"
+              onclick={() => toggleLatestWaterfall(vm.equityCurveSlice.length)}
+            >
+              <span>🔍 {selectedSnapIdx != null ? 'Şelale Dökümünü Kapat' : 'Bu Ayın Şelalesini (Waterfall) İncele'}</span>
+              <span class="v2-btn-arrow">→</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Sağ Kart: İnteraktif Varlık Dağılımı & Keşfet Çubuğu -->
+        <div class="v2-hero-card v2-alloc-card">
+          <div class="v2-card-head">
+            <div class="v2-badge-row">
+              <span class="v2-card-title">Varlık Dağılımı</span>
+              <span class="v2-tag-neutral">Tıkla & Keşfet</span>
+            </div>
+            <span class="v2-alloc-total num">{money(vm.alloc.toplamUsd)}</span>
+          </div>
+
+          <!-- İnteraktif Yığılmış Bar (Stacked Allocation Bar) -->
+          <div class="v2-stacked-bar" role="group" aria-label="Varlık Dağılım Çubuğu">
+            {#each vm.alloc.slices as sl, idx}
+              <button
+                type="button"
+                class="v2-bar-segment"
+                class:active={selectedAllocClass === sl.key}
+                style:width="{Math.max(sl.pay * 100, 2)}%"
+                style:background={CATEGORICAL[idx % CATEGORICAL.length]}
+                title="{sl.etiket}: {money(sl.tutarUsd)} ({pct(sl.pay)})"
+                onclick={() => (selectedAllocClass = selectedAllocClass === sl.key ? null : sl.key)}
+              ></button>
+            {/each}
+          </div>
+
+          <!-- Sınıf Butonları Izgarası -->
+          <div class="v2-class-pill-grid">
+            {#each vm.alloc.slices as sl, idx}
+              {@const isSelected = selectedAllocClass === sl.key}
+              <button
+                type="button"
+                class="v2-class-pill-btn"
+                class:active={isSelected}
+                onclick={() => (selectedAllocClass = isSelected ? null : sl.key)}
+              >
+                <span class="v2-pill-dot" style:background={CATEGORICAL[idx % CATEGORICAL.length]}></span>
+                <span class="v2-pill-name">{sl.etiket}</span>
+                <span class="v2-pill-pct">{pct(sl.pay)}</span>
+                <span class="v2-pill-usd num">{money(sl.tutarUsd)}</span>
+              </button>
+            {/each}
+          </div>
+
+          <!-- Seçilen Sınıf Mini Çekmecesi -->
+          {#if selectedAllocClass}
+            {@const chosenSlice = vm.alloc.slices.find((s) => s.key === selectedAllocClass)}
+            {@const classPositions = derived.positions.open.filter((p) => {
+              const inst = dataset.instruments.find((i) => i.kod === p.kod)
+              return (inst?.sinif ?? 'DİĞER') === selectedAllocClass && p.lot > 1e-9
+            })}
+            <div class="v2-alloc-drawer">
+              <div class="v2-drawer-head">
+                <div class="v2-drawer-info">
+                  <strong class="v2-drawer-title">{chosenSlice?.etiket ?? selectedAllocClass}</strong>
+                  <span class="v2-drawer-meta num">{chosenSlice ? money(chosenSlice.tutarUsd) : ''} · {chosenSlice ? pct(chosenSlice.pay) : ''}</span>
+                </div>
+                <button
+                  type="button"
+                  class="v2-filter-link"
+                  onclick={() => navigateToFilteredPositions(selectedAllocClass!)}
+                >
+                  Pozisyonlarda Filtrele →
+                </button>
+              </div>
+              {#if classPositions.length > 0}
+                <div class="v2-drawer-pos-list">
+                  {#each classPositions as cp}
+                    <span class="v2-drawer-pos-badge">
+                      <span class="v2-badge-sym">{cp.kod}</span>
+                      <span class="v2-badge-lot num">{lot(cp.lot)} lot</span>
+                      <span class="v2-badge-val num">{money(cp.toplamMaliyetUsd)}</span>
+                    </span>
+                  {/each}
+                </div>
+              {:else}
+                <p class="v2-drawer-empty">Bu sınıfta açık pozisyon (hisse/emtia) bulunmuyor (nakit veya bakiye).</p>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
     <!-- Blok 1: BU AY — <Ay Adı> (K5) -->
     {#if vm.month}
@@ -1024,5 +1200,421 @@
     margin-top: 0.35rem;
     margin-bottom: 0.5rem;
     font-style: italic;
+  }
+
+  /* =========================================================
+     V2 KOMUTA MERKEZİ (Obsidyen & Kehribar Bento)
+     ========================================================= */
+  .v2-panorama-hero {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+  }
+  @media (min-width: 860px) {
+    .v2-panorama-hero {
+      grid-template-columns: 1.15fr 1fr;
+    }
+  }
+
+  .v2-hero-card {
+    background: linear-gradient(145deg, rgba(26, 28, 34, 0.95), rgba(18, 19, 23, 0.98));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 1.5rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1.25rem;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .v2-hero-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(245, 158, 11, 0.3);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+  }
+
+  .v2-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .v2-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .v2-live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #10b981;
+  }
+  .v2-pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 10px #10b981;
+    animation: v2-pulse 2s infinite;
+  }
+  .v2-tag-warn {
+    font-size: 0.75rem;
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .v2-tag-neutral {
+    font-size: 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .v2-perf-pill {
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .v2-perf-pill.pos {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .v2-perf-pill.neg {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  .v2-big-equity {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .v2-equity-val {
+    font-size: 2.6rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: #f8fafc;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  }
+  .v2-total-return {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #94a3b8;
+  }
+  .v2-total-return.pos {
+    color: #10b981;
+  }
+  .v2-total-return.neg {
+    color: #ef4444;
+  }
+
+  .v2-metric-triad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 0.85rem;
+  }
+  .v2-metric-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+  .v2-m-lbl {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .v2-m-val {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    white-space: nowrap;
+  }
+  .v2-m-val.pos {
+    color: #10b981;
+  }
+  .v2-m-val.neg {
+    color: #ef4444;
+  }
+  .v2-sub-val {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: #94a3b8;
+    margin-left: 0.25rem;
+  }
+
+  .v2-card-footer {
+    margin-top: 0.25rem;
+  }
+  .v2-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 10px;
+    color: #fbbf24;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .v2-action-btn:hover {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: #fbbf24;
+    transform: translateX(2px);
+  }
+  .v2-btn-arrow {
+    font-size: 1.1rem;
+    transition: transform 0.2s ease;
+  }
+  .v2-action-btn:hover .v2-btn-arrow {
+    transform: translateX(3px);
+  }
+
+  .v2-card-title {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+  .v2-alloc-total {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #f59e0b;
+  }
+
+  .v2-stacked-bar {
+    display: flex;
+    height: 16px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 2px;
+    padding: 2px;
+  }
+  .v2-bar-segment {
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    border-radius: 4px;
+  }
+  .v2-bar-segment:hover,
+  .v2-bar-segment.active {
+    opacity: 1;
+    transform: scaleY(1.25);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+    z-index: 2;
+  }
+
+  .v2-class-pill-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.5rem;
+  }
+  .v2-class-pill-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 0.6rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .v2-class-pill-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+  .v2-class-pill-btn.active {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: #f59e0b;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+  }
+  .v2-pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-bottom: 0.2rem;
+  }
+  .v2-pill-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #f8fafc;
+  }
+  .v2-pill-pct {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fbbf24;
+  }
+  .v2-pill-usd {
+    font-size: 0.8125rem;
+    color: #94a3b8;
+  }
+
+  .v2-alloc-drawer {
+    background: rgba(15, 16, 20, 0.95);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    animation: v2-drawer-slide 0.25s ease-out;
+  }
+  .v2-drawer-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 0.5rem;
+  }
+  .v2-drawer-info {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  .v2-drawer-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #f8fafc;
+  }
+  .v2-drawer-meta {
+    font-size: 0.875rem;
+    color: #94a3b8;
+  }
+  .v2-filter-link {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid #f59e0b;
+    color: #fbbf24;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .v2-filter-link:hover {
+    background: #f59e0b;
+    color: #000;
+  }
+  .v2-drawer-pos-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .v2-drawer-pos-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.85rem;
+  }
+  .v2-badge-sym {
+    font-weight: 700;
+    color: #f8fafc;
+  }
+  .v2-badge-lot {
+    color: #94a3b8;
+    font-size: 0.8125rem;
+  }
+  .v2-badge-val {
+    color: #fbbf24;
+    font-weight: 600;
+  }
+  .v2-drawer-empty {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    font-style: italic;
+  }
+
+  /* Panorama V2 Mode Genel İyileştirmeleri */
+  .panorama.v2-mode {
+    max-width: 1040px;
+  }
+  .panorama.v2-mode .panel,
+  .panorama.v2-mode .waterfall-card {
+    border-radius: 16px;
+    padding: 1.5rem;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .panorama.v2-mode .panel:hover,
+  .panorama.v2-mode .waterfall-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  }
+  .panorama.v2-mode .mini dt {
+    font-size: 0.95rem;
+  }
+  .panorama.v2-mode .mini dd {
+    font-size: 1.15rem;
+  }
+  .panorama.v2-mode .mini dd.strong {
+    font-size: 1.75rem;
+  }
+  .panorama.v2-mode .mini div {
+    padding: 0.65rem 0;
+  }
+
+  @keyframes v2-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.4;
+      transform: scale(0.85);
+    }
+  }
+  @keyframes v2-drawer-slide {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 </style>

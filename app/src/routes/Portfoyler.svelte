@@ -17,6 +17,9 @@
   import EmptyState from '../lib/ui/EmptyState.svelte'
 
   let { dataset, view }: { dataset?: Dataset; view?: DerivedBundle } = $props()
+  let selectedPortfolio = $state<string>('ALL')
+
+  const isV2 = $derived(Boolean((settings as any)?.uiMode === 'v2'))
 
   const positionsByBroker = $derived.by(() => {
     if (!dataset) return new Map<string, OpenPosition[]>()
@@ -65,6 +68,12 @@
       usdPerGram: prices.usdPerGram,
     })
   })
+
+  const visibleGroups = $derived(
+    isV2 && selectedPortfolio !== 'ALL'
+      ? groups.filter((g) => g.key === selectedPortfolio)
+      : groups,
+  )
 
   const portfoyLedger = $derived.by(() => {
     if (!dataset) return null
@@ -335,8 +344,97 @@
 {/snippet}
 
 {#if dataset && view}
-  <section class="portfoyler">
+  <section class="portfoyler" class:v2-mode={(settings as any)?.uiMode === 'v2'}>
     <SectionHeader title="Portföyler" />
+
+    {#if (settings as any)?.uiMode === 'v2'}
+      <div class="v2-bento-section">
+        <div class="v2-bento-header">
+          <div class="v2-bento-title-row">
+            <span class="v2-section-badge">⚡ OBSİDYEN & KEHRİBAR V2</span>
+            <h3 class="v2-bento-title">Portföy Performans Bento</h3>
+          </div>
+          <div class="v2-filter-pills">
+            <button
+              type="button"
+              class="v2-pill"
+              class:active={selectedPortfolio === 'ALL'}
+              onclick={() => (selectedPortfolio = 'ALL')}
+            >
+              Tümü ({summaries.length})
+            </button>
+            {#each summaries as s}
+              <button
+                type="button"
+                class="v2-pill"
+                class:active={selectedPortfolio === s.kod}
+                onclick={() => (selectedPortfolio = s.kod)}
+              >
+                {s.kod}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <div class="v2-bento-grid">
+          {#each summaries as s}
+            {@const isSelected = selectedPortfolio === s.kod}
+            <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+            <div
+              class="v2-bento-card"
+              class:selected={isSelected}
+              role="button"
+              tabindex="0"
+              onclick={() => { selectedPortfolio = selectedPortfolio === s.kod ? 'ALL' : s.kod }}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { selectedPortfolio = selectedPortfolio === s.kod ? 'ALL' : s.kod } }}
+            >
+              <div class="v2-card-head">
+                <div class="v2-card-name-group">
+                  <strong class="v2-card-kod">{s.kod}</strong>
+                  {#if s.ad && s.ad !== s.kod}<span class="v2-card-ad">{s.ad}</span>{/if}
+                </div>
+                {#if s.isSaklama}
+                  <span class="v2-badge-saklama">Saklama</span>
+                {:else}
+                  <span class="v2-kz-badge" class:gain={s.toplamKz > 0} class:loss={s.toplamKz < 0}>
+                    {money(s.toplamKz, { sign: true })}
+                  </span>
+                {/if}
+              </div>
+
+              <div class="v2-card-body">
+                <div class="v2-stat-row">
+                  <span class="v2-stat-label">Açık Değer</span>
+                  <span class="v2-stat-val num">{money(s.acikDegerUsd)}</span>
+                </div>
+                <div class="v2-stat-row">
+                  <span class="v2-stat-label">Getiri %</span>
+                  <span class="v2-stat-val num" class:gain={(s.getiriPct ?? 0) > 0} class:loss={(s.getiriPct ?? 0) < 0}>
+                    {s.getiriPct != null ? pct(s.getiriPct, 1) : DASH}
+                  </span>
+                </div>
+              </div>
+
+              {#if !s.isSaklama}
+                <div class="v2-winrate-box">
+                  <div class="v2-winrate-labels">
+                    <span class="v2-wr-text">İsabet Oranı (Win Rate)</span>
+                    <span class="v2-wr-pct num">{s.winRate != null ? `%${(s.winRate * 100).toFixed(0)}` : '—'}</span>
+                  </div>
+                  <div class="v2-progress-bg">
+                    <div
+                      class="v2-progress-fill"
+                      style:width="{s.winRate != null ? Math.min(100, Math.max(0, s.winRate * 100)) : 0}%"
+                    ></div>
+                  </div>
+                  <div class="v2-trade-count num">{s.salesCount} işlem</div>
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     <!-- Genel özet: Tüm portföyleri karşılaştıran performans tablosu -->
     <div class="summary-card">
@@ -419,7 +517,7 @@
       {/if}
     </div>
 
-    {#each groups as g}
+    {#each visibleGroups as g}
       {@const p = summaryByKod.get(g.key)}
       <div class="panel">
         <div class="panel-header">
@@ -849,5 +947,284 @@
     font-size: 0.8125rem;
     color: var(--ink-soft);
     margin: 0;
+  }
+
+  /* =========================================================================
+     V2 KOMUTA MERKEZİ (OBSİDYEN & KEHRİBAR) STİLLERİ
+     ========================================================================= */
+  .v2-bento-section {
+    margin-bottom: 1.75rem;
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.04) 0%, transparent 100%);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 18px;
+    padding: 1.25rem 1.5rem 1.5rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+  .v2-bento-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  .v2-bento-title-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .v2-section-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gold, #f59e0b);
+  }
+  .v2-bento-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--ink);
+  }
+  .v2-filter-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .v2-pill {
+    appearance: none;
+    background: var(--surface-2, #181b22);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    color: var(--ink-soft);
+    padding: 0.4rem 0.85rem;
+    border-radius: 9999px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .v2-pill:hover {
+    color: var(--ink);
+    border-color: rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.08);
+  }
+  .v2-pill.active {
+    background: var(--gold, #f59e0b);
+    color: #0b0d11;
+    border-color: var(--gold, #f59e0b);
+    font-weight: 700;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+  }
+
+  .v2-bento-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1.15rem;
+  }
+  .v2-bento-card {
+    background: var(--surface, #12141a);
+    border: 1px solid var(--hairline, rgba(255, 255, 255, 0.08));
+    border-radius: 14px;
+    padding: 1.15rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    outline: none;
+  }
+  .v2-bento-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+  .v2-bento-card.selected {
+    border-color: var(--gold, #f59e0b);
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.28);
+    background: linear-gradient(160deg, var(--surface, #12141a) 60%, rgba(245, 158, 11, 0.08));
+  }
+  .v2-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .v2-card-name-group {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  .v2-card-kod {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .v2-card-ad {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+  .v2-badge-saklama {
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 6px;
+    background: rgba(234, 179, 8, 0.15);
+    color: var(--gold, #f59e0b);
+    border: 1px solid rgba(234, 179, 8, 0.35);
+  }
+  .v2-kz-badge {
+    font-size: 0.92rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    font-family: var(--font-num);
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .v2-kz-badge.gain {
+    color: var(--gain, #10b981);
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .v2-kz-badge.loss {
+    color: var(--loss, #ef4444);
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+
+  .v2-card-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-top: 1px solid var(--hairline, rgba(255, 255, 255, 0.06));
+    border-bottom: 1px solid var(--hairline, rgba(255, 255, 255, 0.06));
+  }
+  .v2-stat-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+  .v2-stat-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .v2-stat-val {
+    font-size: 1.12rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .v2-winrate-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+  .v2-winrate-labels {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 0.82rem;
+  }
+  .v2-wr-text {
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .v2-wr-pct {
+    color: var(--gold, #f59e0b);
+    font-weight: 700;
+  }
+  .v2-progress-bg {
+    width: 100%;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+  .v2-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #d97706, #fbbf24);
+    border-radius: 9999px;
+    transition: width 0.35s ease;
+  }
+  .v2-trade-count {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    text-align: right;
+  }
+
+  /* V2 Typography and Card Elevation in .v2-mode */
+  .portfoyler.v2-mode .summary-card,
+  .portfoyler.v2-mode .panel {
+    border-radius: 16px;
+    padding: 1.5rem;
+    background: var(--surface);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .portfoyler.v2-mode .summary-card:hover,
+  .portfoyler.v2-mode .panel:hover {
+    border-color: rgba(245, 158, 11, 0.3);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.38);
+  }
+
+  .portfoyler.v2-mode .summary-header h3 {
+    font-size: 1.25rem;
+    font-weight: 800;
+  }
+  .portfoyler.v2-mode .summary-sub {
+    font-size: 0.95rem;
+  }
+  .portfoyler.v2-mode .summary-table,
+  .portfoyler.v2-mode .subtable {
+    font-size: 0.95rem;
+  }
+  .portfoyler.v2-mode .summary-table th,
+  .portfoyler.v2-mode .subtable th {
+    font-size: 0.88rem;
+    padding: 0.65rem 0.75rem;
+  }
+  .portfoyler.v2-mode .summary-table td,
+  .portfoyler.v2-mode .subtable td {
+    padding: 0.65rem 0.75rem;
+  }
+  .portfoyler.v2-mode .ph-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+  }
+  .portfoyler.v2-mode .ph-kz {
+    font-size: 1.15rem;
+  }
+  .portfoyler.v2-mode .ph-line {
+    font-size: 0.95rem;
+    gap: 0.6rem;
+  }
+  .portfoyler.v2-mode .pie-toggle {
+    font-size: 0.95rem;
+    padding: 0.5rem 0;
+  }
+  .portfoyler.v2-mode .pie-label {
+    font-size: 0.92rem;
+  }
+  .portfoyler.v2-mode .hint,
+  .portfoyler.v2-mode .muted,
+  .portfoyler.v2-mode .closed-trades-summary {
+    font-size: 0.92rem;
+  }
+  .portfoyler.v2-mode .bd-card {
+    border-radius: 12px;
+    padding: 0.65rem 0.95rem;
+  }
+  .portfoyler.v2-mode .bd-title {
+    font-size: 0.95rem;
+  }
+  .portfoyler.v2-mode .bd-lot {
+    font-size: 1.1rem;
   }
 </style>

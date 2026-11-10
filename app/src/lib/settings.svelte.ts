@@ -4,6 +4,8 @@ import { DASH, usd, tryFmt, todayLocalIso } from './format'
 export type Currency = 'USD' | 'TRY'
 export type PeriodKey = 'all' | 'ytd' | '1y' | '6m' | '3m' | '1m'
 export type Basis = 'maliyet' | 'deger'
+export type UiMode = 'classic' | 'v2'
+export type FontScale = 16 | 18 | 20
 
 export const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: 'all', label: 'Tümü' },
@@ -40,10 +42,41 @@ export const settings = $state({
     const p = pref('bbb-period')
     return (PERIODS.find((x) => x.key === p)?.key ?? 'all') as PeriodKey
   })(),
+  uiMode: (pref('bbb-ui-mode') === 'v2' ? 'v2' : 'classic') as UiMode,
+  fontScale: (Number(pref('bbb-font-scale')) === 16 ? 16 : Number(pref('bbb-font-scale')) === 20 ? 20 : 18) as FontScale,
+  quickDrawerOpen: false,
   rate: 1,
   eurRate: 0,
   rateDate: '',
 })
+
+export function setUiMode(m: UiMode) {
+  settings.uiMode = m
+  save('bbb-ui-mode', m)
+  applyUiAttributes()
+}
+
+export function toggleUiMode() {
+  setUiMode(settings.uiMode === 'v2' ? 'classic' : 'v2')
+}
+
+export function setFontScale(s: FontScale) {
+  settings.fontScale = s
+  save('bbb-font-scale', String(s))
+  applyUiAttributes()
+}
+
+export function applyUiAttributes(): void {
+  if (typeof document !== 'undefined') {
+    if (settings.uiMode === 'v2') {
+      document.documentElement.setAttribute('data-ui', 'v2')
+      document.documentElement.style.fontSize = settings.fontScale + 'px'
+    } else {
+      document.documentElement.removeAttribute('data-ui')
+      document.documentElement.style.removeProperty('font-size')
+    }
+  }
+}
 
 export function setCurrency(c: Currency) {
   settings.currency = c

@@ -3,8 +3,9 @@
   import type { DerivedBundle, AppState } from '../lib/data/store'
   import type { DataSource } from '../lib/data/source'
   import type { Writable } from 'svelte/store'
+  import { onMount } from 'svelte'
   import { pct, lot, dateShort, DASH } from '../lib/format'
-  import { money } from '../lib/settings.svelte'
+  import { money, settings } from '../lib/settings.svelte'
   import { prices } from '../lib/prices.svelte'
   import { unrealizedByKod } from '../lib/data/unrealized'
   import { buildLedger, dayDiff } from '../lib/data/ledger'
@@ -35,6 +36,21 @@
   let fClass = $state('')
   let fPortfoy = $state('')
   let fHesap = $state('')
+  let qSearch = $state('')
+  let viewLayout = $state<'table' | 'cards'>('table')
+  let expandedCardKod = $state<string | null>(null)
+
+  onMount(() => {
+    try {
+      const savedClass = sessionStorage.getItem('bbb-v2-filter-class')
+      if (savedClass) {
+        fClass = savedClass
+        sessionStorage.removeItem('bbb-v2-filter-class')
+      }
+    } catch {
+      /* ignore */
+    }
+  })
 
   const distinct = (xs: string[]) => [...new Set(xs)]
 
@@ -255,12 +271,19 @@
     cls: string,
     prt: string,
     hsp: string,
+    q = '',
   ): OpenRow[] {
+    const qNorm = q.trim().toLowerCase()
     return rows.filter(
       (r) =>
         (cls === '' || r.sinif === cls) &&
         (prt === '' || r.portfoyler.includes(prt) || r.portfoy === prt) &&
-        (hsp === '' || r.hesaplar.includes(hsp) || r.hesap === hsp),
+        (hsp === '' || r.hesaplar.includes(hsp) || r.hesap === hsp) &&
+        (!qNorm ||
+          r.kod.toLowerCase().includes(qNorm) ||
+          r.portfoy.toLowerCase().includes(qNorm) ||
+          r.hesap.toLowerCase().includes(qNorm) ||
+          r.sinif.toLowerCase().includes(qNorm)),
     )
   }
 
@@ -545,15 +568,72 @@
 
 {#if dataset && derived}
   {@const vm = buildView(dataset, derived)}
-  {@const openFiltered = applyFilters(vm.openRows, fClass, fPortfoy, fHesap)}
-  <section class="pozisyonlar">
+  {@const isV2 = (settings as any)?.uiMode === 'v2'}
+  {@const openFiltered = applyFilters(vm.openRows, fClass, fPortfoy, fHesap, qSearch)}
+  <section class="pozisyonlar" class:v2-mode={isV2}>
     <SectionHeader title="Pozisyonlar" />
 
     <KpiBand items={vm.statItems} />
 
     <SectionHeader title="Açık pozisyonlar" note={`${openFiltered.length} kayıt`} />
 
+    {#if isV2}
+      <!-- V2 Hızlı Sınıf Hapları ve Görünüm Seçici -->
+      <div class="v2-filter-toolbar" data-testid="v2-positions-toolbar">
+        <div class="v2-pills-row" role="group" aria-label="Sınıf Hızlı Filtreleri">
+          <button
+            type="button"
+            class="v2-filter-pill"
+            class:active={fClass === ''}
+            onclick={() => (fClass = '')}
+          >
+            Tümü <span class="v2-pill-cnt">{vm.openRows.length}</span>
+          </button>
+          {#each vm.classOptions as opt}
+            {@const cnt = vm.openRows.filter((r) => r.sinif === opt).length}
+            <button
+              type="button"
+              class="v2-filter-pill"
+              class:active={fClass === opt}
+              onclick={() => (fClass = fClass === opt ? '' : opt)}
+            >
+              {opt} <span class="v2-pill-cnt">{cnt}</span>
+            </button>
+          {/each}
+        </div>
+
+        <div class="v2-layout-toggle" data-testid="view-toggle">
+          <button
+            type="button"
+            class="v2-toggle-btn"
+            class:active={viewLayout === 'table'}
+            onclick={() => (viewLayout = 'table')}
+          >
+            📋 Tablo Görünümü
+          </button>
+          <button
+            type="button"
+            class="v2-toggle-btn"
+            class:active={viewLayout === 'cards'}
+            onclick={() => (viewLayout = 'cards')}
+          >
+            🎴 Bento Kart Görünümü
+          </button>
+        </div>
+      </div>
+    {/if}
+
     <div class="filters">
+      <div class="flt flt-search">
+        <label for="flt-search">Ara</label>
+        <input
+          id="flt-search"
+          type="search"
+          placeholder="Sembol, portföy veya kurum ara..."
+          aria-label="Pozisyon ara"
+          bind:value={qSearch}
+        />
+      </div>
       <div class="flt">
         <label for="flt-class">Sınıf</label>
         <select id="flt-class" bind:value={fClass}>
@@ -577,7 +657,8 @@
       </div>
     </div>
 
-    <div data-testid="open-table">
+    <!-- Açık Pozisyonlar Tablo Görünümü (Mevcut test uyumluluğu için DOM'da korunur) -->
+    <div data-testid="open-table" style:display={isV2 && viewLayout === 'cards' ? 'none' : 'block'}>
       <DataTable
         columns={openColumns}
         rows={openFiltered}
@@ -586,6 +667,109 @@
         rowKey={(r) => r.kod}
       />
     </div>
+
+    <!-- V2 Bento Pozisyon Kartları Görünümü -->
+    {#if isV2 && viewLayout === 'cards'}
+      <div class="v2-bento-grid" data-testid="v2-bento-cards">
+        {#if openFiltered.length === 0}
+          <div class="v2-empty-cards">
+            Aramanıza veya seçili filtrelere uygun açık pozisyon bulunamadı.
+          </div>
+        {:else}
+          {#each openFiltered as r (r.kod)}
+            <div class="v2-pos-card" class:expanded={expandedCardKod === r.kod}>
+              <div class="v2-card-top">
+                <div class="v2-card-info">
+                  <div class="v2-card-sym-row">
+                    <span class="v2-card-symbol">{r.kod}</span>
+                    <span class="v2-class-tag">{r.sinif}</span>
+                  </div>
+                  <div class="v2-card-meta">
+                    <span>{r.portfoy}</span>
+                    <span class="v2-sep">·</span>
+                    <span>{r.hesap}</span>
+                  </div>
+                </div>
+
+                <div class="v2-card-kz-box">
+                  {#if r.gerceklesmemisKz != null}
+                    <div
+                      class="v2-card-kz-badge"
+                      class:pos={r.gerceklesmemisKz > 0}
+                      class:neg={r.gerceklesmemisKz < 0}
+                    >
+                      <span class="v2-kz-arrow">{r.gerceklesmemisKz > 0 ? '▲' : r.gerceklesmemisKz < 0 ? '▼' : '—'}</span>
+                      <span class="v2-kz-num">{money(r.gerceklesmemisKz, { sign: true })}</span>
+                      {#if r.gerceklesmemisPct != null}
+                        <span class="v2-kz-pct">({pct(r.gerceklesmemisPct)})</span>
+                      {/if}
+                    </div>
+                  {:else}
+                    <span class="v2-card-kz-dash" title="Fiyat bekleniyor">—</span>
+                  {/if}
+                </div>
+              </div>
+
+              <!-- Fiyat & Maliyet Izgarası -->
+              <div class="v2-card-metrics">
+                <div class="v2-c-metric">
+                  <span class="v2-c-lbl">Güncel Fiyat</span>
+                  <span class="v2-c-val num strong">{r.guncelFiyat != null ? money(r.guncelFiyat) : '—'}</span>
+                </div>
+                <div class="v2-c-metric">
+                  <span class="v2-c-lbl">Ort. Maliyet</span>
+                  <span class="v2-c-val num">{money(r.ortMaliyetUsd)}</span>
+                </div>
+                <div class="v2-c-metric">
+                  <span class="v2-c-lbl">Toplam Maliyet</span>
+                  <span class="v2-c-val num">{money(r.toplamMaliyetUsd)}</span>
+                </div>
+                <div class="v2-c-metric">
+                  <span class="v2-c-lbl">Lot</span>
+                  <span class="v2-c-val num">{lot(r.lot)}</span>
+                </div>
+              </div>
+
+              <!-- Portföy Payı Çubuğu -->
+              <div class="v2-card-pay-wrap">
+                <div class="v2-pay-label-row">
+                  <span class="v2-pay-title">Portföydeki Payı</span>
+                  <span class="v2-pay-val num">{pct(r.pay)}</span>
+                </div>
+                <div class="v2-pay-track">
+                  <div
+                    class="v2-pay-bar"
+                    style:width="{Math.max(Math.min(r.pay * 100, 100), 2)}%"
+                  ></div>
+                </div>
+              </div>
+
+              <!-- Seviyeler -->
+              {#if r.seviye && r.seviye !== DASH}
+                <div class="v2-card-levels">
+                  {@html r.seviye}
+                </div>
+              {/if}
+
+              <!-- Detay / Genişleme Butonu -->
+              <button
+                type="button"
+                class="v2-card-expand-btn"
+                onclick={() => (expandedCardKod = expandedCardKod === r.kod ? null : r.kod)}
+              >
+                <span>{expandedCardKod === r.kod ? '▲ İşlem Geçmişini Kapat' : '▼ İşlem Geçmişi & Seviye Yönet'}</span>
+              </button>
+
+              {#if expandedCardKod === r.kod}
+                <div class="v2-card-detail-body">
+                  {@render rowTxns(r)}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        {/if}
+      </div>
+    {/if}
 
     <!-- H6 Tutma Süresi Dağılımı Paneli -->
     <div class="holding-panel" data-testid="holding-panel">
@@ -1021,5 +1205,322 @@
     background: rgba(34, 197, 94, 0.15);
     color: var(--gain);
     border: 1px solid rgba(34, 197, 94, 0.35);
+  }
+
+  /* =========================================================
+     V2 KOMUTA MERKEZİ - POZİSYONLAR
+     ========================================================= */
+  .flt.flt-search {
+    flex: 1 1 200px;
+    max-width: 320px;
+  }
+  .flt.flt-search input[type='search'] {
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.875rem;
+  }
+  .flt.flt-search input[type='search']:focus {
+    outline: none;
+    border-color: var(--gold, #f59e0b);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  }
+
+  .v2-filter-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin: 0.75rem 0 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+  }
+
+  .v2-pills-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .v2-filter-pill {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--hairline);
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: all 0.15s ease;
+  }
+  .v2-filter-pill:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--ink);
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+  .v2-filter-pill.active {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: #f59e0b;
+    color: #fbbf24;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+  }
+  .v2-pill-cnt {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    font-weight: 500;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+  }
+
+  .v2-layout-toggle {
+    display: inline-flex;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .v2-toggle-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .v2-toggle-btn.active {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.4);
+  }
+
+  .v2-bento-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .v2-pos-card {
+    background: linear-gradient(145deg, rgba(26, 28, 34, 0.95), rgba(18, 19, 23, 0.98));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .v2-pos-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(245, 158, 11, 0.35);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+  }
+  .v2-pos-card.expanded {
+    border-color: #f59e0b;
+    box-shadow: 0 12px 32px rgba(245, 158, 11, 0.15);
+  }
+
+  .v2-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .v2-card-sym-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .v2-card-symbol {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: -0.01em;
+  }
+  .v2-class-tag {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+  }
+  .v2-card-meta {
+    font-size: 0.8125rem;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.15rem;
+  }
+  .v2-sep {
+    color: var(--hairline);
+  }
+
+  .v2-card-kz-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .v2-card-kz-badge.pos {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+  .v2-card-kz-badge.neg {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .v2-card-kz-dash {
+    color: #64748b;
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+  .v2-kz-pct {
+    font-size: 0.8125rem;
+    opacity: 0.9;
+  }
+
+  .v2-card-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.4rem;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 0.75rem 0.6rem;
+  }
+  .v2-c-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+  .v2-c-lbl {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .v2-c-val {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+  }
+  .v2-c-val.strong {
+    font-weight: 700;
+    color: #fbbf24;
+  }
+
+  .v2-card-pay-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .v2-pay-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8125rem;
+    color: #94a3b8;
+  }
+  .v2-pay-track {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+  .v2-pay-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  }
+
+  .v2-card-levels {
+    font-size: 0.8125rem;
+    padding: 0.4rem 0.6rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+  }
+
+  .v2-card-expand-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 0.5rem;
+    color: #fbbf24;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s ease;
+  }
+  .v2-card-expand-btn:hover {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+
+  .v2-card-detail-body {
+    background: var(--bg);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 0.5rem;
+    margin-top: 0.25rem;
+  }
+
+  .v2-empty-cards {
+    grid-column: 1 / -1;
+    padding: 2.5rem;
+    text-align: center;
+    color: var(--ink-soft);
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px dashed var(--hairline);
+    font-size: 0.95rem;
+  }
+
+  /* Pozisyonlar V2 Mode Genel İyileştirmeleri */
+  .pozisyonlar.v2-mode .flt label {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .pozisyonlar.v2-mode .flt select,
+  .pozisyonlar.v2-mode .flt input {
+    padding: 0.4rem 0.65rem;
+    font-size: 0.9375rem;
+    border-radius: 8px;
+  }
+  .pozisyonlar.v2-mode .holding-panel {
+    border-radius: 16px;
+    padding: 1.5rem;
+    border: 1px solid var(--hairline);
+  }
+  .pozisyonlar.v2-mode .holding-comment {
+    font-size: 0.95rem;
+    line-height: 1.5;
   }
 </style>

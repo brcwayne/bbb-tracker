@@ -7,12 +7,19 @@ import {
   applyLiveRate,
   initRate,
   isLiveRate,
+  setUiMode,
+  toggleUiMode,
+  setFontScale,
+  applyUiAttributes,
 } from './settings.svelte'
 
 beforeEach(() => {
   settings.currency = 'USD'
   settings.rate = 40
   settings.rateDate = '2026-08-27'
+  setUiMode('classic')
+  setFontScale(18)
+  settings.quickDrawerOpen = false
 })
 
 describe('money()', () => {
@@ -77,5 +84,44 @@ describe('basis setting and persistence (H8)', () => {
     expect(settings.basis).toBe('maliyet')
     setBasis('deger')
     expect(settings.basis).toBe('deger')
+  })
+})
+
+describe('uiMode and fontScale (V2 Komuta Merkezi)', () => {
+  it('defaults to classic and 18px fontScale', () => {
+    expect(settings.uiMode).toBe('classic')
+    expect(settings.fontScale).toBe(18)
+    expect(settings.quickDrawerOpen).toBe(false)
+  })
+
+  it('setUiMode and toggleUiMode switch between classic and v2', () => {
+    setUiMode('v2')
+    expect(settings.uiMode).toBe('v2')
+    expect(localStorage.getItem('bbb-ui-mode')).toBe('v2')
+    expect(document.documentElement.getAttribute('data-ui')).toBe('v2')
+    expect(document.documentElement.style.fontSize).toBe('18px')
+
+    toggleUiMode()
+    expect(settings.uiMode).toBe('classic')
+    expect(localStorage.getItem('bbb-ui-mode')).toBe('classic')
+    expect(document.documentElement.hasAttribute('data-ui')).toBe(false)
+    expect(document.documentElement.style.fontSize).toBe('')
+
+    toggleUiMode()
+    expect(settings.uiMode).toBe('v2')
+    expect(document.documentElement.getAttribute('data-ui')).toBe('v2')
+  })
+
+  it('setFontScale updates fontScale and root fontSize in v2 mode', () => {
+    setUiMode('v2')
+    setFontScale(16)
+    expect(settings.fontScale).toBe(16)
+    expect(localStorage.getItem('bbb-font-scale')).toBe('16')
+    expect(document.documentElement.style.fontSize).toBe('16px')
+
+    setFontScale(20)
+    expect(settings.fontScale).toBe(20)
+    expect(localStorage.getItem('bbb-font-scale')).toBe('20')
+    expect(document.documentElement.style.fontSize).toBe('20px')
   })
 })
