@@ -5,7 +5,8 @@
   import type { DataSource } from '../../lib/data/source'
   import { updateRecord, deleteRecord, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
-  import { cardStatement } from '../../lib/data/accounts'
+  import { cardStatement, formatStatementSummary, type StatementPeriodInfo } from '../../lib/data/accounts'
+  import { copyText } from '../../lib/clipboard'
   import { ownerLedger, SAHIPSIZ } from '../../lib/data/owners'
   import { fmtCurrency, todayLocalIso } from '../../lib/format'
   import EmptyState from '../../lib/ui/EmptyState.svelte'
@@ -66,6 +67,7 @@
       tutar: number
       sonOdeme?: string
       kesim?: string
+      statement: StatementPeriodInfo
     }[] = []
     const creditCards = accounts.filter((a) => a.tur === 'KREDI_KARTI')
 
@@ -86,6 +88,7 @@
             tutar,
             sonOdeme: stmt.odenecekEkstre.sonOdemeTarihi,
             kesim: stmt.odenecekEkstre.kesimTarihi,
+            statement: stmt.odenecekEkstre,
           })
         }
       }
@@ -104,12 +107,50 @@
             tutar,
             sonOdeme: stmt.donemIci.sonOdemeTarihi,
             kesim: stmt.donemIci.kesimTarihi,
+            statement: stmt.donemIci,
           })
         }
       }
     }
     return list
   })
+
+  let kopyalananKartKey = $state<string | null>(null)
+  let kopyaHataKartKey = $state<string | null>(null)
+  let kopyaDurumu = $state('')
+  let sonKopyaMesaji = ''
+  let kopyaTimer: ReturnType<typeof setTimeout> | undefined
+
+  $effect(() => {
+    return () => clearTimeout(kopyaTimer)
+  })
+
+  async function kopyalaKartBorcu(cd: (typeof cardDebts)[number]) {
+    const text = formatStatementSummary({
+      account: { kod: cd.kartKod, ad: cd.kartAd, paraBirimi: cd.paraBirimi },
+      statement: cd.statement,
+      fmt,
+      catName,
+      personName: (k) => (k === SAHIPSIZ ? 'Sahipsiz' : (people.find((p) => p.kod === k)?.ad ?? k)),
+      sahipKod: kod,
+    })
+    const key = `${cd.kartKod}:${cd.tip}`
+    const ok = await copyText(text)
+    clearTimeout(kopyaTimer)
+    kopyalananKartKey = ok ? key : null
+    kopyaHataKartKey = ok ? null : key
+
+    let msg = ok ? `${personName} — ${cd.kartAd} dökümü kopyalandı` : 'Kopyalanamadı'
+    if (msg === sonKopyaMesaji) msg += '\u00A0'
+    sonKopyaMesaji = msg
+    kopyaDurumu = msg
+
+    kopyaTimer = setTimeout(() => {
+      kopyalananKartKey = null
+      kopyaHataKartKey = null
+      kopyaDurumu = ''
+    }, 2500)
+  }
 
   const allRows = $derived(dataset?.personalTx ?? [])
   const personRows = $derived(
@@ -383,19 +424,36 @@
   {#if cardDebts.length > 0}
     <div class="card-debt-alerts">
       <span class="alerts-title">💳 Kredi Kartı Ekstre Borçları:</span>
+      <span class="sr-only" role="status">{kopyaDurumu}</span>
       <div class="debt-pills">
         {#each cardDebts as cd}
+          {@const pillKey = `${cd.kartKod}:${cd.tip}`}
           <div class="debt-pill" class:due={cd.tip === 'ODENECEK'}>
             <div class="pill-info">
-              <strong>{cd.kartAd}</strong>
+              <a class="pill-card-link" href="#/h/hesap/{encodeURIComponent(cd.kartKod)}">
+                <strong>{cd.kartAd}</strong>
+              </a>
               <span class="pill-type">
                 {cd.tip === 'ODENECEK' ? 'Ödenecek Ekstre' : 'Dönem İçi'}
                 {#if cd.sonOdeme} · Son Ödeme: <b>{cd.sonOdeme}</b>{/if}
               </span>
             </div>
-            <span class="pill-amount num loss">
-              {fmtCurrency(cd.tutar, cd.paraBirimi)}
-            </span>
+            <div class="pill-right">
+              <span class="pill-amount num loss">
+                {fmtCurrency(cd.tutar, cd.paraBirimi)}
+              </span>
+              <button
+                type="button"
+                class="btn-pill-copy"
+                data-testid="kart-dokum-kopyala-{cd.kartKod}-{cd.tip}"
+                data-copied={kopyalananKartKey === pillKey ? '' : undefined}
+                data-failed={kopyaHataKartKey === pillKey ? '' : undefined}
+                aria-label="Kopyala — {cd.kartAd} {cd.tip === 'ODENECEK' ? 'ödenecek ekstre' : 'dönem içi'} dökümü"
+                onclick={() => kopyalaKartBorcu(cd)}
+              >
+                {kopyalananKartKey === pillKey ? '✓ Kopyalandı' : kopyaHataKartKey === pillKey ? '! Hata' : '📋 Kopyala'}
+              </button>
+            </div>
           </div>
         {/each}
       </div>
@@ -892,5 +950,65 @@
   .pill-amount {
     font-size: 0.95rem;
     font-weight: 600;
+  }
+  .pill-card-link {
+    color: var(--ink);
+    text-decoration: none;
+    border-radius: 4px;
+  }
+  .pill-card-link:hover {
+    color: var(--accent-defter);
+    text-decoration: underline;
+  }
+  .pill-card-link:focus-visible,
+  .btn-pill-copy:focus-visible {
+    outline: 2px solid var(--accent-defter);
+    outline-offset: 2px;
+  }
+  .pill-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+  .btn-pill-copy {
+    min-inline-size: 24px;
+    min-block-size: 24px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.74rem;
+    font-weight: 500;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    color: var(--ink);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .btn-pill-copy:hover {
+    border-color: var(--accent-defter);
+  }
+  .btn-pill-copy[data-copied] {
+    border-color: var(--gain);
+    color: var(--gain);
+  }
+  .btn-pill-copy[data-failed] {
+    border-color: var(--loss);
+    color: var(--loss);
+  }
+  .sr-only {
+    position: absolute;
+    clip-path: inset(50%);
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    white-space: nowrap;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-pill-copy {
+      transition: none;
+    }
   }
 </style>

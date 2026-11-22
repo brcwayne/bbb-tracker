@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/svelte'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, fireEvent } from '@testing-library/svelte'
 import KisiDetay from './KisiDetay.svelte'
 import { fixture } from '../../fixtures/dataset'
 import type { Dataset, PaymentPlan, PersonalTx, RecurringRule } from '../../lib/data/types'
@@ -308,5 +308,109 @@ describe('KisiDetay sayfası', () => {
     expect(debtPill.textContent).toContain('Bonus Kart')
     expect(debtPill.textContent).toMatch(/400/)
     expect(debtPill.textContent).not.toMatch(/1[.,]000/)
+  })
+
+  describe('kredi kartı kişi bazlı döküm kopyalama', () => {
+    const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+
+    afterEach(() => {
+      if (originalClipboardDescriptor) {
+        Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor)
+      } else {
+        delete (navigator as any).clipboard
+      }
+    })
+
+    it('kart dökümü kopyala butonu yalnızca o kişinin satırlarını kopyalar ve kart linki içerir', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+      })
+
+      const cardDataset: Dataset = {
+        ...ds,
+        personalAccounts: [
+          { kod: 'KK-1', ad: 'Bonus Kart', tur: 'KREDI_KARTI', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true, hesapKesim: 15, sonOdeme: 25 },
+          { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true },
+        ],
+        personalTx: [
+          {
+            id: 'tx_zek_kk',
+            tarih: '2026-08-10',
+            tur: 'GIDER',
+            tutar: 1000,
+            paraBirimi: 'TRY',
+            kategori: 'market',
+            aciklama: 'Zek Market',
+            hesap: 'KK-1',
+            sahip: 'ZEK',
+            taksitPlaniId: null,
+            taksitNo: null,
+            taksitToplam: null,
+            not: '',
+            kaynak: 'manual',
+            olusturulma: '2026-08-10T10:00:00Z',
+          },
+          {
+            id: 'tx_enis_kk',
+            tarih: '2026-08-12',
+            tur: 'GIDER',
+            tutar: 2500,
+            paraBirimi: 'TRY',
+            kategori: 'market',
+            aciklama: 'Enis Elektronik',
+            hesap: 'KK-1',
+            sahip: 'ENIS',
+            taksitPlaniId: null,
+            taksitNo: null,
+            taksitToplam: null,
+            not: '',
+            kaynak: 'manual',
+            olusturulma: '2026-08-12T10:00:00Z',
+          },
+          {
+            id: 'tx_zek_pay',
+            tarih: '2026-08-20',
+            tur: 'TRANSFER',
+            tutar: 600,
+            paraBirimi: 'TRY',
+            kategori: 'transfer',
+            aciklama: 'Zek ödemesi',
+            hesap: 'NAKIT',
+            karsiHesap: 'KK-1',
+            sahip: 'ZEK',
+            taksitPlaniId: null,
+            taksitNo: null,
+            taksitToplam: null,
+            not: '',
+            kaynak: 'manual',
+            olusturulma: '2026-08-20T10:00:00Z',
+          },
+        ],
+      }
+
+      const { container, getByTestId } = render(KisiDetay, {
+        dataset: cardDataset,
+        param: 'ZEK',
+        today: '2026-09-08',
+      })
+
+      const cardLink = container.querySelector('.pill-card-link') as HTMLAnchorElement
+      expect(cardLink).not.toBeNull()
+      expect(cardLink.getAttribute('href')).toBe('#/h/hesap/KK-1')
+
+      const copyBtn = getByTestId('kart-dokum-kopyala-KK-1-ODENECEK')
+      await fireEvent.click(copyBtn)
+
+      expect(writeText).toHaveBeenCalledTimes(1)
+      const copied = writeText.mock.calls[0][0] as string
+      expect(copied).toContain('Bonus Kart Ekstresi — Zek')
+      expect(copied).toContain('Zek Market')
+      expect(copied).not.toContain('Enis Elektronik')
+      expect(copied).toContain('Toplam Borç: ₺1.000,00')
+      expect(copied).toContain('Ödenen: ₺600,00')
+      expect(copied).toContain('Kalan: ₺400,00')
+    })
   })
 })

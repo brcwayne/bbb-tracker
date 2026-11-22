@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/svelte'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, fireEvent } from '@testing-library/svelte'
 import HesapDetay from './HesapDetay.svelte'
 import { fixture } from '../../fixtures/dataset'
+import type { Dataset } from '../../lib/data/types'
 
 const TODAY = '2026-09-08'
 
@@ -213,6 +214,244 @@ describe('Hesap detayı', () => {
 
     // Dönem içi güncel işlemler listelenmeli (örn. 03.09 Kulaklık harcaması)
     expect(container.textContent).toContain('Kulaklık')
+  })
+})
+
+describe('HesapDetay kredi kartı kişi bazlı filtreleme ve kopyalama', () => {
+  const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+
+  function mockClipboard(writeText: ReturnType<typeof vi.fn>) {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+  }
+
+  afterEach(() => {
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor)
+    } else {
+      delete (navigator as any).clipboard
+    }
+  })
+
+  const multiOwnerCardDs: Dataset = {
+    ...fixture,
+    people: [
+      { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+      { kod: 'SELCUK', ad: 'Selçuk', haneUyesi: true, aktif: true },
+    ],
+    personalAccounts: [
+      {
+        kod: 'GARANTI-SANAL',
+        ad: 'Garanti Sanal',
+        tur: 'KREDI_KARTI',
+        paraBirimi: 'TRY',
+        sahip: 'ENIS',
+        aktif: true,
+        hesapKesim: 1,
+        sonOdeme: 14,
+      },
+      {
+        kod: 'GARANTI-BANKA',
+        ad: 'Garanti Bankası',
+        tur: 'BANKA',
+        paraBirimi: 'TRY',
+        sahip: 'ENIS',
+        aktif: true,
+      },
+    ],
+    personalTx: [
+      // Dönem İçi (Ekim 2026): sadece ENIS var, SELCUK yok
+      {
+        id: 'tx_oct_enis',
+        tarih: '2026-10-04',
+        tur: 'GIDER',
+        tutar: 750,
+        paraBirimi: 'TRY',
+        kategori: 'market',
+        aciklama: 'Ekim Enis Market',
+        hesap: 'GARANTI-SANAL',
+        sahip: 'ENIS',
+        taksitPlaniId: null,
+        taksitNo: null,
+        taksitToplam: null,
+        not: '',
+        kaynak: 'manual',
+        olusturulma: '2026-10-04T10:00:00Z',
+      },
+      // Ödenecek Ekstre (Eylül 2026): hem ENIS hem SELCUK var
+      {
+        id: 'tx_sep_selcuk_1',
+        tarih: '2026-09-05',
+        tur: 'GIDER',
+        tutar: 1200,
+        paraBirimi: 'TRY',
+        kategori: 'market',
+        aciklama: 'Selçuk Market',
+        hesap: 'GARANTI-SANAL',
+        sahip: 'SELCUK',
+        taksitPlaniId: null,
+        taksitNo: null,
+        taksitToplam: null,
+        not: '',
+        kaynak: 'manual',
+        olusturulma: '2026-09-05T10:00:00Z',
+      },
+      {
+        id: 'tx_sep_enis_1',
+        tarih: '2026-09-10',
+        tur: 'GIDER',
+        tutar: 500,
+        paraBirimi: 'TRY',
+        kategori: 'yeme-icme',
+        aciklama: 'Enis Yemek',
+        hesap: 'GARANTI-SANAL',
+        sahip: 'ENIS',
+        taksitPlaniId: null,
+        taksitNo: null,
+        taksitToplam: null,
+        not: '',
+        kaynak: 'manual',
+        olusturulma: '2026-09-10T10:00:00Z',
+      },
+      {
+        id: 'tx_sep_selcuk_pay',
+        tarih: '2026-10-02',
+        tur: 'TRANSFER',
+        tutar: 200,
+        paraBirimi: 'TRY',
+        kategori: 'transfer',
+        aciklama: 'Selçuk kısmi ödeme',
+        hesap: 'GARANTI-BANKA',
+        karsiHesap: 'GARANTI-SANAL',
+        sahip: 'SELCUK',
+        taksitPlaniId: null,
+        taksitNo: null,
+        taksitToplam: null,
+        not: '',
+        kaynak: 'manual',
+        olusturulma: '2026-10-02T10:00:00Z',
+      },
+    ],
+  }
+
+  it('kişi rozetine tıklayınca listeyi, toplamları ve üst kopyala butonunu o kişiye göre süzer', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    mockClipboard(writeText)
+
+    const { container, getByRole, getByTestId } = render(HesapDetay, {
+      dataset: multiOwnerCardDs,
+      param: 'GARANTI-SANAL',
+      today: '2026-10-08',
+    })
+
+    // Ödenecek Ekstre sekmesine geç
+    await fireEvent.click(getByRole('tab', { name: /Ödenecek Ekstre/i }))
+    expect(container.textContent).toContain('Selçuk Market')
+    expect(container.textContent).toContain('Enis Yemek')
+
+    const selcukFilterBtn = getByTestId('kisi-filtre-SELCUK')
+    expect(selcukFilterBtn.getAttribute('aria-pressed')).toBe('false')
+    await fireEvent.click(selcukFilterBtn)
+
+    expect(selcukFilterBtn.getAttribute('aria-pressed')).toBe('true')
+    expect(container.textContent).toContain('Selçuk Market')
+    expect(container.textContent).not.toContain('Enis Yemek')
+
+    // Rakam kutuları Selçuk'a özel güncellenmeli (1200 harcama, 200 ödenen, 1000 kalan)
+    const rakamlar = getByTestId('ekstre-rakamlar')
+    expect(rakamlar.textContent).toContain('Selçuk · Harcama')
+    expect(rakamlar.textContent).toMatch(/1[.,]200/)
+    expect(rakamlar.textContent).toMatch(/1[.,]000/)
+
+    // Üst kopyala butonu Selçuk özetini kopyalamalı
+    const topCopyBtn = getByTestId('ekstre-kopyala-btn')
+    expect(topCopyBtn.textContent).toContain('Selçuk Özetini Kopyala')
+    await fireEvent.click(topCopyBtn)
+
+    expect(writeText).toHaveBeenCalledTimes(1)
+    const copied = writeText.mock.calls[0][0] as string
+    expect(copied).toContain('Garanti Sanal Ekstresi — Selçuk')
+    expect(copied).toContain('Selçuk Market')
+    expect(copied).not.toContain('Enis Yemek')
+    expect(copied).toContain('Kalan: ₺1.000,00')
+
+    // Tümü ✕ butonuyla filtre temizlenir
+    await fireEvent.click(getByTestId('sahip-filtre-temizle'))
+    expect(selcukFilterBtn.getAttribute('aria-pressed')).toBe('false')
+    expect(container.textContent).toContain('Enis Yemek')
+
+    // İkinci kez tıklamayla da açılıp kapanır
+    await fireEvent.click(selcukFilterBtn)
+    expect(selcukFilterBtn.getAttribute('aria-pressed')).toBe('true')
+    await fireEvent.click(selcukFilterBtn)
+    expect(selcukFilterBtn.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('kişi rozetindeki kopyala butonu listeyi süzmeden sadece o kişinin dökümünü kopyalar', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    mockClipboard(writeText)
+
+    const { container, getByRole, getByTestId } = render(HesapDetay, {
+      dataset: multiOwnerCardDs,
+      param: 'GARANTI-SANAL',
+      today: '2026-10-08',
+    })
+
+    await fireEvent.click(getByRole('tab', { name: /Ödenecek Ekstre/i }))
+    const copySelcukBtn = getByTestId('kisi-kopyala-SELCUK')
+    await fireEvent.click(copySelcukBtn)
+
+    expect(writeText).toHaveBeenCalledTimes(1)
+    const copied = writeText.mock.calls[0][0] as string
+    expect(copied).toContain('Garanti Sanal Ekstresi — Selçuk')
+    expect(copied).toContain('Selçuk Market')
+    expect(copied).not.toContain('Enis Yemek')
+    expect(copySelcukBtn.hasAttribute('data-copied')).toBe(true)
+    expect(copySelcukBtn.hasAttribute('disabled')).toBe(false)
+
+    const status = container.querySelector('[role="status"]')!
+    expect(status.textContent).toContain('Selçuk özeti kopyalandı')
+
+    // Liste filtrelenmemiş olarak kalmalı
+    expect(container.textContent).toContain('Enis Yemek')
+  })
+
+  it('pano erişimi başarısız olduğunda data-failed ve hata durumu bildirir', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+    mockClipboard(writeText)
+
+    const { container, getByRole, getByTestId } = render(HesapDetay, {
+      dataset: multiOwnerCardDs,
+      param: 'GARANTI-SANAL',
+      today: '2026-10-08',
+    })
+
+    await fireEvent.click(getByRole('tab', { name: /Ödenecek Ekstre/i }))
+    const copySelcukBtn = getByTestId('kisi-kopyala-SELCUK')
+    await fireEvent.click(copySelcukBtn)
+
+    expect(copySelcukBtn.hasAttribute('data-failed')).toBe(true)
+    expect(copySelcukBtn.hasAttribute('disabled')).toBe(false)
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Kopyalanamadı')
+  })
+
+  it('sekme değiştirildiğinde yeni sekmede seçili kişi yoksa filtre otomatik sıfırlanır', async () => {
+    const { container, getByRole, getByTestId } = render(HesapDetay, {
+      dataset: multiOwnerCardDs,
+      param: 'GARANTI-SANAL',
+      today: '2026-10-08',
+    })
+
+    await fireEvent.click(getByRole('tab', { name: /Ödenecek Ekstre/i }))
+    await fireEvent.click(getByTestId('kisi-filtre-SELCUK'))
+    expect(container.textContent).not.toContain('Enis Yemek')
+
+    // Dönem İçi sekmesinde SELCUK harcaması yok -> filtre sıfırlanıp Enis işlemi görünmeli
+    await fireEvent.click(getByRole('tab', { name: /Dönem İçi/i }))
+    expect(container.textContent).toContain('Ekim Enis Market')
+    expect(getByTestId('ekstre-kopyala-btn').textContent).toContain('Özeti Kopyala')
   })
 })
 

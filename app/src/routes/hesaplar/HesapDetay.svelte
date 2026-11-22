@@ -3,7 +3,8 @@
   import type { Dataset, PersonalTx, Cashflow, RecurringRule } from '../../lib/data/types'
   import type { AppState } from '../../lib/data/store'
   import type { DataSource } from '../../lib/data/source'
-  import { accountBalances, cardStatement, monthMovements, type StatementPeriodInfo } from '../../lib/data/accounts'
+  import { accountBalances, cardStatement, formatStatementSummary, monthMovements, round2, type StatementPeriodInfo } from '../../lib/data/accounts'
+  import { copyText } from '../../lib/clipboard'
   import { deleteRecord, updateRecord, writeMultiAndCommit, load } from '../../lib/data/store'
   import { ConflictError } from '../../lib/data/drive'
   import { fmtCurrency, todayLocalIso } from '../../lib/format'
@@ -36,6 +37,7 @@
   const categories = $derived(dataset?.categories ?? [])
   const catName = (kod: string) => categories.find((c) => c.kod === kod)?.ad ?? kod
   const accName = (kod?: string) => accounts.find((a) => a.kod === kod)?.ad ?? kod ?? ''
+  const personName = (kod: string) => dataset?.people?.find((p) => p.kod === kod)?.ad ?? kod
 
   let yil = $state(Number(today.slice(0, 4)))
   let ay = $state(Number(today.slice(5, 7)))
@@ -60,11 +62,21 @@
 
   let gorunumModu = $state<'EKSTRE' | 'TAKVIM'>('EKSTRE')
   let seciliEkstreIndex = $state(0)
-  let kopyalandi = $state(false)
+  let seciliSahip = $state<string | null>(null)
+  let kopyalananHedef = $state<string | null>(null)
+  let kopyaHataHedef = $state<string | null>(null)
+  let kopyaDurumu = $state('')
+  let sonKopyaMesaji = ''
+  let kopyaTimer: ReturnType<typeof setTimeout> | undefined
 
   $effect(() => {
     void param
     seciliEkstreIndex = 0
+    seciliSahip = null
+  })
+
+  $effect(() => {
+    return () => clearTimeout(kopyaTimer)
   })
 
   function acTransfer() {
@@ -115,9 +127,46 @@
   const isKart = $derived(account?.tur === 'KREDI_KARTI')
   const activeStatement = $derived(kart?.ekstreler?.[seciliEkstreIndex])
 
+  const statementOwnerEntries = $derived.by(() => {
+    if (!activeStatement) return []
+    const kods = Array.from(
+      new Set([
+        ...Object.keys(activeStatement.sahipToplami),
+        ...Object.keys(activeStatement.sahipOdenen ?? {}),
+      ]),
+    )
+    return kods.map((sahipKod) => {
+      const tutar = round2(activeStatement.sahipToplami[sahipKod] ?? 0)
+      const odenen = round2(activeStatement.sahipOdenen?.[sahipKod] ?? 0)
+      const kalan = round2(Math.max(0, tutar - odenen))
+      return {
+        sahipKod,
+        kisiAd: personName(sahipKod),
+        tutar,
+        odenen,
+        kalan,
+      }
+    })
+  })
+
+  const etkinSahip = $derived(
+    seciliSahip && statementOwnerEntries.some((o) => o.sahipKod === seciliSahip)
+      ? seciliSahip
+      : null,
+  )
+
+  const aktifSahipOzet = $derived(
+    etkinSahip ? (statementOwnerEntries.find((o) => o.sahipKod === etkinSahip) ?? null) : null,
+  )
+
+  function toggleSahipFiltre(sahipKod: string) {
+    seciliSahip = etkinSahip === sahipKod ? null : sahipKod
+  }
+
   const gorunenKayitlar = $derived.by(() => {
     if (isKart && gorunumModu === 'EKSTRE') {
-      return activeStatement?.kayitlar ?? []
+      const list = activeStatement?.kayitlar ?? []
+      return etkinSahip ? list.filter((r) => (r.sahip || 'Diğer') === etkinSahip) : list
     }
     if (!hareket) return []
     return seciliGun === null
@@ -125,53 +174,36 @@
       : hareket.kayitlar.filter((r) => Number(r.tarih.slice(8, 10)) === seciliGun)
   })
 
-  async function kopyalaEkstre(st: StatementPeriodInfo) {
+  async function kopyalaEkstre(st: StatementPeriodInfo, sahipKod?: string) {
     if (!account) return
-    const lines: string[] = [
-      `💳 ${account.ad} Ekstresi`,
-      st.sonOdemeTarihi ? `Son Ödeme Tarihi: ${st.sonOdemeTarihi}` : '',
-      `Dönem: ${st.baslangicTarihi} – ${st.kesimTarihi}`,
-      '',
-    ].filter(Boolean)
+    const text = formatStatementSummary({
+      account,
+      statement: st,
+      fmt,
+      catName,
+      personName,
+      sahipKod,
+    })
+    const hedef = sahipKod ?? '__ALL__'
+    const ok = await copyText(text)
+    clearTimeout(kopyaTimer)
+    kopyalananHedef = ok ? hedef : null
+    kopyaHataHedef = ok ? null : hedef
 
-    if (Object.keys(st.sahipToplami).length > 0) {
-      for (const [sahipKod, tutar] of Object.entries(st.sahipToplami)) {
-        const kisiAd = dataset?.people?.find(p => p.kod === sahipKod)?.ad ?? sahipKod
-        const odenen = st.sahipOdenen?.[sahipKod] ?? 0
-        const kalan = Math.max(0, Math.round((tutar - odenen) * 100) / 100)
-        if (odenen > 0) {
-          lines.push(`👤 ${kisiAd}: ${fmt(tutar)} (Ödenen: ${fmt(odenen)}, Kalan: ${fmt(kalan)})`)
-        } else {
-          lines.push(`👤 ${kisiAd}: ${fmt(tutar)}`)
-        }
-      }
-      lines.push('')
-    }
+    let msg = ok
+      ? sahipKod
+        ? `${personName(sahipKod)} özeti kopyalandı`
+        : 'Ekstre özeti kopyalandı'
+      : 'Kopyalanamadı'
+    if (msg === sonKopyaMesaji) msg += '\u00A0'
+    sonKopyaMesaji = msg
+    kopyaDurumu = msg
 
-    lines.push('Harcamalar:')
-    const giderler = st.kayitlar.filter(x => x.tur === 'GIDER')
-    if (giderler.length === 0) {
-      lines.push('Bu dönemde harcama bulunmuyor.')
-    } else {
-      for (const r of giderler) {
-        const dt = `${r.tarih.slice(8, 10)}.${r.tarih.slice(5, 7)}`
-        const kisi = r.sahip && r.sahip !== 'ENIS' ? ` (${dataset?.people?.find(p => p.kod === r.sahip)?.ad ?? r.sahip})` : ''
-        lines.push(`• ${dt} ${r.aciklama || catName(r.kategori)}: ${fmt(r.tutar)}${kisi}`)
-      }
-    }
-
-    lines.push('')
-    lines.push(`Toplam Borç: ${fmt(st.toplam)}`)
-    if (st.odenen > 0) {
-      lines.push(`Ödenen: ${fmt(st.odenen)}`)
-      lines.push(`Kalan: ${fmt(st.kalan)}`)
-    }
-
-    try {
-      await navigator.clipboard.writeText(lines.join('\n'))
-      kopyalandi = true
-      setTimeout(() => (kopyalandi = false), 2500)
-    } catch {}
+    kopyaTimer = setTimeout(() => {
+      kopyalananHedef = null
+      kopyaHataHedef = null
+      kopyaDurumu = ''
+    }, 2500)
   }
 
   const AY_ADI = [
@@ -500,6 +532,10 @@
 
       {#if activeStatement}
         {@const st = activeStatement}
+        {@const copyTarget = etkinSahip ?? '__ALL__'}
+        {@const gosterilenToplam = aktifSahipOzet ? aktifSahipOzet.tutar : st.toplam}
+        {@const gosterilenOdenen = aktifSahipOzet ? aktifSahipOzet.odenen : st.odenen}
+        {@const gosterilenKalan = aktifSahipOzet ? aktifSahipOzet.kalan : st.kalan}
         <div class="ekstre-ozet-karti">
           <div class="ozet-ust">
             <div class="ozet-tarihler">
@@ -509,39 +545,91 @@
                 <span class="son-odeme-badge">Son Ödeme: <b>{st.sonOdemeTarihi}</b></span>
               {/if}
             </div>
-            <button type="button" class="btn-copy" onclick={() => kopyalaEkstre(st)}>
-              {kopyalandi ? '✓ Kopyalandı' : '📋 Özeti Kopyala'}
+            <button
+              type="button"
+              class="btn-copy"
+              data-testid="ekstre-kopyala-btn"
+              data-copied={kopyalananHedef === copyTarget ? '' : undefined}
+              data-failed={kopyaHataHedef === copyTarget ? '' : undefined}
+              onclick={() => kopyalaEkstre(st, etkinSahip ?? undefined)}
+            >
+              {kopyalananHedef === copyTarget
+                ? '✓ Kopyalandı'
+                : kopyaHataHedef === copyTarget
+                  ? '! Kopyalanamadı'
+                  : etkinSahip
+                    ? `📋 ${personName(etkinSahip)} Özetini Kopyala`
+                    : '📋 Özeti Kopyala'}
             </button>
           </div>
+          <span class="sr-only" role="status">{kopyaDurumu}</span>
 
-          {#if Object.keys(st.sahipToplami).length > 0}
+          {#if statementOwnerEntries.length > 0}
             <div class="kisi-dagilimi">
-              <span class="dagilim-baslik">Kişi Dağılımı:</span>
+              <div class="dagilim-ust">
+                <span class="dagilim-baslik">Kişi Dağılımı:</span>
+                {#if etkinSahip}
+                  <button
+                    type="button"
+                    class="btn-filtre-temizle"
+                    data-testid="sahip-filtre-temizle"
+                    onclick={() => (seciliSahip = null)}
+                  >
+                    Tümü ✕
+                  </button>
+                {:else if statementOwnerEntries.length > 1}
+                  <span class="dagilim-ipucu">Süzmek için isme tıkla</span>
+                {/if}
+              </div>
               <div class="kisi-etiketler">
-                {#each Object.entries(st.sahipToplami) as [sahipKod, tutar]}
-                  {@const kisiAd = dataset?.people?.find(p => p.kod === sahipKod)?.ad ?? sahipKod}
-                  {@const odenen = st.sahipOdenen?.[sahipKod] ?? 0}
-                  {@const kalan = Math.max(0, Math.round((tutar - odenen) * 100) / 100)}
-                  <div class="kisi-badge">
+                {#each statementOwnerEntries as o (o.sahipKod)}
+                  <div
+                    class="kisi-badge"
+                    class:active={etkinSahip === o.sahipKod}
+                    data-testid="kisi-badge-{o.sahipKod}"
+                  >
                     <div class="kisi-badge-head">
-                      <span class="kisi-ad">👤 <strong>{kisiAd}</strong>: <b class="num loss">{fmt(tutar)}</b></span>
-                      {#if isDrive && isKart}
+                      <button
+                        type="button"
+                        class="kisi-filter-btn"
+                        data-testid="kisi-filtre-{o.sahipKod}"
+                        aria-pressed={etkinSahip === o.sahipKod}
+                        onclick={() => toggleSahipFiltre(o.sahipKod)}
+                      >
+                        👤 <strong>{o.kisiAd}</strong>: <b class="num loss">{fmt(o.tutar)}</b>
+                      </button>
+                      <div class="kisi-badge-actions">
                         <button
                           type="button"
-                          class="btn-kisi-ode"
-                          title="{kisiAd} için kart ödemesi yap"
-                          onclick={() => acKartOdemesi(sahipKod, kalan > 0 ? kalan : tutar)}
+                          class="btn-kisi-kopyala"
+                          data-testid="kisi-kopyala-{o.sahipKod}"
+                          data-copied={kopyalananHedef === o.sahipKod ? '' : undefined}
+                          data-failed={kopyaHataHedef === o.sahipKod ? '' : undefined}
+                          aria-label="{o.kisiAd} özetini kopyala"
+                          title="{o.kisiAd} özetini kopyala"
+                          onclick={() => kopyalaEkstre(st, o.sahipKod)}
                         >
-                          Öde
+                          <span aria-hidden="true">{kopyalananHedef === o.sahipKod ? '✓' : kopyaHataHedef === o.sahipKod ? '!' : '📋'}</span>
                         </button>
-                      {/if}
+                        {#if isDrive && isKart}
+                          <button
+                            type="button"
+                            class="btn-kisi-ode"
+                            aria-label="Öde — {o.kisiAd} için kart ödemesi"
+                            title="{o.kisiAd} için kart ödemesi yap"
+                            onclick={() => acKartOdemesi(o.sahipKod, o.kalan > 0 ? o.kalan : o.tutar)}
+                          >
+                            Öde
+                          </button>
+                        {/if}
+                      </div>
                     </div>
-                    {#if odenen > 0}
+                    {#if o.odenen > 0}
                       <div class="kisi-badge-sub">
                         <span>Ödenen:</span>
-                        <b class="num gain">+{fmt(odenen)}</b>
-                        {#if kalan > 0}
-                          <span class="kisi-kalan">(Kalan: <b class="num loss">{fmt(kalan)}</b>)</span>
+                        <b class="num gain">+{fmt(o.odenen)}</b>
+                        {#if o.kalan > 0}
+                          <span class="kisi-kalan">(Kalan: <b class="num loss">{fmt(o.kalan)}</b>)</span>
                         {:else}
                           <span class="kisi-tamam">✓ Ödendi</span>
                         {/if}
@@ -553,20 +641,20 @@
             </div>
           {/if}
 
-          <div class="ekstre-rakamlar">
+          <div class="ekstre-rakamlar" data-testid="ekstre-rakamlar">
             <div class="rakam-kutu">
-              <span>Harcama</span>
-              <b class="num loss">{fmt(st.toplam)}</b>
+              <span>{aktifSahipOzet ? `${aktifSahipOzet.kisiAd} · Harcama` : 'Harcama'}</span>
+              <b class="num loss">{fmt(gosterilenToplam)}</b>
             </div>
-            {#if st.odenen > 0}
+            {#if gosterilenOdenen > 0}
               <div class="rakam-kutu">
                 <span>Ödenen</span>
-                <b class="num gain">{fmt(st.odenen)}</b>
+                <b class="num gain">{fmt(gosterilenOdenen)}</b>
               </div>
             {/if}
             <div class="rakam-kutu kalan">
               <span>Kalan Borç</span>
-              <b class="num loss">{fmt(st.kalan)}</b>
+              <b class="num loss">{fmt(gosterilenKalan)}</b>
             </div>
           </div>
         </div>
@@ -610,7 +698,13 @@
     {/if}
 
       {#if gorunenKayitlar.length === 0}
-        <p class="bos">Bu {seciliGun === null ? 'ayda' : 'günde'} hareket yok.</p>
+        <p class="bos">
+          {#if isKart && gorunumModu === 'EKSTRE'}
+            {etkinSahip ? `Bu ekstrede ${personName(etkinSahip)} için hareket yok.` : 'Bu ekstrede hareket yok.'}
+          {:else}
+            Bu {seciliGun === null ? 'ayda' : 'günde'} hareket yok.
+          {/if}
+        </p>
       {:else}
         <ul class="hareketler">
           {#each gorunenKayitlar as r (r.id)}
@@ -624,6 +718,9 @@
               <span class="tarih num">{r.tarih.slice(8, 10)}.{r.tarih.slice(5, 7)}</span>
               <span class="ad">
                 {satirBasligi(r)}
+                {#if isKart && gorunumModu === 'EKSTRE' && !etkinSahip && statementOwnerEntries.length > 1 && r.sahip}
+                  <span class="rozet sahip-rozet">{personName(r.sahip)}</span>
+                {/if}
                 {#if r.taksitNo != null && r.taksitToplam != null}
                   <span class="rozet">{r.taksitNo}/{r.taksitToplam}</span>
                 {/if}
@@ -1315,6 +1412,8 @@
   }
   .btn-copy {
     padding: 0.35rem 0.7rem;
+    min-inline-size: 24px;
+    min-block-size: 24px;
     font-size: 0.78rem;
     font-weight: 500;
     background: var(--surface-2);
@@ -1328,20 +1427,59 @@
     border-color: var(--accent-defter);
     background: var(--surface);
   }
+  .btn-copy:focus-visible,
+  .btn-filtre-temizle:focus-visible,
+  .kisi-filter-btn:focus-visible,
+  .btn-kisi-kopyala:focus-visible,
+  .btn-kisi-ode:focus-visible {
+    outline: 2px solid var(--accent-defter);
+    outline-offset: 2px;
+  }
+  .btn-copy[data-copied],
+  .btn-kisi-kopyala[data-copied] {
+    border-color: var(--gain);
+    color: var(--gain);
+  }
+  .btn-copy[data-failed],
+  .btn-kisi-kopyala[data-failed] {
+    border-color: var(--loss);
+    color: var(--loss);
+  }
 
   .kisi-dagilimi {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 0.45rem;
     background: var(--surface-2);
-    padding: 0.45rem 0.75rem;
+    padding: 0.55rem 0.75rem;
     border-radius: 6px;
+  }
+  .dagilim-ust {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 0.5rem;
   }
   .dagilim-baslik {
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--ink-soft);
+  }
+  .dagilim-ipucu {
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+  }
+  .btn-filtre-temizle {
+    min-block-size: 24px;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: var(--surface);
+    border: 1px solid var(--accent-defter);
+    border-radius: 999px;
+    color: var(--accent-defter);
+    cursor: pointer;
   }
   .kisi-etiketler {
     display: flex;
@@ -1359,12 +1497,59 @@
     border-radius: 6px;
     border: 1px solid var(--hairline);
     min-width: 170px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .kisi-badge.active {
+    border-color: var(--accent-defter);
+    box-shadow: 0 0 0 1px var(--accent-defter);
+    background: var(--surface-2);
+    background: color-mix(in srgb, var(--accent-defter) 8%, var(--surface));
   }
   .kisi-badge-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 0.5rem;
+  }
+  .kisi-filter-btn {
+    background: transparent;
+    border: none;
+    padding: 0.1rem 0.2rem;
+    margin: 0;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    border-radius: 4px;
+    min-block-size: 24px;
+  }
+  .kisi-filter-btn:hover {
+    color: var(--accent-defter);
+  }
+  .kisi-badge-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-shrink: 0;
+  }
+  .btn-kisi-kopyala {
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    color: var(--ink);
+    font-size: 0.75rem;
+    padding: 0.15rem 0.4rem;
+    min-inline-size: 24px;
+    min-block-size: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+  .btn-kisi-kopyala:hover {
+    border-color: var(--accent-defter);
+    background: var(--surface);
   }
   .btn-kisi-ode {
     background: var(--surface-2);
@@ -1373,14 +1558,40 @@
     font-size: 0.7rem;
     font-weight: 600;
     padding: 0.15rem 0.45rem;
+    min-inline-size: 24px;
+    min-block-size: 24px;
     border-radius: 4px;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.15s ease;
   }
   .btn-kisi-ode:hover {
     border-color: var(--accent-defter);
     background: var(--accent-defter);
     color: #fff;
+  }
+  .sahip-rozet {
+    color: var(--accent-defter);
+  }
+  .sr-only {
+    position: absolute;
+    clip-path: inset(50%);
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    white-space: nowrap;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-copy,
+    .btn-kisi-kopyala,
+    .kisi-badge {
+      transition: none;
+    }
   }
   .kisi-badge-sub {
     display: flex;

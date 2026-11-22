@@ -547,5 +547,129 @@ export function monthMovements(
   }
 }
 
+export interface FormatStatementSummaryOptions {
+  account: Pick<PersonalAccount, 'kod' | 'ad' | 'paraBirimi'>
+  statement: StatementPeriodInfo
+  fmt: (v: number, para?: string) => string
+  catName: (kod: string) => string
+  personName: (kod: string) => string
+  /** Optional owner code (`r.sahip || 'Diğer'`). When set, outputs ONLY this owner's items and totals. */
+  sahipKod?: string
+}
+
+/**
+ * Formats a credit card statement period into a shareable text summary.
+ * When `sahipKod` is provided, only that owner's transactions and totals are included.
+ */
+export function formatStatementSummary({
+  account,
+  statement,
+  fmt,
+  catName,
+  personName,
+  sahipKod,
+}: FormatStatementSummaryOptions): string {
+  const lines: string[] = [
+    sahipKod
+      ? `💳 ${account.ad} Ekstresi — ${personName(sahipKod)}`
+      : `💳 ${account.ad} Ekstresi`,
+  ]
+  if (statement.sonOdemeTarihi) {
+    lines.push(`Son Ödeme Tarihi: ${statement.sonOdemeTarihi}`)
+  }
+  lines.push(`Dönem: ${statement.baslangicTarihi} – ${statement.kesimTarihi}`)
+  lines.push('')
+
+  if (!sahipKod) {
+    const ownerKods = Array.from(
+      new Set([
+        ...Object.keys(statement.sahipToplami),
+        ...Object.keys(statement.sahipOdenen ?? {}),
+      ]),
+    )
+    if (ownerKods.length > 0) {
+      for (const kod of ownerKods) {
+        const tutar = round2(statement.sahipToplami[kod] ?? 0)
+        const odenen = round2(statement.sahipOdenen?.[kod] ?? 0)
+        const kalan = round2(Math.max(0, tutar - odenen))
+        if (odenen > 0) {
+          lines.push(
+            `👤 ${personName(kod)}: ${fmt(tutar, account.paraBirimi)} (Ödenen: ${fmt(odenen, account.paraBirimi)}, Kalan: ${fmt(kalan, account.paraBirimi)})`,
+          )
+        } else {
+          lines.push(`👤 ${personName(kod)}: ${fmt(tutar, account.paraBirimi)}`)
+        }
+      }
+      lines.push('')
+    }
+  }
+
+  lines.push('Harcamalar:')
+  const cardRows = statement.kayitlar.filter((r) => {
+    if (r.hesap !== account.kod) return false
+    if (
+      r.tur !== 'GIDER' &&
+      r.tur !== 'GELIR' &&
+      r.tur !== 'TRANSFER' &&
+      r.tur !== 'DUZELTME'
+    ) {
+      return false
+    }
+    if (sahipKod && (r.sahip || 'Diğer') !== sahipKod) return false
+    return true
+  })
+
+  if (cardRows.length === 0) {
+    lines.push('Bu dönemde harcama bulunmuyor.')
+  } else {
+    for (const r of cardRows) {
+      const dt = `${r.tarih.slice(8, 10)}.${r.tarih.slice(5, 7)}`
+      const baseLabel =
+        r.aciklama ||
+        (r.tur === 'TRANSFER'
+          ? 'Karttan transfer'
+          : r.tur === 'DUZELTME'
+            ? 'Bakiye düzeltmesi'
+            : catName(r.kategori))
+      const taksitSuffix =
+        r.taksitNo != null &&
+        r.taksitToplam != null &&
+        !baseLabel.includes(`${r.taksitNo}/${r.taksitToplam}`)
+          ? ` (${r.taksitNo}/${r.taksitToplam})`
+          : ''
+      const label = `${baseLabel}${taksitSuffix}`
+      const kisi =
+        !sahipKod && r.sahip && r.sahip !== 'ENIS' ? ` (${personName(r.sahip)})` : ''
+
+      if (r.tur === 'GELIR') {
+        lines.push(`• ${dt} ${label} (İade): -${fmt(r.tutar, r.paraBirimi)}${kisi}`)
+      } else if (r.tur === 'DUZELTME') {
+        lines.push(`• ${dt} ${label}: ${fmt(-r.tutar, r.paraBirimi)}${kisi}`)
+      } else {
+        lines.push(`• ${dt} ${label}: ${fmt(r.tutar, r.paraBirimi)}${kisi}`)
+      }
+    }
+  }
+
+  lines.push('')
+  const toplam = sahipKod
+    ? round2(statement.sahipToplami[sahipKod] ?? 0)
+    : statement.toplam
+  const odenen = sahipKod
+    ? round2(statement.sahipOdenen?.[sahipKod] ?? 0)
+    : statement.odenen
+  const kalan = sahipKod
+    ? round2(Math.max(0, toplam - odenen))
+    : statement.kalan
+
+  lines.push(`Toplam Borç: ${fmt(toplam, account.paraBirimi)}`)
+  if (odenen > 0) {
+    lines.push(`Ödenen: ${fmt(odenen, account.paraBirimi)}`)
+    lines.push(`Kalan: ${fmt(kalan, account.paraBirimi)}`)
+  }
+
+  return lines.join('\n')
+}
+
 
 

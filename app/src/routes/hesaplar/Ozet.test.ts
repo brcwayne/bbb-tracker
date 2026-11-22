@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/svelte'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, fireEvent } from '@testing-library/svelte'
 import Ozet from './Ozet.svelte'
 import { fixture } from '../../fixtures/dataset'
 import type { Dataset } from '../../lib/data/types'
@@ -203,6 +203,85 @@ describe('Ozet sayfası', () => {
       const { container } = render(Ozet, { dataset: cardDataset, today: '2026-09-08' })
       expect(container.textContent).toMatch(/400/)
       expect(container.textContent).not.toMatch(/1[.,]000/)
+    })
+
+    describe('kişi kırılımında kart dökümü kopyalama', () => {
+      const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+
+      afterEach(() => {
+        if (originalClipboardDescriptor) {
+          Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor)
+        } else {
+          delete (navigator as any).clipboard
+        }
+      })
+
+      it('kişiye özel kopyala butonu yalnızca o kişinin kart harcamalarını kopyalar', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined)
+        Object.defineProperty(navigator, 'clipboard', {
+          value: { writeText },
+          configurable: true,
+        })
+
+        const multiCardDs: Dataset = {
+          ...fixture,
+          people: [
+            { kod: 'ENIS', ad: 'Enis', haneUyesi: true, aktif: true },
+            { kod: 'ZEK', ad: 'Zek', haneUyesi: false, aktif: true },
+          ],
+          personalAccounts: [
+            { kod: 'KK-1', ad: 'Bonus Kart', tur: 'KREDI_KARTI', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true, hesapKesim: 15, sonOdeme: 25 },
+            { kod: 'NAKIT', ad: 'Nakit', tur: 'NAKIT', paraBirimi: 'TRY', sahip: 'ENIS', aktif: true },
+          ],
+          personalTx: [
+            {
+              id: 'tx_zek_kk',
+              tarih: '2026-08-10',
+              tur: 'GIDER',
+              tutar: 850,
+              paraBirimi: 'TRY',
+              kategori: 'market',
+              aciklama: 'Zek Kart Harcaması',
+              hesap: 'KK-1',
+              sahip: 'ZEK',
+              taksitPlaniId: null,
+              taksitNo: null,
+              taksitToplam: null,
+              not: '',
+              kaynak: 'manual',
+              olusturulma: '2026-08-10T10:00:00Z',
+            },
+            {
+              id: 'tx_enis_kk',
+              tarih: '2026-08-12',
+              tur: 'GIDER',
+              tutar: 1900,
+              paraBirimi: 'TRY',
+              kategori: 'market',
+              aciklama: 'Enis Kart Harcaması',
+              hesap: 'KK-1',
+              sahip: 'ENIS',
+              taksitPlaniId: null,
+              taksitNo: null,
+              taksitToplam: null,
+              not: '',
+              kaynak: 'manual',
+              olusturulma: '2026-08-12T10:00:00Z',
+            },
+          ],
+        }
+
+        const { getByTestId } = render(Ozet, { dataset: multiCardDs, today: '2026-09-08' })
+        const copyBtn = getByTestId('ozet-kart-kopyala-ZEK-KK-1-ODENECEK')
+        await fireEvent.click(copyBtn)
+
+        expect(writeText).toHaveBeenCalledTimes(1)
+        const copied = writeText.mock.calls[0][0] as string
+        expect(copied).toContain('Bonus Kart Ekstresi — Zek')
+        expect(copied).toContain('Zek Kart Harcaması')
+        expect(copied).not.toContain('Enis Kart Harcaması')
+        expect(copied).toContain('Toplam Borç: ₺850,00')
+      })
     })
   })
 

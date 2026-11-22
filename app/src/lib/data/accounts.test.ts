@@ -3,11 +3,13 @@ import {
   accountGroups,
   calculateDueDate,
   cardStatement,
+  formatStatementSummary,
   monthMovements,
   netWorthBand,
   shiftWeekend,
   txDelta,
 } from './accounts'
+import { fmtCurrency } from '../format'
 import type { Debt, PersonalAccount, PersonalTx } from './types'
 
 const tx = (o: Partial<PersonalTx>): PersonalTx => ({
@@ -498,6 +500,110 @@ describe('Haftasonu ve Son Ödeme Tarihi', () => {
     expect(res.odenecekEkstre!.sahipToplami['SELCUK']).toBe(1000)
     expect(res.odenecekEkstre!.sahipOdenen['SELCUK']).toBe(1000)
     expect(res.donemIci!.odenen).toBe(0)
+  })
+})
+
+describe('formatStatementSummary', () => {
+  const sanalKart: PersonalAccount = {
+    kod: 'GARANTI-SANAL',
+    ad: 'Garanti Sanal',
+    tur: 'KREDI_KARTI',
+    paraBirimi: 'TRY',
+    sahip: 'ENIS',
+    aktif: true,
+    hesapKesim: 1,
+    sonOdeme: 14,
+  }
+  const catName = (kod: string) => ({ market: 'Market', yeme: 'Yeme İçme' }[kod] ?? kod)
+  const personName = (kod: string) => ({ ENIS: 'Enis', SELCUK: 'Selçuk' }[kod] ?? kod)
+  const fmt = (v: number, para = 'TRY') => fmtCurrency(v, para)
+
+  it('tüm ekstre özetini kişi kırılımı, taksit, iade ve döviz satırıyla biçimlendirir', () => {
+    const rows: PersonalTx[] = [
+      tx({ id: 't1', tarih: '2026-09-05', tutar: 1000, hesap: 'GARANTI-SANAL', sahip: 'SELCUK', aciklama: 'Telefon', taksitNo: 2, taksitToplam: 3 }),
+      tx({ id: 't2', tarih: '2026-09-06', tutar: 500, hesap: 'GARANTI-SANAL', sahip: 'SELCUK', aciklama: 'Laptop 2/3', taksitNo: 2, taksitToplam: 3 }),
+      tx({ id: 't3', tarih: '2026-09-07', tur: 'GELIR', tutar: 200, hesap: 'GARANTI-SANAL', sahip: 'SELCUK', aciklama: 'İade' }),
+      tx({ id: 't4', tarih: '2026-09-08', tutar: 400, hesap: 'GARANTI-SANAL', sahip: 'ENIS', aciklama: 'Market' }),
+      tx({ id: 't5', tarih: '2026-09-09', tutar: 20, paraBirimi: 'USD', hesap: 'GARANTI-SANAL', sahip: 'SELCUK', aciklama: 'App Store' }),
+      tx({ id: 'p1', tarih: '2026-10-05', tur: 'TRANSFER', tutar: 300, hesap: 'GARANTI-BANKA', karsiHesap: 'GARANTI-SANAL', sahip: 'SELCUK', aciklama: 'Kısmi ödeme' }),
+    ]
+
+    const stmt = cardStatement(rows, sanalKart, '2026-10-08').odenecekEkstre!
+    const text = formatStatementSummary({ account: sanalKart, statement: stmt, fmt, catName, personName })
+
+    expect(text).toContain('💳 Garanti Sanal Ekstresi')
+    expect(text).toContain('Son Ödeme Tarihi: 2026-10-14')
+    expect(text).toContain('👤 Selçuk: ₺1.300,00 (Ödenen: ₺300,00, Kalan: ₺1.000,00)')
+    expect(text).toContain('👤 Enis: ₺400,00')
+    expect(text).toContain('• 05.09 Telefon (2/3): ₺1.000,00 (Selçuk)')
+    // Laptop 2/3 zaten taksit etiketini içerdiği için tekrar (2/3) eklenmemeli
+    expect(text).toContain('• 06.09 Laptop 2/3: ₺500,00 (Selçuk)')
+    expect(text).not.toContain('Laptop 2/3 (2/3)')
+    expect(text).toContain('• 07.09 İade (İade): -₺200,00 (Selçuk)')
+    expect(text).toContain('• 08.09 Market: ₺400,00')
+    expect(text).not.toContain('Market: ₺400,00 (Enis)')
+    expect(text).toContain('• 09.09 App Store: $20.00 (Selçuk)')
+    expect(text).not.toContain('Kısmi ödeme')
+    expect(text).toContain('Toplam Borç: ₺1.700,00')
+    expect(text).toContain('Ödenen: ₺300,00')
+    expect(text).toContain('Kalan: ₺1.400,00')
+  })
+
+  it('sahipKod verildiğinde yalnızca o kişinin satırlarını ve toplamlarını üretir', () => {
+    const rows: PersonalTx[] = [
+      tx({ id: 't1', tarih: '2026-09-05', tutar: 1000, hesap: 'GARANTI-SANAL', sahip: 'SELCUK', aciklama: 'Selçuk Market' }),
+      tx({ id: 't2', tarih: '2026-09-08', tutar: 400, hesap: 'GARANTI-SANAL', sahip: 'ENIS', aciklama: 'Enis Yemek' }),
+      tx({ id: 'p1', tarih: '2026-10-05', tur: 'TRANSFER', tutar: 250, hesap: 'GARANTI-BANKA', karsiHesap: 'GARANTI-SANAL', sahip: 'SELCUK', aciklama: 'Selçuk ödeme' }),
+      tx({ id: 'p2', tarih: '2026-10-06', tur: 'TRANSFER', tutar: 400, hesap: 'GARANTI-BANKA', karsiHesap: 'GARANTI-SANAL', sahip: 'ENIS', aciklama: 'Enis ödeme' }),
+    ]
+
+    const stmt = cardStatement(rows, sanalKart, '2026-10-08').odenecekEkstre!
+    const text = formatStatementSummary({
+      account: sanalKart,
+      statement: stmt,
+      fmt,
+      catName,
+      personName,
+      sahipKod: 'SELCUK',
+    })
+
+    expect(text).toContain('💳 Garanti Sanal Ekstresi — Selçuk')
+    expect(text).not.toContain('👤')
+    expect(text).toContain('• 05.09 Selçuk Market: ₺1.000,00')
+    expect(text).not.toContain('(Selçuk)')
+    expect(text).not.toContain('Enis Yemek')
+    expect(text).toContain('Toplam Borç: ₺1.000,00')
+    expect(text).toContain('Ödenen: ₺250,00')
+    expect(text).toContain('Kalan: ₺750,00')
+  })
+
+  it('kişinin harcaması yoksa boş harcama mesajı verir ve sahipsiz satırı Diğer olarak eşler', () => {
+    const rows: PersonalTx[] = [
+      tx({ id: 't1', tarih: '2026-09-05', tutar: 150, hesap: 'GARANTI-SANAL', sahip: '', aciklama: 'Sahipsiz işlem' }),
+    ]
+    const stmt = cardStatement(rows, sanalKart, '2026-10-08').odenecekEkstre!
+
+    const selcukText = formatStatementSummary({
+      account: sanalKart,
+      statement: stmt,
+      fmt,
+      catName,
+      personName,
+      sahipKod: 'SELCUK',
+    })
+    expect(selcukText).toContain('Bu dönemde harcama bulunmuyor.')
+    expect(selcukText).toContain('Toplam Borç: ₺0,00')
+
+    const digerText = formatStatementSummary({
+      account: sanalKart,
+      statement: stmt,
+      fmt,
+      catName,
+      personName,
+      sahipKod: 'Diğer',
+    })
+    expect(digerText).toContain('• 05.09 Sahipsiz işlem: ₺150,00')
+    expect(digerText).toContain('Toplam Borç: ₺150,00')
   })
 })
 
